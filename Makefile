@@ -19,20 +19,10 @@ OBJS = mt19937.o \
 	ray_slope.o \
 	ray_test.o
 
-FOBJS = mt19937.o \
-	myf03.o \
-	ray_float.o \
-	ray_intersection_gpu_float.o \
-	ray_intersection_float.o \
-	ray_test_float.o
-
-all: ray_test ray_test_float
+all: ray_test
 
 ray_test: ${OBJS}
 	${CXX} ${OBJS} ${CUDALIBS} ${EXTRALIBS} -o ray_test
-
-ray_test_float: ${FOBJS}
-	${FC} ${FOBJS} ${CUDALIBS} ${EXTRALIBS} -o ray_test_float
 
 %.o: %.F90
 	${FC} ${FFLAGS} -c $< -o $@

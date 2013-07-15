@@ -3,17 +3,16 @@
 #include <stdio.h>
 
 __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
-                                       double *s2b, double *s2t,
+                                       double *s2bs, double *s2ts,
                                        bool *hits, int Ncells) {
-  // s2b is vector from ray start to lower cell corner.
-  // s2t is vector from ray start to upper cell corner.
-
   double *dir;
   double dist;
+  double s2b[3]; // Vector from ray start to lower cell corner.
+  double s2t[3]; // Vector from ray start to upper cell corner.
   double e2b[3]; // Vector from ray end to lower cell corner.
   double e2t[3]; // Vector from ray end to upper cell corner.
 
-  int tid = blockIdx.x;// * blockDim.x + threadIdx.x;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   dir = ray->dir;
   dist = ray->length;
@@ -23,8 +22,10 @@ __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
     for (int i=0; i<3; i++) {
       // s2x is s2x(N,3) in Fortran, so (x1, x2, ... y1, y2, ... z1, z2, ...)
       // in memory.
-      e2b[i] = s2b[tid+Ncells*i] - dir[i] * dist;
-      e2t[i] = s2t[tid+Ncells*i] - dir[i] * dist;
+      s2b[i] = s2bs[tid + Ncells*i];
+      s2t[i] = s2ts[tid + Ncells*i];
+      e2b[i] = s2b[i] - dir[i] * dist;
+      e2t[i] = s2t[i] - dir[i] * dist;
     }
 
     // Assume true.  If ray misses then it will be set to false in the switch.
@@ -200,7 +201,7 @@ extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
   CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
                               cudaMemcpyHostToDevice) );
 
-  gpu_ray_cells_pluecker<<<N,1>>>(dev_ray, dev_s2b, dev_s2t,
+  gpu_ray_cells_pluecker<<<(N+1)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
                                           dev_hits, N);
 
   CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
