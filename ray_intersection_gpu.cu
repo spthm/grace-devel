@@ -1,9 +1,10 @@
 #include "cudaErrorCheck.h"
 #include "ray_intersection.h"
+#include <stdio.h>
 
-__global__ void gpu_ray_cell_pluecker(cpp_src_ray_type *ray,
-                                      double *s2b, double *s2t, bool *hits,
-                                      int Ncells) {
+__global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
+                                       double *s2b, double *s2t,
+                                       bool *hits, int Ncells) {
   // s2b is vector from ray start to lower cell corner.
   // s2t is vector from ray start to upper cell corner.
 
@@ -12,7 +13,7 @@ __global__ void gpu_ray_cell_pluecker(cpp_src_ray_type *ray,
   double e2b[3]; // Vector from ray end to lower cell corner.
   double e2t[3]; // Vector from ray end to upper cell corner.
 
-  int tid = blockIdx.x * blockDim.x + threadIdx.x
+  int tid = blockIdx.x;// * blockDim.x + threadIdx.x;
 
   dir = ray->dir;
   dist = ray->length;
@@ -178,38 +179,38 @@ __global__ void gpu_ray_cell_pluecker(cpp_src_ray_type *ray,
     }
 }
 
-extern "C" bool cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
-                                     double *s2b, double *s2t, int Ncells) {
-  bool hits[Ncells];
+extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
+                                     double *s2b, double *s2t,
+                                     int *Ncells, bool *hits) {
+  int N = *Ncells;
   bool *dev_hits;
   cpp_src_ray_type *dev_ray;
   double *dev_s2b;
   double *dev_s2t;
 
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_rays, sizeof(*src_ray) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2b, 3*Ncells*sizeof(*s2b) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2t, 3*Ncells*sizeof(*s2t) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, sizeof(hits) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*src_ray) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2b, 3*N*sizeof(*s2b) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2t, 3*N*sizeof(*s2t) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, N*sizeof(*hits) ) );
 
   CUDA_HANDLE_ERR( cudaMemcpy(dev_ray, src_ray, sizeof(*src_ray),
-                   cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2b, s2b, 3*Ncells*sizeof(*s2b),
-                   cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*Ncells*sizeof(*s2t),
-                   cudaMemcpyHostToDevice) );
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2b, s2b, 3*N*sizeof(*s2b),
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
+                              cudaMemcpyHostToDevice) );
 
-  gpu_ray_cell_pluecker<<<(N+1)/16,16>>>(dev_ray, dev_s2b, dev_s2t, dev_hits,
-                                         Ncells);
+  gpu_ray_cells_pluecker<<<N,1>>>(dev_ray, dev_s2b, dev_s2t,
+                                          dev_hits, N);
 
-  CUDA_HANDLE_ERR( cudaMemcpy(&hits, dev_hits, sizeof(hits),
-                   cudaMemcpyDeviceToHost) );
+  CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
+                              cudaMemcpyDeviceToHost) );
 
   cudaFree(dev_ray);
   cudaFree(dev_s2b);
   cudaFree(dev_s2t);
   cudaFree(dev_hits);
 
-  return hits;
 }
 
 __global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bot, double *top,
