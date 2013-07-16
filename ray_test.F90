@@ -131,7 +131,7 @@ external :: cu_src_ray_pluecker, cu_ray_slope
 
     ! Print the total number of correct CUDA results.
     formatter = "(A6, A10, A10, A8)"
-    write(*,formatter), "Class ", "CUDA OK", "CUDA Bad", "Ratio"
+    write(*,formatter), "Class ", "CUDA OK", "CUDA Err", "Ratio"
 
     formatter = "(I3, A5, I13, A5, I7, A5, F11.2, A4)"
     do i=1,8
@@ -146,8 +146,8 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     ! Print the hit/miss-specific numbers of correct CUDA results.
     write(*,*)
     formatter = "(A6, A14, A15, A16, A17)"
-    write(*,formatter) "Class ", "Hit CUDA OK", "Hit CUDA Bad", &
-                       "Miss CUDA OK", "Miss CUDA Bad"
+    write(*,formatter) "Class ", "Hit CUDA OK", "Hit CUDA Err", &
+                       "Miss CUDA OK", "Miss CUDA Err"
 
     formatter = "(I3, A5, I13, A5, I14, A5, I17, A5, I14, A4)"
     do i=1,8
