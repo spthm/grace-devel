@@ -98,7 +98,7 @@ external :: cu_src_ray_pluecker
         call cu_src_ray_pluecker(cpp_src_ray, s2bs, s2ts, N_cells, cu_hits)
 
         ! Check for hit with CUDA ray slopes code.
-        !slope_hits = cu_ray_slope(slope_src_ray, bots, tops, N)
+        slope_hits = cu_ray_slope(slope_src_ray, bots, tops, N_cells)
 
         ! Loop through hits and check results against Fortran code.
         do i=1,N_cells
@@ -118,13 +118,13 @@ external :: cu_src_ray_pluecker
             endif
 
             ! Handle case that CUDA slopes-test result != Fortran result.
-    !         if (slope_hit .neqv. hit) then
-    !             slope_fail(slope_src_ray%classification+1) = &
-    !                 slope_fail(slope_src_ray%classification+1) + 1
-    !         else
-    !             slope_success(slope_src_ray%classification+1) = &
-    !                 slope_success(slope_src_ray%classification+1) + 1
-    !         endif
+            if (slope_hits(i) .neqv. hits(i)) then
+                slope_fail(slope_src_ray%classification+1) = &
+                    slope_fail(slope_src_ray%classification+1) + 1
+            else ! slope_hits(i) != hits(i)
+                slope_success(slope_src_ray%classification+1) = &
+                    slope_success(slope_src_ray%classification+1) + 1
+            endif
         enddo
     enddo
 
@@ -157,15 +157,15 @@ external :: cu_src_ray_pluecker
     enddo
 
     ! Print the total number of correct CUDA ray-slopes results.
-!     write(*,*)
-!     formatter = "(A6, A12, A12, A8)"
-!     write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
+    write(*,*)
+    formatter = "(A6, A12, A12, A8)"
+    write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
 
-!     formatter = "(I3, I14, I10, F11.2)"
-!     do i=1,26
-!         write(*,formatter) i-1, slope_success(i), slope_fail(i), &
-!             FLOAT(slope_fail(i))/FLOAT(slope_success(i))
-!     enddo
+    formatter = "(I3, I14, I10, F11.2)"
+    do i=1,26
+        write(*,formatter) i-1, slope_success(i), slope_fail(i), &
+            FLOAT(slope_fail(i))/FLOAT(slope_success(i))
+    enddo
 
     write(*,*)
     write(*,"(A8, I10)") "Hits:", N_hits

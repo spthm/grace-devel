@@ -201,7 +201,7 @@ extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
   CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
                               cudaMemcpyHostToDevice) );
 
-  gpu_ray_cells_pluecker<<<(N+1)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
+  gpu_ray_cells_pluecker<<<(N+17)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
                                           dev_hits, N);
 
   CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
@@ -214,314 +214,327 @@ extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
 
 }
 
-__global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bot, double *top,
-                              bool *hit) {
+__global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bots, double *tops,
+                                   bool *hits, int N) {
 
-  *hit = true;
+  int tid = blockIdx.x * blockDim.x + threadIdx.x;
+  double bot[3];
+  double top[3];
 
-  switch (r->classification)
-  {
-    case MMM:
-      if ((r->x < bot[0]) || (r->y < bot[1]) || (r->z < bot[2])
-        || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
-        || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
-        || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+  if (tid < N) {
+    hits[tid] = true;
 
-    case MMP:
+    for (int i=0; i<3; i++) {
+      bot[i] = bots[tid + N*i];
+      top[i] = tops[tid + N*i];
+    }
 
-      if ((r->x < bot[0]) || (r->y < bot[1]) || (r->z > top[2])
-        || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
-        || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
-        || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+    switch (r->classification)
+    {
+      case MMM:
+        if ((r->x < bot[0]) || (r->y < bot[1]) || (r->z < bot[2])
+          || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
+          || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
+          || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MPM:
+      case MMP:
 
-      if ((r->x < bot[0]) || (r->y > top[1]) || (r->z < bot[2])
-        || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
-        || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
-        || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x < bot[0]) || (r->y < bot[1]) || (r->z > top[2])
+          || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
+          || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
+          || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MPP:
+      case MPM:
 
-      if ((r->x < bot[0]) || (r->y > top[1]) || (r->z > top[2])
-        || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
-        || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
-        || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x < bot[0]) || (r->y > top[1]) || (r->z < bot[2])
+          || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
+          || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
+          || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PMM:
+      case MPP:
 
-      if ((r->x > top[0]) || (r->y < bot[1]) || (r->z < bot[2])
-        || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
-        || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
-        || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x < bot[0]) || (r->y > top[1]) || (r->z > top[2])
+          || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
+          || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
+          || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PMP:
+      case PMM:
 
-      if ((r->x > top[0]) || (r->y < bot[1]) || (r->z > top[2])
-        || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
-        || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
-        || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x > top[0]) || (r->y < bot[1]) || (r->z < bot[2])
+          || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
+          || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
+          || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PPM:
+      case PMP:
 
-      if ((r->x > top[0]) || (r->y > top[1]) || (r->z < bot[2])
-        || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
-        || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
-        || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x > top[0]) || (r->y < bot[1]) || (r->z > top[2])
+          || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
+          || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
+          || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PPP:
+      case PPM:
 
-      if ((r->x > top[0]) || (r->y > top[1]) || (r->z > top[2])
-        || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
-        || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
-        || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x > top[0]) || (r->y > top[1]) || (r->z < bot[2])
+          || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
+          || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
+          || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case OMM:
+      case PPP:
 
-      if((r->x < bot[0]) || (r->x > top[0])
-        || (r->y < bot[1]) || (r->z < bot[2])
-        || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
-        )
-        *hit = false;
-      break;
+        if ((r->x > top[0]) || (r->y > top[1]) || (r->z > top[2])
+          || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
+          || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
+          || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case OMP:
+      case OMM:
 
-      if((r->x < bot[0]) || (r->x > top[0])
-        || (r->y < bot[1]) || (r->z > top[2])
-        || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
-        || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
-        )
-        *hit = false;
-      break;
+        if((r->x < bot[0]) || (r->x > top[0])
+          || (r->y < bot[1]) || (r->z < bot[2])
+          || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case OPM:
+      case OMP:
 
-      if((r->x < bot[0]) || (r->x > top[0])
-        || (r->y > top[1]) || (r->z < bot[2])
-        || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
-        )
-        *hit = false;
-      break;
+        if((r->x < bot[0]) || (r->x > top[0])
+          || (r->y < bot[1]) || (r->z > top[2])
+          || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
+          || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case OPP:
+      case OPM:
 
-      if((r->x < bot[0]) || (r->x > top[0])
-        || (r->y > top[1]) || (r->z > top[2])
-        || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
-        || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
-        )
-        *hit = false;
-      break;
+        if((r->x < bot[0]) || (r->x > top[0])
+          || (r->y > top[1]) || (r->z < bot[2])
+          || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MOM:
+      case OPP:
 
-      if((r->y < bot[1]) || (r->y > top[1])
-        || (r->x < bot[0]) || (r->z < bot[2])
-        || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+        if((r->x < bot[0]) || (r->x > top[0])
+          || (r->y > top[1]) || (r->z > top[2])
+          || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
+          || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MOP:
+      case MOM:
 
-      if((r->y < bot[1]) || (r->y > top[1])
-        || (r->x < bot[0]) || (r->z > top[2])
-        || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
-        )
-        *hit = false;
-      break;
+        if((r->y < bot[1]) || (r->y > top[1])
+          || (r->x < bot[0]) || (r->z < bot[2])
+          || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case POM:
+      case MOP:
 
-      if((r->y < bot[1]) || (r->y > top[1])
-        || (r->x > top[0]) || (r->z < bot[2])
-        || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
-        || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if((r->y < bot[1]) || (r->y > top[1])
+          || (r->x < bot[0]) || (r->z > top[2])
+          || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case POP:
+      case POM:
 
-      if((r->y < bot[1]) || (r->y > top[1])
-        || (r->x > top[0]) || (r->z > top[2])
-        || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
-        || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
-        )
-        *hit = false;
-      break;
+        if((r->y < bot[1]) || (r->y > top[1])
+          || (r->x > top[0]) || (r->z < bot[2])
+          || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
+          || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MMO:
+      case POP:
 
-      if((r->z < bot[2]) || (r->z > top[2])
-        || (r->x < bot[0]) || (r->y < bot[1])
-        || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
-        )
-        *hit = false;
-      break;
+        if((r->y < bot[1]) || (r->y > top[1])
+          || (r->x > top[0]) || (r->z > top[2])
+          || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
+          || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MPO:
+      case MMO:
 
-      if((r->z < bot[2]) || (r->z > top[2])
-        || (r->x < bot[0]) || (r->y > top[1])
-        || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
-        )
-        *hit = false;
-      break;
+        if((r->z < bot[2]) || (r->z > top[2])
+          || (r->x < bot[0]) || (r->y < bot[1])
+          || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PMO:
+      case MPO:
 
-      if((r->z < bot[2]) || (r->z > top[2])
-        || (r->x > top[0]) || (r->y < bot[1])
-        || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
-        || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
-        )
-        *hit = false;
-      break;
+        if((r->z < bot[2]) || (r->z > top[2])
+          || (r->x < bot[0]) || (r->y > top[1])
+          || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case PPO:
+      case PMO:
 
-      if((r->z < bot[2]) || (r->z > top[2])
-        || (r->x > top[0]) || (r->y > top[1])
-        || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
-        || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
-        )
-        *hit = false;
-      break;
+        if((r->z < bot[2]) || (r->z > top[2])
+          || (r->x > top[0]) || (r->y < bot[1])
+          || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
+          || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case MOO:
+      case PPO:
 
-      if((r->x < bot[0])
-        || (r->y < bot[1]) || (r->y > top[1])
-        || (r->z < bot[2]) || (r->z > top[2])
-        )
-        *hit = false;
-      break;
+        if((r->z < bot[2]) || (r->z > top[2])
+          || (r->x > top[0]) || (r->y > top[1])
+          || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
+          || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
+          )
+          hits[tid] = false;
+        break;
 
-    case POO:
+      case MOO:
 
-      if((r->x > top[0])
-        || (r->y < bot[1]) || (r->y > top[1])
-        || (r->z < bot[2]) || (r->z > top[2])
-        )
-        *hit = false;
-      break;
+        if((r->x < bot[0])
+          || (r->y < bot[1]) || (r->y > top[1])
+          || (r->z < bot[2]) || (r->z > top[2])
+          )
+          hits[tid] = false;
+        break;
 
-    case OMO:
+      case POO:
 
-      if((r->y < bot[1])
-        || (r->x < bot[0]) || (r->x > top[0])
-        || (r->z < bot[2]) || (r->z > top[2])
-        )
-        *hit = false;
+        if((r->x > top[0])
+          || (r->y < bot[1]) || (r->y > top[1])
+          || (r->z < bot[2]) || (r->z > top[2])
+          )
+          hits[tid] = false;
+        break;
 
-    // Deliberate fall-through!?
-    case OPO:
+      case OMO:
 
-      if((r->y > top[1])
-        || (r->x < bot[0]) || (r->x > top[0])
-        || (r->z < bot[2]) || (r->z > top[2])
-        )
-        *hit = false;
+        if((r->y < bot[1])
+          || (r->x < bot[0]) || (r->x > top[0])
+          || (r->z < bot[2]) || (r->z > top[2])
+          )
+          hits[tid] = false;
 
-    case OOM:
+      // Deliberate fall-through!?
+      case OPO:
 
-      if((r->z < bot[2])
-        || (r->x < bot[0]) || (r->x > top[0])
-        || (r->y < bot[1]) || (r->y > top[1])
-        )
-        *hit = false;
+        if((r->y > top[1])
+          || (r->x < bot[0]) || (r->x > top[0])
+          || (r->z < bot[2]) || (r->z > top[2])
+          )
+          hits[tid] = false;
 
-    case OOP:
+      case OOM:
 
-      if((r->z > top[2])
-        || (r->x < bot[0]) || (r->x > top[0])
-        || (r->y < bot[1]) || (r->y > top[1])
-        )
-        *hit = false;
-      break;
+        if((r->z < bot[2])
+          || (r->x < bot[0]) || (r->x > top[0])
+          || (r->y < bot[1]) || (r->y > top[1])
+          )
+          hits[tid] = false;
+
+      case OOP:
+
+        if((r->z > top[2])
+          || (r->x < bot[0]) || (r->x > top[0])
+          || (r->y < bot[1]) || (r->y > top[1])
+          )
+          hits[tid] = false;
+        break;
+    }
   }
 }
 
-extern "C" bool cu_ray_slope_(slope_ray_type *ray, double *bot, double *top) {
-  bool hit;
-  bool *dev_hit;
+extern "C" bool cu_ray_slope_(slope_ray_type *ray, double *bots, double *tops,
+                              int *Ncells) {
+  int N = *Ncells;
+  bool hits[N];
+  bool *dev_hits;
   slope_ray_type *dev_ray;
-  double *dev_bot;
-  double *dev_top;
+  double *dev_bots;
+  double *dev_tops;
 
   cudaMalloc( (void**)&dev_ray, sizeof(*ray) );
-  cudaMalloc( (void**)&dev_bot, 3 * sizeof(*bot) );
-  cudaMalloc( (void**)&dev_top, 3 * sizeof(*top) );
-  cudaMalloc( (void**)&dev_hit, sizeof(hit) );
+  cudaMalloc( (void**)&dev_bots, 3*N*sizeof(*bots) );
+  cudaMalloc( (void**)&dev_tops, 3*N*sizeof(*tops) );
+  cudaMalloc( (void**)&dev_hits, sizeof(hits) );
 
   cudaMemcpy(dev_ray, ray, sizeof(*ray), cudaMemcpyHostToDevice);
-  cudaMemcpy(dev_bot, bot, 3 * sizeof(*bot), cudaMemcpyHostToDevice);
-  cudaMemcpy(dev_top, top, 3 * sizeof(*top), cudaMemcpyHostToDevice);
+  cudaMemcpy(dev_bots, bots, 3*N*sizeof(*bots), cudaMemcpyHostToDevice);
+  cudaMemcpy(dev_tops, tops, 3*N*sizeof(*tops), cudaMemcpyHostToDevice);
 
-  gpu_ray_cell_slope<<<1,1>>>(dev_ray, dev_bot, dev_top, dev_hit);
+  gpu_ray_cell_slope<<<(N+17)/16,16>>>(dev_ray, dev_bots, dev_tops, dev_hits, N);
 
-  cudaMemcpy(&hit, dev_hit, sizeof(hit), cudaMemcpyDeviceToHost);
+  cudaMemcpy(hits, dev_hits, sizeof(hits), cudaMemcpyDeviceToHost);
 
   cudaFree(dev_ray);
-  cudaFree(dev_bot);
-  cudaFree(dev_top);
-  cudaFree(dev_hit);
+  cudaFree(dev_bots);
+  cudaFree(dev_tops);
+  cudaFree(dev_hits);
 
-  return hit;
+  return hits;
 }
