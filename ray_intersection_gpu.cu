@@ -180,40 +180,6 @@ __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
     }
 }
 
-extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
-                                     double *s2b, double *s2t,
-                                     int *Ncells, bool *hits) {
-  int N = *Ncells;
-  bool *dev_hits;
-  cpp_src_ray_type *dev_ray;
-  double *dev_s2b;
-  double *dev_s2t;
-
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*src_ray) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2b, 3*N*sizeof(*s2b) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2t, 3*N*sizeof(*s2t) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, N*sizeof(*hits) ) );
-
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_ray, src_ray, sizeof(*src_ray),
-                              cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2b, s2b, 3*N*sizeof(*s2b),
-                              cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
-                              cudaMemcpyHostToDevice) );
-
-  gpu_ray_cells_pluecker<<<(N+17)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
-                                          dev_hits, N);
-
-  CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
-                              cudaMemcpyDeviceToHost) );
-
-  cudaFree(dev_ray);
-  cudaFree(dev_s2b);
-  cudaFree(dev_s2t);
-  cudaFree(dev_hits);
-
-}
-
 __global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bots, double *tops,
                                    bool *hits, int N) {
 
@@ -509,32 +475,67 @@ __global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bots, double *tops
   }
 }
 
-extern "C" bool cu_ray_slope_(slope_ray_type *ray, double *bots, double *tops,
-                              int *Ncells) {
+extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
+                                     double *s2b, double *s2t,
+                                     int *Ncells, bool *hits) {
   int N = *Ncells;
-  bool hits[N];
+  bool *dev_hits;
+  cpp_src_ray_type *dev_ray;
+  double *dev_s2b;
+  double *dev_s2t;
+
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*src_ray) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2b, 3*N*sizeof(*s2b) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2t, 3*N*sizeof(*s2t) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, N*sizeof(*hits) ) );
+
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_ray, src_ray, sizeof(*src_ray),
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2b, s2b, 3*N*sizeof(*s2b),
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
+                              cudaMemcpyHostToDevice) );
+
+  gpu_ray_cells_pluecker<<<(N+17)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
+                                           dev_hits, N);
+
+  CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
+                              cudaMemcpyDeviceToHost) );
+
+  cudaFree(dev_ray);
+  cudaFree(dev_s2b);
+  cudaFree(dev_s2t);
+  cudaFree(dev_hits);
+}
+
+extern "C" void cu_ray_slope_(slope_ray_type *ray, double *bots, double *tops,
+                              int *Ncells, bool *hits) {
+  int N = *Ncells;
   bool *dev_hits;
   slope_ray_type *dev_ray;
   double *dev_bots;
   double *dev_tops;
 
-  cudaMalloc( (void**)&dev_ray, sizeof(*ray) );
-  cudaMalloc( (void**)&dev_bots, 3*N*sizeof(*bots) );
-  cudaMalloc( (void**)&dev_tops, 3*N*sizeof(*tops) );
-  cudaMalloc( (void**)&dev_hits, sizeof(hits) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*ray) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_bots, 3*N*sizeof(*bots) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_tops, 3*N*sizeof(*tops) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, N*sizeof(*hits) ) );
 
-  cudaMemcpy(dev_ray, ray, sizeof(*ray), cudaMemcpyHostToDevice);
-  cudaMemcpy(dev_bots, bots, 3*N*sizeof(*bots), cudaMemcpyHostToDevice);
-  cudaMemcpy(dev_tops, tops, 3*N*sizeof(*tops), cudaMemcpyHostToDevice);
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_ray, ray, sizeof(*ray),
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_bots, bots, 3*N*sizeof(*bots),
+                              cudaMemcpyHostToDevice) );
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_tops, tops, 3*N*sizeof(*tops),
+                              cudaMemcpyHostToDevice) );
 
-  gpu_ray_cell_slope<<<(N+17)/16,16>>>(dev_ray, dev_bots, dev_tops, dev_hits, N);
+  gpu_ray_cell_slope<<<(N+17)/16,16>>>(dev_ray, dev_bots, dev_tops,
+                                       dev_hits, N);
 
-  cudaMemcpy(hits, dev_hits, sizeof(hits), cudaMemcpyDeviceToHost);
+  CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
+                              cudaMemcpyDeviceToHost) );
 
   cudaFree(dev_ray);
   cudaFree(dev_bots);
   cudaFree(dev_tops);
   cudaFree(dev_hits);
-
-  return hits;
 }

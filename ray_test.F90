@@ -5,8 +5,8 @@ use myf03_mod
 use mt19937_mod, only: genrand_real3, init_mersenne_twister
 use ISO_C_BINDING
 implicit none
-logical, external :: cpp_src_ray_pluecker, cu_ray_slope
-external :: cu_src_ray_pluecker
+logical, external :: cpp_src_ray_pluecker
+external :: cu_src_ray_pluecker, cu_ray_slope
 
     integer(C_INT), parameter :: N_cells = 100000, N_rays = 100
     type(src_ray_type) :: src_ray
@@ -98,7 +98,7 @@ external :: cu_src_ray_pluecker
         call cu_src_ray_pluecker(cpp_src_ray, s2bs, s2ts, N_cells, cu_hits)
 
         ! Check for hit with CUDA ray slopes code.
-        slope_hits = cu_ray_slope(slope_src_ray, bots, tops, N_cells)
+        call cu_ray_slope(slope_src_ray, bots, tops, N_cells, slope_hits)
 
         ! Loop through hits and check results against Fortran code.
         do i=1,N_cells
@@ -144,6 +144,17 @@ external :: cu_src_ray_pluecker
                            FLOAT(cu_fail(i))/FLOAT(cu_success(i))
     enddo
 
+    ! Print the total number of correct CUDA ray-slopes results.
+    write(*,*)
+    formatter = "(A6, A12, A12, A8)"
+    write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
+
+    formatter = "(I3, I14, I10, F11.2)"
+    do i=1,8
+        write(*,formatter) i-1, slope_success(i), slope_fail(i), &
+            FLOAT(slope_fail(i))/FLOAT(slope_success(i))
+    enddo
+
     ! Print the hit/miss-specific numbers of correct CUDA results.
     write(*,*)
     formatter = "(A6, A14, A15, A16, A17)"
@@ -156,16 +167,6 @@ external :: cu_src_ray_pluecker
                            cu_miss_success(i), cu_miss_fail(i)
     enddo
 
-    ! Print the total number of correct CUDA ray-slopes results.
-    write(*,*)
-    formatter = "(A6, A12, A12, A8)"
-    write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
-
-    formatter = "(I3, I14, I10, F11.2)"
-    do i=1,26
-        write(*,formatter) i-1, slope_success(i), slope_fail(i), &
-            FLOAT(slope_fail(i))/FLOAT(slope_success(i))
-    enddo
 
     write(*,*)
     write(*,"(A8, I10)") "Hits:", N_hits
