@@ -16,7 +16,6 @@ OBJS = mt19937.o \
 	ray.o \
 	ray_intersection_gpu.o \
 	ray_intersection.o \
-	ray_slope.o \
 	ray_test.o
 
 all: ray_test
