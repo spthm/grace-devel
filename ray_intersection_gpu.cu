@@ -3,9 +3,9 @@
 #include <stdio.h>
 
 __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
-                                       double *s2bs, double *s2ts,
+                                       double *bots, double *tops,
                                        bool *hits, int Ncells) {
-  double *dir;
+  double *dir, *start;
   double dist;
   double s2b[3]; // Vector from ray start to lower cell corner.
   double s2t[3]; // Vector from ray start to upper cell corner.
@@ -15,6 +15,7 @@ __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
   int tid = blockIdx.x * blockDim.x + threadIdx.x;
 
   dir = ray->dir;
+  start = ray->start;
   dist = ray->length;
 
   if (tid < Ncells) {
@@ -22,8 +23,8 @@ __global__ void gpu_ray_cells_pluecker(cpp_src_ray_type *ray,
     for (int i=0; i<3; i++) {
       // s2x is s2x(N,3) in Fortran, so (x1, x2, ... y1, y2, ... z1, z2, ...)
       // in memory.
-      s2b[i] = s2bs[tid + Ncells*i];
-      s2t[i] = s2ts[tid + Ncells*i];
+      s2b[i] = bots[tid + Ncells*i] - start[i];
+      s2t[i] = tops[tid + Ncells*i] - start[i];
       e2b[i] = s2b[i] - dir[i] * dist;
       e2t[i] = s2t[i] - dir[i] * dist;
     }
@@ -299,222 +300,246 @@ __global__ void gpu_ray_cell_slope(slope_ray_type *r, double *bots, double *tops
           )
           hits[tid] = false;
         break;
+      // We are going to assume that no ray ever has a directional component
+      // which is exactly equal to zero.
+      // case OMM:
 
-      case OMM:
+      //   if((r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y < bot[1]) || (r->z < bot[2])
+      //     || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
+      //     || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x < bot[0]) || (r->x > top[0])
-          || (r->y < bot[1]) || (r->z < bot[2])
-          || (r->jbyk * bot[2] - top[1] + r->c_zy > 0)
-          || (r->kbyj * bot[1] - top[2] + r->c_yz > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case OMP:
 
-      case OMP:
+      //   if((r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y < bot[1]) || (r->z > top[2])
+      //     || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
+      //     || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x < bot[0]) || (r->x > top[0])
-          || (r->y < bot[1]) || (r->z > top[2])
-          || (r->jbyk * top[2] - top[1] + r->c_zy > 0)
-          || (r->kbyj * bot[1] - bot[2] + r->c_yz < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case OPM:
 
-      case OPM:
+      //   if((r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y > top[1]) || (r->z < bot[2])
+      //     || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
+      //     || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x < bot[0]) || (r->x > top[0])
-          || (r->y > top[1]) || (r->z < bot[2])
-          || (r->jbyk * bot[2] - bot[1] + r->c_zy < 0)
-          || (r->kbyj * top[1] - top[2] + r->c_yz > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case OPP:
 
-      case OPP:
+      //   if((r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y > top[1]) || (r->z > top[2])
+      //     || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
+      //     || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x < bot[0]) || (r->x > top[0])
-          || (r->y > top[1]) || (r->z > top[2])
-          || (r->jbyk * top[2] - bot[1] + r->c_zy < 0)
-          || (r->kbyj * top[1] - bot[2] + r->c_yz < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case MOM:
 
-      case MOM:
+      //   if((r->y < bot[1]) || (r->y > top[1])
+      //     || (r->x < bot[0]) || (r->z < bot[2])
+      //     || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
+      //     || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->y < bot[1]) || (r->y > top[1])
-          || (r->x < bot[0]) || (r->z < bot[2])
-          || (r->kbyi * bot[0] - top[2] + r->c_xz > 0)
-          || (r->ibyk * bot[2] - top[0] + r->c_zx > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case MOP:
 
-      case MOP:
+      //   if((r->y < bot[1]) || (r->y > top[1])
+      //     || (r->x < bot[0]) || (r->z > top[2])
+      //     || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
+      //     || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->y < bot[1]) || (r->y > top[1])
-          || (r->x < bot[0]) || (r->z > top[2])
-          || (r->kbyi * bot[0] - bot[2] + r->c_xz < 0)
-          || (r->ibyk * top[2] - top[0] + r->c_zx > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case POM:
 
-      case POM:
+      //   if((r->y < bot[1]) || (r->y > top[1])
+      //     || (r->x > top[0]) || (r->z < bot[2])
+      //     || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
+      //     || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->y < bot[1]) || (r->y > top[1])
-          || (r->x > top[0]) || (r->z < bot[2])
-          || (r->kbyi * top[0] - top[2] + r->c_xz > 0)
-          || (r->ibyk * bot[2] - bot[0] + r->c_zx < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case POP:
 
-      case POP:
+      //   if((r->y < bot[1]) || (r->y > top[1])
+      //     || (r->x > top[0]) || (r->z > top[2])
+      //     || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
+      //     || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->y < bot[1]) || (r->y > top[1])
-          || (r->x > top[0]) || (r->z > top[2])
-          || (r->kbyi * top[0] - bot[2] + r->c_xz < 0)
-          || (r->ibyk * top[2] - bot[0] + r->c_zx < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case MMO:
 
-      case MMO:
+      //   if((r->z < bot[2]) || (r->z > top[2])
+      //     || (r->x < bot[0]) || (r->y < bot[1])
+      //     || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
+      //     || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->z < bot[2]) || (r->z > top[2])
-          || (r->x < bot[0]) || (r->y < bot[1])
-          || (r->jbyi * bot[0] - top[1] + r->c_xy > 0)
-          || (r->ibyj * bot[1] - top[0] + r->c_yx > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case MPO:
 
-      case MPO:
+      //   if((r->z < bot[2]) || (r->z > top[2])
+      //     || (r->x < bot[0]) || (r->y > top[1])
+      //     || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
+      //     || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->z < bot[2]) || (r->z > top[2])
-          || (r->x < bot[0]) || (r->y > top[1])
-          || (r->jbyi * bot[0] - bot[1] + r->c_xy < 0)
-          || (r->ibyj * top[1] - top[0] + r->c_yx > 0)
-          )
-          hits[tid] = false;
-        break;
+      // case PMO:
 
-      case PMO:
+      //   if((r->z < bot[2]) || (r->z > top[2])
+      //     || (r->x > top[0]) || (r->y < bot[1])
+      //     || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
+      //     || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->z < bot[2]) || (r->z > top[2])
-          || (r->x > top[0]) || (r->y < bot[1])
-          || (r->jbyi * top[0] - top[1] + r->c_xy > 0)
-          || (r->ibyj * bot[1] - bot[0] + r->c_yx < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case PPO:
 
-      case PPO:
+      //   if((r->z < bot[2]) || (r->z > top[2])
+      //     || (r->x > top[0]) || (r->y > top[1])
+      //     || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
+      //     || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->z < bot[2]) || (r->z > top[2])
-          || (r->x > top[0]) || (r->y > top[1])
-          || (r->jbyi * top[0] - bot[1] + r->c_xy < 0)
-          || (r->ibyj * top[1] - bot[0] + r->c_yx < 0)
-          )
-          hits[tid] = false;
-        break;
+      // case MOO:
 
-      case MOO:
+      //   if((r->x < bot[0])
+      //     || (r->y < bot[1]) || (r->y > top[1])
+      //     || (r->z < bot[2]) || (r->z > top[2])
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x < bot[0])
-          || (r->y < bot[1]) || (r->y > top[1])
-          || (r->z < bot[2]) || (r->z > top[2])
-          )
-          hits[tid] = false;
-        break;
+      // case POO:
 
-      case POO:
+      //   if((r->x > top[0])
+      //     || (r->y < bot[1]) || (r->y > top[1])
+      //     || (r->z < bot[2]) || (r->z > top[2])
+      //     )
+      //     hits[tid] = false;
+      //   break;
 
-        if((r->x > top[0])
-          || (r->y < bot[1]) || (r->y > top[1])
-          || (r->z < bot[2]) || (r->z > top[2])
-          )
-          hits[tid] = false;
-        break;
+      // case OMO:
 
-      case OMO:
+      //   if((r->y < bot[1])
+      //     || (r->x < bot[0]) || (r->x > top[0])
+      //     || (r->z < bot[2]) || (r->z > top[2])
+      //     )
+      //     hits[tid] = false;
 
-        if((r->y < bot[1])
-          || (r->x < bot[0]) || (r->x > top[0])
-          || (r->z < bot[2]) || (r->z > top[2])
-          )
-          hits[tid] = false;
+      // // Deliberate fall-through!?
+      // case OPO:
 
-      // Deliberate fall-through!?
-      case OPO:
+      //   if((r->y > top[1])
+      //     || (r->x < bot[0]) || (r->x > top[0])
+      //     || (r->z < bot[2]) || (r->z > top[2])
+      //     )
+      //     hits[tid] = false;
 
-        if((r->y > top[1])
-          || (r->x < bot[0]) || (r->x > top[0])
-          || (r->z < bot[2]) || (r->z > top[2])
-          )
-          hits[tid] = false;
+      // case OOM:
 
-      case OOM:
+      //   if((r->z < bot[2])
+      //     || (r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y < bot[1]) || (r->y > top[1])
+      //     )
+      //     hits[tid] = false;
 
-        if((r->z < bot[2])
-          || (r->x < bot[0]) || (r->x > top[0])
-          || (r->y < bot[1]) || (r->y > top[1])
-          )
-          hits[tid] = false;
+      // case OOP:
 
-      case OOP:
-
-        if((r->z > top[2])
-          || (r->x < bot[0]) || (r->x > top[0])
-          || (r->y < bot[1]) || (r->y > top[1])
-          )
-          hits[tid] = false;
-        break;
+      //   if((r->z > top[2])
+      //     || (r->x < bot[0]) || (r->x > top[0])
+      //     || (r->y < bot[1]) || (r->y > top[1])
+      //     )
+      //     hits[tid] = false;
+      //   break;
     }
   }
 }
 
 extern "C" void cu_src_ray_pluecker_(cpp_src_ray_type *src_ray,
-                                     double *s2b, double *s2t,
-                                     int *Ncells, bool *hits) {
+                                     double *bots, double *tops,
+                                     int *Ncells, bool *hits,
+                                     float *elapsedTime) {
   int N = *Ncells;
   bool *dev_hits;
   cpp_src_ray_type *dev_ray;
-  double *dev_s2b;
-  double *dev_s2t;
+  double *dev_bots;
+  double *dev_tops;
+
+  cudaEvent_t start, stop;
+
+  // We are somewhat unfairly including the time taken up with memory copies.
+  // This is to be absolutely certain that the GPU code shows an advantage,
+  // even with overheads.
+  CUDA_HANDLE_ERR( cudaEventCreate(&start) );
+  CUDA_HANDLE_ERR( cudaEventCreate(&stop) );
+  CUDA_HANDLE_ERR( cudaEventRecord(start, 0) );
 
   CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*src_ray) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2b, 3*N*sizeof(*s2b) ) );
-  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_s2t, 3*N*sizeof(*s2t) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_bots, 3*N*sizeof(*bots) ) );
+  CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_tops, 3*N*sizeof(*tops) ) );
   CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_hits, N*sizeof(*hits) ) );
 
   CUDA_HANDLE_ERR( cudaMemcpy(dev_ray, src_ray, sizeof(*src_ray),
                               cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2b, s2b, 3*N*sizeof(*s2b),
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_bots, bots, 3*N*sizeof(*bots),
                               cudaMemcpyHostToDevice) );
-  CUDA_HANDLE_ERR( cudaMemcpy(dev_s2t, s2t, 3*N*sizeof(*s2t),
+  CUDA_HANDLE_ERR( cudaMemcpy(dev_tops, tops, 3*N*sizeof(*tops),
                               cudaMemcpyHostToDevice) );
 
-  gpu_ray_cells_pluecker<<<(N+17)/16,16>>>(dev_ray, dev_s2b, dev_s2t,
+  gpu_ray_cells_pluecker<<<(N+17)/32,32>>>(dev_ray, dev_bots, dev_tops,
                                            dev_hits, N);
 
   CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
                               cudaMemcpyDeviceToHost) );
 
-  cudaFree(dev_ray);
-  cudaFree(dev_s2b);
-  cudaFree(dev_s2t);
+  CUDA_HANDLE_ERR( cudaEventRecord(stop, 0) );
+  CUDA_HANDLE_ERR( cudaEventSynchronize(stop) );
+  CUDA_HANDLE_ERR( cudaEventElapsedTime(elapsedTime, start, stop) );
+
   cudaFree(dev_hits);
+  cudaFree(dev_ray);
+  cudaFree(dev_bots);
+  cudaFree(dev_tops);
+  CUDA_HANDLE_ERR( cudaEventDestroy(start) );
+  CUDA_HANDLE_ERR( cudaEventDestroy(stop) );
 }
 
-extern "C" void cu_ray_slope_(slope_ray_type *ray, double *bots, double *tops,
-                              int *Ncells, bool *hits) {
+extern "C" void cu_ray_slope_(slope_ray_type *ray,
+                              double *bots, double *tops, int *Ncells,
+                              bool *hits, float *elapsedTime) {
   int N = *Ncells;
   bool *dev_hits;
   slope_ray_type *dev_ray;
   double *dev_bots;
   double *dev_tops;
+
+  cudaEvent_t start, stop;
+
+  CUDA_HANDLE_ERR( cudaEventCreate(&start) );
+  CUDA_HANDLE_ERR( cudaEventCreate(&stop) );
+  CUDA_HANDLE_ERR( cudaEventRecord(start, 0) );
 
   CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_ray, sizeof(*ray) ) );
   CUDA_HANDLE_ERR( cudaMalloc( (void**)&dev_bots, 3*N*sizeof(*bots) ) );
@@ -528,14 +553,20 @@ extern "C" void cu_ray_slope_(slope_ray_type *ray, double *bots, double *tops,
   CUDA_HANDLE_ERR( cudaMemcpy(dev_tops, tops, 3*N*sizeof(*tops),
                               cudaMemcpyHostToDevice) );
 
-  gpu_ray_cell_slope<<<(N+17)/16,16>>>(dev_ray, dev_bots, dev_tops,
+  gpu_ray_cell_slope<<<(N+17)/32,32>>>(dev_ray, dev_bots, dev_tops,
                                        dev_hits, N);
 
   CUDA_HANDLE_ERR( cudaMemcpy(hits, dev_hits, N*sizeof(*hits),
                               cudaMemcpyDeviceToHost) );
 
+  CUDA_HANDLE_ERR( cudaEventRecord(stop, 0) );
+  CUDA_HANDLE_ERR( cudaEventSynchronize(stop) );
+  CUDA_HANDLE_ERR( cudaEventElapsedTime(elapsedTime, start, stop) );
+
+  cudaFree(dev_hits);
   cudaFree(dev_ray);
   cudaFree(dev_bots);
   cudaFree(dev_tops);
-  cudaFree(dev_hits);
+  CUDA_HANDLE_ERR( cudaEventDestroy(start) );
+  CUDA_HANDLE_ERR( cudaEventDestroy(stop) );
 }

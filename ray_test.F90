@@ -5,10 +5,9 @@ use myf03_mod
 use mt19937_mod, only: genrand_real3, init_mersenne_twister
 use ISO_C_BINDING
 implicit none
-logical, external :: cpp_src_ray_pluecker
 external :: cu_src_ray_pluecker, cu_ray_slope
 
-    integer(C_INT), parameter :: N_cells = 100000, N_rays = 100
+    integer(C_INT), parameter :: N_cells = 10000, N_rays = 100
     type(src_ray_type) :: src_ray
     type(cpp_src_ray_type) :: cpp_src_ray
     type(slope_src_ray_type) :: slope_src_ray
@@ -19,8 +18,10 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     integer(i8b) :: slope_success(26), slope_fail(26)
     integer(i8b) :: cu_hit_success(8), cu_miss_success(8)
     integer(i8b) :: cu_hit_fail(8), cu_miss_fail(8)
+    real(C_FLOAT) :: cu_time = 0, slope_time = 0, fortran_time = 0, elapsed_time
+    integer(C_LONG) :: init_time, final_time, count_rate
     real(C_DOUBLE) :: bots(N_cells,3), tops(N_cells,3)
-    real(C_DOUBLE) :: s2bs(N_cells,3), s2ts(N_cells,3)
+    real(C_DOUBLE) :: s2b(3), s2t(3)
     real(C_DOUBLE) :: mag, tmp(3)
     integer*8 :: seed, N_hits = 0
     character(len=50) :: formatter
@@ -82,11 +83,17 @@ external :: cu_src_ray_pluecker, cu_ray_slope
             tops(i,:) = max(tops(i,:), tmp)
 
             ! Ray start -> box bottom/top.
-            s2bs(i,:) = bots(i,:) - src_ray%start
-            s2ts(i,:) = tops(i,:) - src_ray%start
+            s2b = bots(i,:) - src_ray%start
+            s2t = tops(i,:) - src_ray%start
 
             ! Check for hit with original Fortran code, increment total hits if so.
-            hits(i) = src_ray_pluecker(src_ray, s2bs(i,:), s2ts(i,:))
+            call system_clock(init_time, count_rate)
+
+            hits(i) = src_ray_pluecker(src_ray, s2b, s2t)
+
+            call system_clock(final_time)
+            fortran_time = fortran_time + (final_time - init_time)
+
             if (hits(i) .eqv. .true.) then
                 N_hits = N_hits + 1
             endif
@@ -95,10 +102,14 @@ external :: cu_src_ray_pluecker, cu_ray_slope
         ! It is best to pass in pre-allocated cu_hits; if we malloc this in a
         ! C++ function then it may never be deleted!
         ! Check for hit with CUDA code.
-        call cu_src_ray_pluecker(cpp_src_ray, s2bs, s2ts, N_cells, cu_hits)
+        call cu_src_ray_pluecker(cpp_src_ray, bots, tops, N_cells, &
+                                 cu_hits, elapsed_time)
+        cu_time = cu_time + elapsed_time
 
         ! Check for hit with CUDA ray slopes code.
-        call cu_ray_slope(slope_src_ray, bots, tops, N_cells, slope_hits)
+        call cu_ray_slope(slope_src_ray, bots, tops, N_cells, &
+                          slope_hits, elapsed_time)
+        slope_time = slope_time + elapsed_time
 
         ! Loop through hits and check results against Fortran code.
         do i=1,N_cells
@@ -132,6 +143,9 @@ external :: cu_src_ray_pluecker, cu_ray_slope
         enddo
     enddo
 
+    ! Convert Fortran code time to milliseconds.
+    fortran_time = 1000.0 * fortran_time / dble(count_rate)
+
     ! Sum hit/miss fails to get total number of incorrect CUDA returns.
     do i=1,8
         cu_success(i) = cu_hit_success(i) + cu_miss_success(i)
@@ -152,8 +166,8 @@ external :: cu_src_ray_pluecker, cu_ray_slope
                            ""//achar(27)//"[0m"
     enddo
 
-    ! Print the total number of correct CUDA ray-slopes results.
     write(*,*)
+    ! Print the total number of correct CUDA ray-slopes results.
     formatter = "(A6, A12, A13, A8)"
     write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
 
@@ -187,5 +201,10 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     write(*,*)
     write(*,"(A5, A8, I10, A4)") ""//achar(27)//"[36m", "Hits:", N_hits, &
                                  ""//achar(27)//"[0m"
+
+    write(*,*)
+    write(*,"(A19, F8.3, A3)") "Total Fortran time: ", fortran_time, " ms"
+    write(*,"(A21, F8.3, A3)") "Total Pluecker time: ", cu_time, " ms"
+    write(*,"(A18, F8.3, A3)") "Total slope time: ", slope_time, " ms"
 
 end program ray_test

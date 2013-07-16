@@ -2,10 +2,10 @@ CXX = g++
 CPPFLAGS =
 
 FC = gfortran
-FFLAGS = -cpp
+FFLAGS = -cpp -O3
 
 CUC = nvcc
-CUFLAGS = -arch sm_30
+CUFLAGS = -arch sm_30 -O3
 
 CUDALIBS = -L/usr/local/cuda/lib64 -Wl,-rpath=/usr/local/cuda/lib64 -lcudart
 
