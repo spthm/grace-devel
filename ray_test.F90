@@ -94,6 +94,8 @@ external :: cu_src_ray_pluecker, cu_ray_slope
             endif
         enddo
 
+        ! It is best to pass in pre-allocated cu_hits; if we malloc this in a
+        ! C++ function then it may never be deleted!
         ! Check for hit with CUDA code.
         call cu_src_ray_pluecker(cpp_src_ray, s2bs, s2ts, N_cells, cu_hits)
 
@@ -138,21 +140,29 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     formatter = "(A6, A10, A10, A8)"
     write(*,formatter), "Class ", "CUDA OK", "CUDA Bad", "Ratio"
 
-    formatter = "(I3, I12, I8, F11.2)"
+    formatter = "(I3, A5, I13, A5, I7, A5, F11.2, A4)"
     do i=1,8
-        write(*,formatter) i-1, cu_success(i), cu_fail(i), &
-                           FLOAT(cu_fail(i))/FLOAT(cu_success(i))
+        write(*,formatter) i-1, &
+                           ""//achar(27)//"[32m", cu_success(i), &
+                           ""//achar(27)//"[31m", cu_fail(i), &
+                           ""//achar(27)//"[33m", FLOAT(cu_fail(i))/ &
+                                                  FLOAT(cu_success(i)), &
+                           ""//achar(27)//"[0m"
     enddo
 
     ! Print the total number of correct CUDA ray-slopes results.
     write(*,*)
-    formatter = "(A6, A12, A12, A8)"
+    formatter = "(A6, A12, A13, A8)"
     write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
 
-    formatter = "(I3, I14, I10, F11.2)"
+    formatter = "(I3, A5, I14, A5, I10, A5, F12.2, A4)"
     do i=1,8
-        write(*,formatter) i-1, slope_success(i), slope_fail(i), &
-            FLOAT(slope_fail(i))/FLOAT(slope_success(i))
+        write(*,formatter) i-1, &
+                           ""//achar(27)//"[32m", slope_success(i), &
+                           ""//achar(27)//"[31m", slope_fail(i), &
+                           ""//achar(27)//"[33m", FLOAT(slope_fail(i))/ &
+                                                  FLOAT(slope_success(i)), &
+                           ""//achar(27)//"[0m"
     enddo
 
     ! Print the hit/miss-specific numbers of correct CUDA results.
@@ -161,14 +171,19 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     write(*,formatter) "Class ", "Hit CUDA OK", "Hit CUDA Bad", &
                        "Miss CUDA OK", "Miss CUDA Bad"
 
-    formatter = "(I3, I13, I14, I17, I14)"
+    formatter = "(I3, A5, I13, A5, I14, A5, I17, A5, I14, A4)"
     do i=1,8
-        write(*,formatter) i-1, cu_hit_success(i), cu_hit_fail(i), &
-                           cu_miss_success(i), cu_miss_fail(i)
+        write(*,formatter) i-1, &
+                           ""//achar(27)//"[32m", cu_hit_success(i), &
+                           ""//achar(27)//"[31m", cu_hit_fail(i), &
+                           ""//achar(27)//"[32m", cu_miss_success(i), &
+                           ""//achar(27)//"[31m", cu_miss_fail(i), &
+                           ""//achar(27)//"[0m"
     enddo
 
 
     write(*,*)
-    write(*,"(A8, I10)") "Hits:", N_hits
+    write(*,"(A5, A8, I10, A4)") ""//achar(27)//"[36m", "Hits:", N_hits, &
+                                 ""//achar(27)//"[0m"
 
 end program ray_test
