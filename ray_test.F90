@@ -12,7 +12,7 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     type(src_ray_type) :: src_ray
     type(cpp_src_ray_type) :: cpp_src_ray
     type(slope_src_ray_type) :: slope_src_ray
-    integer*4 :: i, j
+    integer*4 :: i, j, k
     logical(C_BOOL) :: hits(N_cells), cpp_hits(N_cells)
     logical(C_BOOL) :: cu_hits(N_cells), slope_hits(N_cells)
     integer(i8b) :: cu_success(8), cu_fail(8)
@@ -21,7 +21,7 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     integer(i8b) :: cu_hit_fail(8), cu_miss_fail(8)
     real(C_DOUBLE) :: bots(N_cells,3), tops(N_cells,3)
     real(C_DOUBLE) :: s2bs(N_cells,3), s2ts(N_cells,3)
-    real(C_DOUBLE) :: tmp(3)
+    real(C_DOUBLE) :: mag, tmp(3)
     integer*8 :: seed, N_hits = 0
     character(len=50) :: formatter
 
@@ -63,18 +63,16 @@ external :: cu_src_ray_pluecker, cu_ray_slope
         ! Make N_cells cells.  Loop over them in Fortran.
         do i=1,N_cells
             ! Random point (x, y, z) in (-1, 1).
-            bots(i,:) = (/ 2.0*genrand_real3()-1.0, &
-                           2.0*genrand_real3()-1.0, &
-                           2.0*genrand_real3()-1.0 /)
+            do k=1,3
+                bots(i,k) = 2.0*genrand_real3()-1.0
+            enddo
 
             ! A second random point, such that a line drawn between the two
             ! crosses no axes (its magnitude is greater for each co-ordinate).
-            tmp = (/ sign((1.0-abs(bots(i,1)))*genrand_real3() + abs(bots(i,1)), &
-                          bots(i,1)), &
-                     sign((1.0-abs(bots(i,2)))*genrand_real3() + abs(bots(i,2)), &
-                          bots(i,2)), &
-                     sign((1.0-abs(bots(i,3)))*genrand_real3() + abs(bots(i,3)), &
-                          bots(i,3)) /)
+            do k=1,3
+                mag = abs(bots(i,k))
+                tmp(k) = sign( (1.0-mag)*genrand_real3() + mag, bots(i,k) )
+            enddo
 
             ! Store first point before finding true bottom/top using min/max.
             tops(i,:) = bots(i,:)
@@ -107,15 +105,19 @@ external :: cu_src_ray_pluecker, cu_ray_slope
              ! Handle case that CUDA result != Fortran result.
             if (hits(i) .eqv. .true.) then
                 if (cu_hits(i) .neqv. hits(i)) then
-                    cu_hit_fail(src_ray%class+1) = cu_hit_fail(src_ray%class+1) + 1
+                    cu_hit_fail(src_ray%class+1) = &
+                        cu_hit_fail(src_ray%class+1) + 1
                 else ! cu_hits(i) == hits(i)
-                    cu_hit_success(src_ray%class+1) = cu_hit_success(src_ray%class+1) + 1
+                    cu_hit_success(src_ray%class+1) = &
+                        cu_hit_success(src_ray%class+1) + 1
                 endif
             else ! hits(i) == false
                 if (cu_hits(i) .neqv. hits(i)) then
-                    cu_miss_fail(src_ray%class+1) = cu_miss_fail(src_ray%class+1) + 1
+                    cu_miss_fail(src_ray%class+1) = &
+                        cu_miss_fail(src_ray%class+1) + 1
                 else ! cu_hits(i) == hits(i)
-                    cu_miss_success(src_ray%class+1) = cu_miss_success(src_ray%class+1) + 1
+                    cu_miss_success(src_ray%class+1) = &
+                        cu_miss_success(src_ray%class+1) + 1
                 endif
             endif
 
