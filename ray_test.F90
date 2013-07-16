@@ -10,15 +10,13 @@ external :: cu_src_ray_pluecker, cu_ray_slope
     integer(C_INT), parameter :: N_cells = 10000, N_rays = 100
     type(src_ray_type) :: src_ray
     type(cpp_src_ray_type) :: cpp_src_ray
-    type(slope_src_ray_type) :: slope_src_ray
     integer*4 :: i, j, k
-    logical(C_BOOL) :: hits(N_cells), cpp_hits(N_cells)
-    logical(C_BOOL) :: cu_hits(N_cells), slope_hits(N_cells)
+    logical(C_BOOL) :: hits(N_cells)
+    logical(C_BOOL) :: cu_hits(N_cells)
     integer(i8b) :: cu_success(8), cu_fail(8)
-    integer(i8b) :: slope_success(26), slope_fail(26)
     integer(i8b) :: cu_hit_success(8), cu_miss_success(8)
     integer(i8b) :: cu_hit_fail(8), cu_miss_fail(8)
-    real(C_FLOAT) :: cu_time = 0, slope_time = 0, fortran_time = 0, elapsed_time
+    real(C_FLOAT) :: cu_time = 0, fortran_time = 0, elapsed_time
     integer(C_LONG) :: init_time, final_time, count_rate
     real(C_DOUBLE) :: bots(N_cells,3), tops(N_cells,3)
     real(C_DOUBLE) :: s2b(3), s2t(3)
@@ -33,11 +31,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
         cu_hit_fail(i) = 0.0
         cu_miss_success(i) = 0.0
         cu_miss_fail(i) = 0.0
-    enddo
-
-    do i=1,26
-        slope_success(i) = 0.0
-        slope_fail(i) = 0.0
     enddo
 
     ! Initialize RNG using count of processor clocks.
@@ -58,8 +51,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
         cpp_src_ray%dir = src_ray%dir
         cpp_src_ray%length = src_ray%length
         cpp_src_ray%dir_class = src_ray%class
-
-        call make_slope_ray(cpp_src_ray, slope_src_ray)
 
         ! Make N_cells cells.  Loop over them in Fortran.
         do i=1,N_cells
@@ -106,11 +97,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
                                  cu_hits, elapsed_time)
         cu_time = cu_time + elapsed_time
 
-        ! Check for hit with CUDA ray slopes code.
-        call cu_ray_slope(slope_src_ray, bots, tops, N_cells, &
-                          slope_hits, elapsed_time)
-        slope_time = slope_time + elapsed_time
-
         ! Loop through hits and check results against Fortran code.
         do i=1,N_cells
              ! Handle case that CUDA result != Fortran result.
@@ -130,15 +116,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
                     cu_miss_success(src_ray%class+1) = &
                         cu_miss_success(src_ray%class+1) + 1
                 endif
-            endif
-
-            ! Handle case that CUDA slopes-test result != Fortran result.
-            if (slope_hits(i) .neqv. hits(i)) then
-                slope_fail(slope_src_ray%classification+1) = &
-                    slope_fail(slope_src_ray%classification+1) + 1
-            else ! slope_hits(i) != hits(i)
-                slope_success(slope_src_ray%classification+1) = &
-                    slope_success(slope_src_ray%classification+1) + 1
             endif
         enddo
     enddo
@@ -166,21 +143,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
                            ""//achar(27)//"[0m"
     enddo
 
-    write(*,*)
-    ! Print the total number of correct CUDA ray-slopes results.
-    formatter = "(A6, A12, A13, A8)"
-    write(*,formatter), "Class ", "Slopes OK", "Slopes Bad", "Ratio"
-
-    formatter = "(I3, A5, I14, A5, I10, A5, F12.2, A4)"
-    do i=1,8
-        write(*,formatter) i-1, &
-                           ""//achar(27)//"[32m", slope_success(i), &
-                           ""//achar(27)//"[31m", slope_fail(i), &
-                           ""//achar(27)//"[33m", FLOAT(slope_fail(i))/ &
-                                                  FLOAT(slope_success(i)), &
-                           ""//achar(27)//"[0m"
-    enddo
-
     ! Print the hit/miss-specific numbers of correct CUDA results.
     write(*,*)
     formatter = "(A6, A14, A15, A16, A17)"
@@ -204,7 +166,6 @@ external :: cu_src_ray_pluecker, cu_ray_slope
 
     write(*,*)
     write(*,"(A19, F8.3, A3)") "Total Fortran time: ", fortran_time, " ms"
-    write(*,"(A21, F8.3, A3)") "Total Pluecker time: ", cu_time, " ms"
-    write(*,"(A18, F8.3, A3)") "Total slope time: ", slope_time, " ms"
+    write(*,"(A16, F8.3, A3)") "Total GPU time: ", cu_time, " ms"
 
 end program ray_test

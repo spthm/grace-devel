@@ -15,7 +15,6 @@ public :: src_ray_class_from_dir
 public :: src_ray_pluecker
 
 public :: cpp_src_ray_type
-public :: slope_src_ray_type
 
 real(r8b), parameter :: zero = 0.0d0
 real(r8b), parameter :: one = 1.0d0
@@ -48,21 +47,6 @@ type, BIND(C) :: cpp_src_ray_type
   real(C_DOUBLE) :: pini      !< initial photons
   real(C_DOUBLE) :: dt_s      !< time step associated with ray [s]
 end type cpp_src_ray_type
-
-type, BIND(C) :: slope_src_ray_type
-  integer(C_INT) :: classification !< The position of this matters for some reason.
-  real(C_DOUBLE) :: x, y, z  !< starting position
-  real(C_DOUBLE) :: i, j, k    !< unit vector direction
-  real(C_FLOAT)  :: ibyj, jbyi, kbyj, jbyk, ibyk, kbyi !< Slope
-  real(C_FLOAT)  :: c_xy, c_xz, c_yx, c_yz, c_zx, c_zy
-  real(C_DOUBLE) :: length    !< length (determines when to stop tracing)
-
-  real(C_DOUBLE) :: freq      !< freq in HI ionizing units
-  real(C_DOUBLE) :: enrg      !< enrg of a single photon in ergs
-  real(C_DOUBLE) :: pcnt      !< photon count (changes as the ray is depleted)
-  real(C_DOUBLE) :: pini      !< initial photons
-  real(C_DOUBLE) :: dt_s      !< time step associated with ray [s]
-end type slope_src_ray_type
 
 
 
