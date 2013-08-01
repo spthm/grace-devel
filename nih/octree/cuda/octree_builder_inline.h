@@ -62,11 +62,13 @@ struct Octree_collection
 // Helper class to collect the 8 children of a given node from
 // a binary kd-tree structure.
 // The class implements template based compile-time recursion.
+//! When building octree, STRIDE is BLOCK_SIZE and LEVEL is always 0.
 template <uint32 LEVEL, uint32 STRIDE>
 struct Octree_collector
 {
     static NIH_HOST_DEVICE void find_children(
         const uint32        node_index,
+        // nih/kd/kd_node.h hasn't been included!???
         const Kd_node*      nodes,
         Octree_collection*  result,
         uint32*             children,
@@ -74,6 +76,9 @@ struct Octree_collector
     {
         const Kd_node node = nodes[ node_index ];
 
+        //! These don't work properly.  nodes is an array of Bintree_nodes,
+        //! whose test for has_child is different from the one in Kd_node!(???)
+        //! Kd_nodes either have two children or are leaves.
         const bool active0 = node.has_child(0);
         const bool active1 = node.has_child(1);
 
@@ -93,6 +98,11 @@ struct Octree_collector
             // traverse the children in Morton order: preserving
             // the order is key here, as we want the output counter
             // to match the bitmask pop-counts.
+            //! octant *2 (+1) propagates the octant's position:
+            //! left, left, left = 0
+            //! left, left, right = 1
+            //! left, right, left = 2
+            //! ...
             if (active0)
             {
                 Octree_collector<LEVEL+1,STRIDE>::find_children(
@@ -127,6 +137,14 @@ struct Octree_collector<3,STRIDE>
     {
         // we got to one of the octants
         children[ STRIDE * result->node_count ] = node_index;
+        //! 1u < octant has a 1 at the nth-least-significant bit,
+        //! where n is the octant number [1,8].
+        //! Bitmask is built cumulatively.  Ultimately, it has a 1 at each n
+        //! least-significant-bits that there is a child node.
+        //! e.g. 00000000 00000000 00000000 10011110 for octree nodes at
+        //! 8, 5, 4, 3, 2.  (Note from above that since the nodes are cast to
+        //! kd_nodes, it is not actually possible for this layout - either a node
+        //! has two children or it has none!)
         result->bitmask |= 1u << octant;
         result->node_count += 1;
 
@@ -170,6 +188,7 @@ __global__ void collect_octants_kernel(
 
         uint32 node;
 
+        //!  Holds only these three zero-initialized variables.
         Octree_collection result;
         result.node_count = 0;
         result.leaf_count = 0;
@@ -232,6 +251,7 @@ inline void collect_octants(
     const size_t n_blocks   = nih::min( max_blocks, (in_tasks_count + BLOCK_SIZE-1) / BLOCK_SIZE );
     const size_t grid_size  = n_blocks * BLOCK_SIZE;
 
+    //! See bintree_gen_inline.h split() function.
     collect_octants_kernel<BLOCK_SIZE> <<<n_blocks,BLOCK_SIZE>>> (
         grid_size,
         kd_nodes,
@@ -287,6 +307,8 @@ void Octree_builder<Integer>::build(
         m_index->begin() );
 
     // generate a kd-tree
+    //! This is a binary tree, NOT a kd-tree.  There are some fundamental
+    //! differences(???)
     cuda::Bintree_context tree( m_kd_nodes, *m_leaves );
 
     //! m_kd_context has type cuda::Bintree_gen_context, and is a member
@@ -299,6 +321,12 @@ void Octree_builder<Integer>::build(
     //! It contains device vectors for nodes and leaves, and can return a
     //! Context object with direct pointers to these arrays, suitable for
     //! passing to a GPU kernel.
+    //!
+    //! Generate splits all nodes, in breadth-first order (one level at a time)
+    //! and loops until all are processed, or it reaches level 0.  Leaf nodes
+    //! are created when necessary (if the number of codes spanned by a node
+    //! is <= the max leaf size).
+    //! Any remaining nodes, at this point, are converted to leaves.
     cuda::generate(
         m_kd_context,
         n_points,
@@ -311,6 +339,9 @@ void Octree_builder<Integer>::build(
     m_leaf_count = m_kd_context.m_leaves;
 
     // start building the octree
+    //! Not sure why m_task_queues is a pointer and m_counters is only a reference.
+    //! These are just helper variables, pointing to the thing we're actually
+    //! modifying.
     thrust::device_vector<Split_task>* m_task_queues = m_kd_context.m_task_queues;
     thrust::device_vector<uint32>&     m_counters    = m_kd_context.m_counters;
 
@@ -334,6 +365,7 @@ void Octree_builder<Integer>::build(
     m_task_queues[ in_queue ][0] = Split_task( 0, 0, 0, 0 );
 
     uint32 level = 0;
+    // Equivalent to m_levels[level] = 0, level+=1;
     m_levels[ level++ ] = 0;
 
     // loop until there's tasks left in the input queue
@@ -341,13 +373,17 @@ void Octree_builder<Integer>::build(
     {
         m_levels[ level++ ] = m_counters[2];
 
+        //!
         need_space( *m_octree, m_counters[2] + m_counters[ in_queue ]*8 );
 
         // clear the output queue
         m_counters[ out_queue ] = 0;
         cudaThreadSynchronize();
 
+        //! Calculates number of blocks and lanuches kernel.
         octree_builder::collect_octants(
+            //! In collect_octants, the first argument (point to a Bintree_node)
+            //! is case as a pointer to a Kd_node.
             thrust::raw_pointer_cast( &m_kd_nodes.front() ),
             m_counters[ in_queue ],
             task_queues[ in_queue ],

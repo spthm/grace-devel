@@ -127,6 +127,11 @@ __global__ void split_kernel(
 
             skip_node = in_skip_nodes[ task_id ];
 
+            //! keep_singletons is set to true for octree, false for kd tree.
+            //! When true, if there is no split at the current level (i.e. all
+            //! 1's or all 0's) we still make a child node.
+            //! Setting this to false makes a binary radix tree, as in Karras
+            //! 2012?
             if (!keep_singletons)
             {
                 //! Find first level at which codes in range differ.
@@ -277,11 +282,15 @@ __global__ void gen_leaves_kernel(
         }
 
         // alloc output slots
+        //! As in split_kernel(), but the generate_leaf bool condition has been
+        //! replaced with the test for performing this task.
+        //! All active threads should be creating leaves!
         uint32 leaf_index = cuda::alloc<1>( task_id < in_tasks_count, out_leaf_count, warp_tid, warp_offset + warp_id );
 
         // write the parent node
         if (task_id < in_tasks_count)
         {
+            //! These nodes have not yet been written, and they have no children.
             tree.write_node( node, false, false, leaf_index, skip_node, level, begin, end, uint32(-1) );
             tree.write_leaf( leaf_index, begin, end );
         }
@@ -348,11 +357,15 @@ void gen_leaves(
     const uint32*       in_skip_nodes,
     uint32*             out_leaf_count)
 {
+    //! Same as above, for split().  Determines number of blocks based on number
+    //! required and HW limitations.
     const uint32 BLOCK_SIZE = 128;
     const size_t max_blocks = thrust::detail::backend::cuda::arch::max_active_blocks(gen_leaves_kernel<Tree,BLOCK_SIZE>, BLOCK_SIZE, 0);
     const size_t n_blocks   = nih::min( max_blocks, (in_tasks_count + BLOCK_SIZE-1) / BLOCK_SIZE );
     const size_t grid_size  = n_blocks * BLOCK_SIZE;
 
+    //! Takes all nodes from input_queue and writes them to the nodes array
+    //! and the leaves array.
     gen_leaves_kernel<Tree,BLOCK_SIZE> <<<n_blocks,BLOCK_SIZE>>> (
         tree,
         grid_size,
@@ -369,6 +382,7 @@ void gen_leaves(
 template <typename Tree, typename Integer>
 void generate(
     Bintree_gen_context& context,
+    //! Actually passed as n_points, hence allows for duplicates.
     const uint32    n_codes,
     const Integer*  codes,
     const uint32    bits,
@@ -472,14 +486,18 @@ void generate(
         --level;
     }
 
-    //! After processing level 0, we drop out of the above while loop by may still
+    //! After processing level 0 we drop out of the above while loop, but may
     //! have nodes left in the (now) input queue.  These must all be made into
     //! leaves.
 
     for (; level >= 0; --level)
+        //! If we dropped out before reaching level zero, then set the number of
+        //! notes at all levels from the current, down to zero, to n_nodes.
         context.m_levels[ level ] = n_nodes;
 
     // generate a leaf for each of the remaining tasks
+    //! Calculates number of blocks then launches a CUDA kernel.
+    //! All remaining nodes are made into leaves.  n_nodes won't need updating.
     if (context.m_counters[ in_queue ])
     {
         bintree::gen_leaves(

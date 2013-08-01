@@ -54,7 +54,8 @@ FORCE_INLINE NIH_HOST_DEVICE Iterator find_pivot(
     //! before the first code.(???)
     if (predicate( begin[0] ) == predicate( begin[n-1] ))
         //!! Is this wrong?  Shouldn't begin + n and begin be swapped?
-        //!! Perhaps doesn't matter since there isn't actually a split...
+        //!! Looks like it doesn't matter since there isn't actually a split.
+        //! Just switches order of arbitrary child0, child1.
         return predicate( begin[0] ) ? begin + n : begin;
 
     // perform a binary search over the given range
