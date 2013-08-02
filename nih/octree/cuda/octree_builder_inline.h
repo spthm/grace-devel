@@ -71,6 +71,8 @@ struct Octree_collector
         // nih/kd/kd_node.h hasn't been included!???
         const Kd_node*      nodes,
         Octree_collection*  result,
+        //! Children is shared memory of total size BLOCK_SIZE * 8
+        //! == STRIDE * 8.
         uint32*             children,
         const uint32        octant = 0)
     {
@@ -103,6 +105,20 @@ struct Octree_collector
             //! left, left, right = 1
             //! left, right, left = 2
             //! ...
+            //!
+            //! get_left/right perform no checks to ensure that either
+            //! child actually exists (since in a kd-tree, they both do
+            //! or do not!)
+            //!
+            //! node.get_right() will return the left child of the next
+            //! node at this level if no left child exists!
+            //! And this node will be re-processed when the next node
+            //! gets to this part of the code and causes the if(active0)
+            //! branch to execute!
+            //!
+            //! It's all moot and broken anyway with the cast to Kd_node.
+            //! The child offset is *not* calculated in the same way as for
+            //! Bintree_node (it is m_packed_data << 3u, rather than <<2u).
             if (active0)
             {
                 Octree_collector<LEVEL+1,STRIDE>::find_children(
@@ -125,6 +141,7 @@ struct Octree_collector
     }
 };
 // Terminal node of Octree_collector's compile-time recursion.
+//! Occurs at level 3, so 2^3 = 8 recursion depth.
 template <uint32 STRIDE>
 struct Octree_collector<3,STRIDE>
 {
@@ -136,14 +153,16 @@ struct Octree_collector<3,STRIDE>
         const uint32        octant)
     {
         // we got to one of the octants
+        //! All 1st children occupy the [0,BLOCK_SIZE) slots,
+        //! 2nd children [BLOCK_SIZE,2*BLOCK_SIZE) etc...
         children[ STRIDE * result->node_count ] = node_index;
         //! 1u < octant has a 1 at the nth-least-significant bit,
         //! where n is the octant number [1,8].
         //! Bitmask is built cumulatively.  Ultimately, it has a 1 at each n
         //! least-significant-bits that there is a child node.
-        //! e.g. 00000000 00000000 00000000 10011110 for octree nodes at
+        //! e.g. [00000000]*3 10011110 for octree nodes at
         //! 8, 5, 4, 3, 2.  (Note from above that since the nodes are cast to
-        //! kd_nodes, it is not actually possible for this layout - either a node
+        //! kd_nodes, this layout is not actually possible - either a node
         //! has two children or it has none!)
         result->bitmask |= 1u << octant;
         result->node_count += 1;
@@ -176,6 +195,8 @@ __global__ void collect_octants_kernel(
     volatile __shared__ uint32 sm_red[ BLOCK_SIZE * 2 ];
     volatile uint32* warp_red = sm_red + WARP_SIZE * 2 * warp_id;
 
+    //! Each thread within a block has reserved shared-memory space
+    //! for writing 8 children (octants).
     __shared__ uint32 sm_children[ BLOCK_SIZE * 8 ];
     uint32* children = sm_children + threadIdx.x;
 
