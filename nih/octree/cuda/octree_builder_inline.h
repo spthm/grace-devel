@@ -90,8 +90,18 @@ struct Octree_collector
             // fitting within an octant of his parent.
             // Which octant do we assign this guy to?
             // Let's say the minimum...
+            //! We have a leaf that isn't at the bottom level of our octant
+            //! search, and hence conceptually covers more than one octant.
+            //! We simply place it in the lowest
             children[ STRIDE * result->node_count ] = node_index;
+            //! (3 - level) = number of levels below this one, so
+            //! 2^(3-level) = number of octants below any node at *this* level.
+            //! Then, octant * 2^(3-level) = number of octants below *and before*
+            //! this node.
+            //! Octants start counting at 0, so no need for +1 in above.
+            //! bitmask then as a 1 at octant * 2^(3-level).
             result->bitmask |= 1u << (octant << (3 - LEVEL));
+            //! Increase node *and* leaf count.
             result->node_count += 1;
             result->leaf_count += 1;
         }
@@ -222,6 +232,9 @@ __global__ void collect_octants_kernel(
 
             node = in_task.m_node;
 
+            //! This makes use of compile-time recursion using templates.
+            //! Terminates when LEVEL (initialized to zero here) reaches 3,
+            //! i.e. 2^3 = 8 sub-divisions.
             Octree_collector<0,BLOCK_SIZE>::find_children(
                 in_task.m_input,
                 kd_nodes,
@@ -231,24 +244,52 @@ __global__ void collect_octants_kernel(
 
         // allocate output nodes, output tasks, and write all leaves
         {
+            //! Works as for split_task.  Counts the number of children
+            //! generated with a warp scan prefix sum and calculates each thread's
+            //! individual offset index.
+            //! Task count is reduced by the number of leaves since these do
+            //! not need to be further divided.
             uint32 task_count = result.node_count - result.leaf_count;
 
+            //! Offset of first octant in the out_nodes list.
+            //! These routines also atomicAdd to out_nodes/tasks_count
             uint32 node_offset = cuda::alloc( result.node_count, out_nodes_count, warp_tid, warp_red, warp_offset + warp_id );
             uint32 task_offset = cuda::alloc( task_count,        out_tasks_count, warp_tid, warp_red, warp_offset + warp_id );
 
             // write the parent node
             if (task_id < in_tasks_count)
+                //! Write this node, using its index from the binary tree,
+                //! as an octree node.  out_nodes forms the actual octree
+                //! structure.
                 out_nodes[ node ] = Octree_node( result.bitmask, node_offset );
 
             // write out all outputs
+            //! Loop through all octants.
             for (uint32 i = 0; i < result.node_count; ++i)
             {
+                //! The sm_children shared memory block is structured as
+                //! [1, 1, 1, ..., 2, 2, 2, ...., 8, 8, 8], where n denotes
+                //! the n-th child of a node processed in this block.
+                //! The stride is set to block_size.
+                //! children is already offset by threadIdx.x
+                //!
+                //! Get the index of the i-th child in the binary tree.
                 const uint32  kd_node_index = children[ i * BLOCK_SIZE ];
                 const Kd_node kd_node       = kd_nodes[ kd_node_index ];
 
                 if (kd_node.is_leaf() == false)
+                    //! If we do not have a leaf then we have a new split task.
+                    //! node_offset becomes 'node' above, and denotes the position
+                    //! in the output octree this octree node should be written
+                    //! to when processed.
+                    //! kd_node_index gives this node's position in the bintree,
+                    //! so it can be located and split.
                     out_tasks[ task_offset++ ] = Split_task( node_offset, 0, 0, kd_node_index );
                 else
+                    //! If we have a leaf node it does not need to be processed,
+                    //! and we may immediately write it to the output queue as a leaf.
+                    //! kd_node.get_child_offset() returns the index to itself
+                    //! if the node is a leaf.
                     out_nodes[ node_offset ] = Octree_node( kd_node.get_child_offset() );
 
                 node_offset++;
@@ -385,6 +426,8 @@ void Octree_builder<Integer>::build(
 
     m_task_queues[ in_queue ][0] = Split_task( 0, 0, 0, 0 );
 
+    //! Level is reversed, as compared to the bintree, for the octree,
+    //! with 0 denoting the root node.
     uint32 level = 0;
     // Equivalent to m_levels[level] = 0, level+=1;
     m_levels[ level++ ] = 0;
@@ -402,9 +445,11 @@ void Octree_builder<Integer>::build(
         cudaThreadSynchronize();
 
         //! Calculates number of blocks and lanuches kernel.
+        //! Each node is split into octants by grouping elements of its
+        //! children, children's children and children's children's children.
         octree_builder::collect_octants(
-            //! In collect_octants, the first argument (point to a Bintree_node)
-            //! is case as a pointer to a Kd_node.
+            //! In collect_octants, the first argument (pointer to a Bintree_node)
+            //! is cast as a pointer to a Kd_node.
             thrust::raw_pointer_cast( &m_kd_nodes.front() ),
             m_counters[ in_queue ],
             task_queues[ in_queue ],
@@ -422,6 +467,8 @@ void Octree_builder<Integer>::build(
     }
     m_node_count = m_counters[2];
 
+    //! For all deeper levels than the final level, set the number of nodes to
+    //! the tree total.
     for (; level < 64; ++level)
         m_levels[ level ] = m_node_count;
 }
