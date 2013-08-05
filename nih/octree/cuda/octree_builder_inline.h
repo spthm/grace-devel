@@ -375,8 +375,8 @@ void Octree_builder<Integer>::build(
 
     //! m_kd_context has type cuda::Bintree_gen_context, and is a member
     //! variable of the Octree_builder struct.
-    //! It contains the Split_task definition, an array 3 of such tasks vectors,
-    //! counters, nodes to skip, number of nodes, leaves and nodes in each level.
+    //! It contains the Split_task definition, an array of 3 such tasks vectors,
+    //! counters, nodes to skip, number of nodes, and leaves and nodes in each level.
     //! These are all needed during *construction*.
     //!
     //! tree has type cuda::Bintree_context.
@@ -398,6 +398,8 @@ void Octree_builder<Integer>::build(
         true,
         tree );
 
+    //! Bintree_gen_context.m_leaves == number of leaves.
+    //! Bintree_context. and Octree_builder.m_leaves == array of leaf indices.
     m_leaf_count = m_kd_context.m_leaves;
 
     // start building the octree
