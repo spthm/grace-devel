@@ -353,6 +353,12 @@ void Octree_builder<Integer>::build(
         points_begin,
         points_begin + n_points,
         m_codes.begin(),
+        //! Morton functor builds 30- or 60-bit keys for uint32 or uint64
+        //! templates.
+        //! The bbox is used to map the points' floating point values to
+        //! the range [0,1], which are then mapped to integers in [0,n).
+        //! For 30-bit keys (i.e. 10-bit x, y, z values) n is 2^10 = 1024.
+        //! For 60-bit keys (i.e. 20-bit "            ") n is 2^20.
         morton_functor<Integer>( bbox ) );
 
     // setup the point indices, from 0 to n_points-1

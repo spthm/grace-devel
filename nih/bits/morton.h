@@ -45,20 +45,20 @@ FORCE_INLINE NIH_HOST_DEVICE uint32 morton_code(
     uint32 y,
     uint32 z)
 {
-    x = (x | (x << 16)) & 0x030000FF; 
-    x = (x | (x <<  8)) & 0x0300F00F; 
-    x = (x | (x <<  4)) & 0x030C30C3; 
-    x = (x | (x <<  2)) & 0x09249249; 
+    x = (x | (x << 16)) & 0x030000FF;
+    x = (x | (x <<  8)) & 0x0300F00F;
+    x = (x | (x <<  4)) & 0x030C30C3;
+    x = (x | (x <<  2)) & 0x09249249;
 
-    y = (y | (y << 16)) & 0x030000FF; 
-    y = (y | (y <<  8)) & 0x0300F00F; 
-    y = (y | (y <<  4)) & 0x030C30C3; 
-    y = (y | (y <<  2)) & 0x09249249; 
+    y = (y | (y << 16)) & 0x030000FF;
+    y = (y | (y <<  8)) & 0x0300F00F;
+    y = (y | (y <<  4)) & 0x030C30C3;
+    y = (y | (y <<  2)) & 0x09249249;
 
-    z = (z | (z << 16)) & 0x030000FF; 
-    z = (z | (z <<  8)) & 0x0300F00F; 
-    z = (z | (z <<  4)) & 0x030C30C3; 
-    z = (z | (z <<  2)) & 0x09249249; 
+    z = (z | (z << 16)) & 0x030000FF;
+    z = (z | (z <<  8)) & 0x0300F00F;
+    z = (z | (z <<  4)) & 0x030C30C3;
+    z = (z | (z <<  2)) & 0x09249249;
 
     return x | (y << 1) | (z << 2);
 }
@@ -110,6 +110,9 @@ struct morton_functor<uint32>
     template <typename Point_type>
     FORCE_INLINE NIH_HOST_DEVICE uint32 operator() (const Point_type point) const
     {
+        //! quantize maps a float in [0,1] to an integer in [0,n).
+        //! For 32-bit input, we construct a 30-bit key from three 10-bit
+        //! inputs, hence map to integers in the range [0,2^10=1024)
         uint32 x = quantize( (point[0] - m_base[0]) * m_inv[0], 1024u );
         uint32 y = quantize( (point[1] - m_base[1]) * m_inv[1], 1024u );
         uint32 z = quantize( (point[2] - m_base[2]) * m_inv[2], 1024u );
