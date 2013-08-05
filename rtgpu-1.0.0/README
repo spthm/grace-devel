@@ -1,0 +1,28 @@
+Dependencies:
+
+- Nvidia OptiX 2.0 - http://developer.nvidia.com/object/optix-home.html
+- gcc >= 4.5.0 - http://gcc.gnu.org
+- boost >= 1.44 - http://www.boost.org
+- OpenMesh >= 2.0-RC5 - http://www.openmesh.org/
+- FLTK >= 1.1 - http://www.fltk.org
+- CUDA SDK >= 3.2 - http://developer.nvidia.com/object/cuda_3_2_downloads.html
+- Glew >= 1.5.6 - http://glew.sourceforge.net/
+- cmake >= 2.8.1 - http://www.cmake.org
+
+To compile, enter in the appropriate directory and type:
+
+cmake .
+make
+
+The executable will be in src/rtgpu
+
+To rotate the camera, hold the left mouse button while moving mouse pointer.
+To rotate the light in the teapot scene, hold the middle mouse button while
+moving the mouse pointer
+
+In OptiX project, to change the render method, change the appropriate #define
+in src/matte.cu
+
+To change the scene rendered (teapot or sponza), change the appropriate #define
+in src/canvas.cpp
+

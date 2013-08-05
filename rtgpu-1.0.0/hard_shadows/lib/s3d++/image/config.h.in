@@ -1,0 +1,4 @@
+#cmakedefine HAS_CXX0X 1
+#cmakedefine HAS_RVALUE_REFERENCES 1
+#cmakedefine HAS_PNG 1
+#cmakedefine HAS_JPEG 1
