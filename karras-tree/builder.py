@@ -1,15 +1,47 @@
 import numpy as np
 import morton_keys
 
-class BinRadixTreeBuilder(object):
-    """docstring for BinRadixTreeBuilder"""
+class BinRadixTree(object):
+    """docstring for BinRadixTree"""
     def __init__(self, primitives):
         super(BinRadixTree, self).__init__()
         self.primitives = primitives
         self.n_primitives = len(primitives)
-        self.keys = morton_keys.generate_keys(self.primitives)
-        self.sort(primitives, keys)
-        self.build()
+        # In C++ we would alocate the space here.
+        # In serial Python, we can just append during the build loop.
+        self.nodes = []
+        self.leaves = []
+
+        #self.keys = self.generate_keys()
+        #self.sort_keys()
+        #self.build()
+
+    class Node(object):
+        def __init__(self, left, right, parent):
+            self.left_index, self.left_array = left
+            self.right_index, self.right_array = right
+            self.parent_index, self.parent_array = parent
+        def get_left(self):
+            return self.left_array[self.left_index]
+        def get_right(self):
+            return self.right_array[self.right_index]
+        def get_parent(self):
+            return self.parent_array[self.parent_index]
+        def is_left_leaf(self):
+            return self.left_array is not self.parent_array
+            #return self.get_left().is_leaf()
+        def is_right_leaf(self):
+            return self.right_array is not self.parent_array
+            #return self.get_right().is_leaf()
+        def is_leaf(self):
+            return False
+
+    class Leaf(object):
+        def __init__(self, parent_index, array):
+            self.parent_index = parent_index
+            self.array = array
+        def is_leaf(self):
+            print True
 
     def common_prefix(self, i, j):
         if j < 0:
@@ -19,12 +51,12 @@ class BinRadixTreeBuilder(object):
         xor = self.keys[i] ^ self.keys[j]
         if xor > 0:
             # Count leading zeros of the xor.
-            return int(31 - np.floor(np.log2(xor)))
+            return 31 - int(np.floor(np.log2(xor)))
         else: # idential keys
+            # Identical keys.  Increase length of prefix using key indices.
             xor = i ^ j
-            # Increase length of prefix using key indices.
-            return 32 + int(31 - np.floor(np.log2(xor)))
-
+            index_prefix = 31 - int(np.floor(np.log2(xor)))
+            return 32 + index_prefix
 
     def build(self):
         # This loop can be done in parallel.
@@ -71,13 +103,12 @@ class BinRadixTreeBuilder(object):
             split_idx = i + s*d + min(d,0)
 
             # Output child nodes/leaves.
-            # if min(i,j) == split_idx:
-            #     left = leaves[split_idx]
-            # else:
-            #     left = nodes[split_idx]
-            # if max(i,j) == split_idx + 1:
-            #     right = leaves[split_idx+1]
-            # else:
-            #     right = nodes[spit_idx+1]
-            if abs(j - i) >=
+            if min(i,j) == split_idx:
+                left = LeafNode(split_idx)
+            else:
+                left = Node(split_idx)
+            if max(i,j) == split_idx + 1:
+                right = LeafNode(split_idx+1)
+            else:
+                right = Node(spit_idx+1)
             nodes[i] = (left, right)
