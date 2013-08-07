@@ -2,3 +2,4 @@
 *.mod
 ray_test
 ray_test_float
+*.pyc
