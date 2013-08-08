@@ -1,47 +1,84 @@
 import numpy as np
 import morton_keys
 
+class Node(object):
+    def __init__(self, left, right, parent):
+        super(Node, self).__init__()
+        self._left = left
+        self._right = right
+        self._parent = parent
+
+    @classmethod
+    def empty(cls):
+        left, right, parent = ((None, None),)*3
+        return cls(left, right, parent)
+
+    @property
+    def left(self):
+        return self._left
+
+    @left.setter
+    def left(self, left_child):
+        self._left = left_child
+
+    @property
+    def right(self):
+        return self._right
+
+    @right.setter
+    def right(self, right_child):
+        self._right = right_child
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @parent.setter
+    def parent(self, parent_node):
+        self._parent = parent_node
+
+    def is_leaf(self):
+        return False
+
+class LeafNode(object):
+    def __init__(self, parent_node):
+        super(LeafNode, self).__init__()
+        self._parent = parent_node
+
+    @property
+    def parent(self):
+        return self._parent
+
+    @parent.setter
+    def parent(self, parent_node):
+        self._parent = parent_node
+
+    def is_leaf(self):
+        return True
+
 class BinRadixTree(object):
     """docstring for BinRadixTree"""
-    def __init__(self, primitives):
+    def __init__(self, primitives=[]):
+        """
+        Initialize BinRadixTree from a list of (x,y,z) primitive co-ordinates.
+
+        Morton keys are generated for the primitives, memory is 'allocated' for
+        the tree, but it is not constructed and the keys are not sorted.
+        """
         super(BinRadixTree, self).__init__()
         self.primitives = primitives
         self.n_primitives = len(primitives)
-        # In C++ we would alocate the space here.
-        # In serial Python, we can just append during the build loop.
-        self.nodes = []
-        self.leaves = []
+        self.keys = self.generate_keys()
+        self.nodes = [Node.empty() for i in range(self.n_primitives-1)]
+        self.leaves = [LeadNode(None) for i in range(self.n_primitives)]
 
-        #self.keys = self.generate_keys()
-        #self.sort_keys()
-        #self.build()
-
-    class Node(object):
-        def __init__(self, left, right, parent):
-            self.left_index, self.left_array = left
-            self.right_index, self.right_array = right
-            self.parent_index, self.parent_array = parent
-        def get_left(self):
-            return self.left_array[self.left_index]
-        def get_right(self):
-            return self.right_array[self.right_index]
-        def get_parent(self):
-            return self.parent_array[self.parent_index]
-        def is_left_leaf(self):
-            return self.left_array is not self.parent_array
-            #return self.get_left().is_leaf()
-        def is_right_leaf(self):
-            return self.right_array is not self.parent_array
-            #return self.get_right().is_leaf()
-        def is_leaf(self):
-            return False
-
-    class Leaf(object):
-        def __init__(self, parent_index, array):
-            self.parent_index = parent_index
-            self.array = array
-        def is_leaf(self):
-            print True
+    @classmethod
+    def from_primitives(cls, primitives):
+        "Construct BinRadixTree from a list of (x,y,z) primitive co-ordinates."
+        tree = cls(primitives)
+        tree.sort_by_keys()
+        tree.build()
+        return tree
 
     def common_prefix(self, i, j):
         if j < 0:
@@ -58,7 +95,22 @@ class BinRadixTree(object):
             index_prefix = 31 - int(np.floor(np.log2(xor)))
             return 32 + index_prefix
 
+    def generate_keys(self):
+        # morton_code expects (x, y, z) as arguments.
+        self.keys = [morton_keys.morton_code(*pos) for pos in primitives]
+
+    def sort_by_keys(self):
+        packed_tuple = zip(self.keys, self.primitives)
+        # Sorts by first element (the keys).
+        packed_tuple.sort()
+        # Unpack and *convert to list* (zip outputs tuples).
+        self.keys, self.primitives = [list(t) for t in zip(*packed)]
+
     def build(self):
+        if len(self.nodes != self.n_primitives-1):
+            self.nodes = [Node.empty() for i in range(self.n_primitives-1)]
+        if len(self.leaves != self.n_primitives):
+            self.leaves = [LeadNode(None) for i in range(self.n_primitives)]
         # This loop can be done in parallel.
         for node_idx in range(self.n_primitives-1):
             i = node_idx
@@ -88,7 +140,7 @@ class BinRadixTree(object):
                 if self.common_prefix(i, i + (l+t)*d) > min_common_prefix:
                     l += t
                 t /= 2
-            j = i +l*d
+            j = i + l*d
 
             # Perform a binary seach in [i,j] for the split position,
             # making use of the fact that everything before the split has a
@@ -102,13 +154,21 @@ class BinRadixTree(object):
                 t /= 2
             split_idx = i + s*d + min(d,0)
 
-            # Output child nodes/leaves.
+            # Output child nodes/leaves, and set parents/children where possible.
+            # Leaves are processed only once, so we can explicity construct them
+            # here.
+            # Nodes are processed twice (once by themselves, once by their
+            # parent), so we may only update their properties.
+            this_node = self.nodes[i]
             if min(i,j) == split_idx:
-                left = LeafNode(split_idx)
+                left = self.leaves[split_idx] = LeafNode(this_node)
             else:
-                left = Node(split_idx)
+                left = self.nodes[split_idx]
+                left.parent = this_node
             if max(i,j) == split_idx + 1:
-                right = LeafNode(split_idx+1)
+                right = self.leaves[split_idx+1] = LeafNode(this_node)
             else:
-                right = Node(spit_idx+1)
-            nodes[i] = (left, right)
+                right = self.nodes[split_idx+1]
+                right.parent = this_node
+            this_node.left = left
+            this_node.right = right
