@@ -101,6 +101,7 @@ class BinRadixTree(object):
         prefix_length = bits.common_prefix(key_i, key_j)
         if prefix_length == 32:
             # Identical keys.  Increase length of prefix using key indices.
+            print "Identical keys!"
             prefix_length += bits.common_prefix(i, j)
         return prefix_length
 
@@ -128,7 +129,7 @@ class BinRadixTree(object):
         if len(self.nodes) != self.n_primitives-1:
             self.nodes = [Node.empty() for i in range(self.n_primitives-1)]
         if len(self.leaves) != self.n_primitives:
-            self.leaves = [LeadNode(None) for i in range(self.n_primitives)]
+            self.leaves = [LeafNode(None) for i in range(self.n_primitives)]
         # This loop can be done in parallel.
         for node_idx in range(self.n_primitives-1):
             i = node_idx
@@ -165,11 +166,14 @@ class BinRadixTree(object):
             # longer common prefix than the node's prefix.
             node_prefix = self._common_prefix(i, j)
             s = 0
-            t = l / 2
-            while t >= 1:
+            t = l
+            while True:
+                # t = ceil(l/2), ceil(l/4), ...
+                t = (t+1) / 2
                 if self._common_prefix(i, i + (s+t)*d) > node_prefix:
                     s += t
-                t /= 2
+                if t == 1:
+                    break
             split_idx = i + s*d + min(d,0)
 
             # Output child nodes/leaves, and set parents/children where possible.
@@ -180,11 +184,13 @@ class BinRadixTree(object):
             this_node = self.nodes[i]
             this_node.index = i
             if min(i,j) == split_idx:
+                #print "Leaf at", split_idx
                 left = self.leaves[split_idx] = LeafNode(split_idx, this_node)
             else:
                 left = self.nodes[split_idx]
                 left.parent = this_node
             if max(i,j) == split_idx + 1:
+                #print "Leaf at", split_idx + 1
                 right = self.leaves[split_idx+1] = LeafNode(split_idx+1,
                                                             this_node)
             else:
