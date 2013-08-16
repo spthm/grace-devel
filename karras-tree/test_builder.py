@@ -20,7 +20,7 @@ for leaf in binary_tree.leaves:
     print leaf.index
 
 print
-print "Node indices and leaf indices, if present:"
+print "Node indices, and leaf indices if present:"
 for node in binary_tree.nodes:
     print node.index
     left, right = node.left, node.right

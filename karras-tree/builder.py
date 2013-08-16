@@ -5,14 +5,18 @@ import bits
 class Node(object):
     def __init__(self, index, left, right, parent):
         super(Node, self).__init__()
-        self.index = index
+        self._index = index
         self._left = left
         self._right = right
         self._parent = parent
 
     @classmethod
-    def empty(cls):
-        return cls(0, None, None, None)
+    def null(cls):
+        return cls(-1, None, None, None)
+
+    @property
+    def index(self):
+        return self._index
 
     @property
     def left(self):
@@ -41,16 +45,23 @@ class Node(object):
     def is_leaf(self):
         return False
 
+    def isNull(self):
+        return self._index == -1
+
 class LeafNode(object):
     def __init__(self, index, parent_node, span=1):
         super(LeafNode, self).__init__()
-        self.index = index
+        self._index = index
         self._parent = parent_node
         self._span = span
 
     @classmethod
-    def empty(cls):
-        return cls(0, None)
+    def null(cls):
+        return cls(-1, None)
+
+    @property
+    def index(self):
+        return self._index
 
     @property
     def parent(self):
@@ -67,6 +78,9 @@ class LeafNode(object):
     def is_leaf(self):
         return True
 
+    def isNull(self):
+        return self._index == -1
+
 class BinRadixTree(object):
     """Represents a binary radix tree.  Contains methods for tree construction."""
     def __init__(self, primitives=[], n_per_leaf=1):
@@ -80,13 +94,13 @@ class BinRadixTree(object):
         self.primitives = primitives
         self.n_primitives = len(primitives)
         self.n_per_leaf = n_per_leaf
-        self.n_nodes = self.n_primitives - self.n_per_leaf
-        self.n_leaves = self.n_nodes + 1
+        self.n_nodes = self.n_primitives - 1
+        self.n_leaves = self.n_primitives
 
         self.keys = self.generate_keys()
 
-        self.nodes = [Node.empty() for i in range(self.n_nodes)]
-        self.leaves = [LeafNode.empty() for i in range(self.n_leaves)]
+        self.nodes = [Node.null() for i in range(self.n_nodes)]
+        self.leaves = [LeafNode.null() for i in range(self.n_leaves)]
 
     @classmethod
     def from_primitives(cls, primitives):
@@ -107,7 +121,8 @@ class BinRadixTree(object):
         print("Sorting keys...")
         tree.sort_primitives_by_keys()
         print("Building short tree..")
-        tree.build_short()
+        tree.build()
+        tree.compact()
         return tree
 
     def generate_keys(self):
@@ -143,21 +158,73 @@ class BinRadixTree(object):
             split_index = self._find_split_index(node_index,
                                                  end_index,
                                                  direction)
-            #self._update_node(node_index, end_index, split_index)
-            # For self.n_per_leaf, this is always true.  (A node spans >= 2 keys.)
-            if abs(end_index - node_index) + 1 > self.n_per_leaf:
-                self._update_node(node_index, end_index, split_index)
+
+            self.update_node(node_index, end_index, split_index)
+
+    def compact(self):
+        "Removes null nodes and leaves from a tree with n_per_leaf > 1."
+        if self.n_per_leaf == 1:
+            raise ValueError("n_per_leaf == 1, cannot compact tree.")
+
+        n_leaves = self._count_valid_nodes(self.leaves)
+
+        # index_shifts[i] == number of nodes removed for j < i.
+        index_shifts = self._exclusive_prefix_null_sum(self.leaves)
+
+        self.nodes = self._remove_null_nodes(self.nodes)
+        self.leaves = self._remove_null_nodes(self.leaves)
+
+        if len(self.leaves) != n_leaves:
+            # Pretty much has to work.
+            raise ValueError("Compaction failed.  n_leaves != len(self.leaves).")
+        if len(self.nodes) != n_leaves - 1:
+            # Might get this if there's a bug.
+            raise ValueError("Compaction failed.  n_nodes != n_leaves - 1.")
+
+        self._shift_indices(index_shifts)
+
+    def update_node(self, node_index, end_index, split_index):
+        # For self.n_per_leaf == 1, this is always true.
+        # (A node spans >= 2 keys.)
+        if abs(end_index - node_index) + 1 > self.n_per_leaf:
+            self._write_node(node_index, end_index, split_index)
+        else:
+            # This node will be processed as a leaf by its parent,
+            # or is the would-be child of a would-be node.
+            self._write_null_node(node_index)
+
+    def _shift_indices(self, shifts):
+        for node in self.nodes:
+            left_index = node.left.index
+            if isinstance(node.left, LeafNode):
+                node.left = self.leaves[left_index - shifts[left_index]]
             else:
-                print abs(end_index - node_index)
-                # This node will be processed as a leaf by its parent,
-                # or is the would-be child of a would-be node.
-                self._make_null_node(node_index)
+                node.left = self.nodes[left_index - shifts[left_index]]
 
-        if self.n_per_leaf > 1:
-            self._compact_tree()
+            right_index = node.right.index
+            if isinstance(node.right, LeafNode):
+                node.right = self.leaves[right_index - shifts[right_index]]
+            else:
+                node.right = self.nodes[right_index - shifts[right_index]]
 
-    def _compact_tree(self):
-        pass
+    def _exclusive_prefix_null_sum(self, array):
+        running_total = 0
+        prefix_sums = [0,]
+        for i in range(len(array)-1):
+            if array[i].isNull():
+                running_total += 1
+            prefix_sums.append(running_total)
+        return prefix_sums
+
+    def _count_valid_nodes(self, array=None):
+        if array == None:
+            array = self.nodes
+        return sum([1 for node in array if node.index >= 0])
+
+    def _remove_null_nodes(self, array=None):
+        if array == None:
+            array = self.nodes
+        return [node for node in array if node.index >= 0]
 
     def _node_direction(self, i):
         return np.sign(self._common_prefix(i, i+1) -
@@ -173,7 +240,6 @@ class BinRadixTree(object):
         prefix_length = bits.common_prefix(key_i, key_j)
         if prefix_length == 32:
             # Identical keys.  Increase length of prefix using key indices.
-            print "Identical keys!"
             prefix_length += bits.common_prefix(i, j)
         return prefix_length
 
@@ -220,14 +286,14 @@ class BinRadixTree(object):
         # If d = -1, then we actually found split_idx + 1.
         return i + s*d + min(d,0)
 
-    def _update_node(self, i, j, split_idx):
+    def _write_node(self, i, j, split_idx):
         # Output child nodes/leaves, and set parents/children where possible.
         # Leaves are processed only once, so we can explicity construct them
         # here.
         # Nodes are processed twice (first by their parent, then by
         # themselves), so we may only update their properties.
         this_node = self.nodes[i]
-        this_node.index = i
+        this_node._index = i
         left_child_span = split_idx - min(i,j) + 1
         right_child_span = max(i,j) - split_idx
 
@@ -248,6 +314,6 @@ class BinRadixTree(object):
         this_node.left = left
         this_node.right = right
 
-    def _make_null_node(self, i):
-        self.nodes[i] = Node.empty()
+    def _write_null_node(self, i):
+        self.nodes[i] = Node.null()
 
