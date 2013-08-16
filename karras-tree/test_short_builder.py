@@ -2,7 +2,7 @@ import numpy as np
 
 from builder import BinRadixTree, LeafNode
 
-N = 100
+N = 1000
 
 # Store spheres as (x, y, z, r).
 spheres = np.array(np.random.rand(N,4), dtype=np.float32)
