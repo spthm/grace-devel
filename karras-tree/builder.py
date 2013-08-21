@@ -115,7 +115,9 @@ class BinRadixTree(object):
 
     @classmethod
     def short_from_primitives(cls, primitives, n_per_leaf):
-        "Construct a short BinRadixTree from (x,y,z) positions and a max leaf size. "
+        """
+        Construct a short BinRadixTree from (x,y,z) positions and a max leaf size.
+        """
         print("Allocating arrays, generating keys...")
         tree = cls(primitives, n_per_leaf)
         print("Sorting keys...")
@@ -126,7 +128,9 @@ class BinRadixTree(object):
         return tree
 
     def generate_keys(self):
-        "Returns a list of morton keys, one for each primitive."
+        """
+        Returns a list of morton keys, one for each primitive.
+        """
         # morton_key_3D expects (x, y, z) as arguments.
         # Spheres are stored as (x, y, z, r)
         return [morton_keys.morton_key_3D(*pos[0:3]) for pos in self.primitives]
@@ -145,7 +149,9 @@ class BinRadixTree(object):
         self.keys, self.primitives = [list(t) for t in zip(*packed_tuple)]
 
     def build(self):
-        "Builds a binary radix tree from the list of primitives and their keys."
+        """
+        Builds a binary radix tree from the list of primitives and their keys.
+        """
         # This loop can be done in parallel.
         for node_index in range(self.n_nodes):
             # Get the 'direction' of the node.
