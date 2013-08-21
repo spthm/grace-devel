@@ -23,7 +23,7 @@ for (leaf1, leaf2) in zip(binary_tree.leaves, short_tree.leaves):
 print
 print "Node indices, and leaf indices if present:"
 for (node1, node2) in zip(binary_tree.nodes, short_tree.nodes):
-    print node1.index, node2.index
+    print "Node indices:", node1.index, node2.index
     left1, right1 = node1.left, node1.right
     left2, right2 = node2.left, node2.right
     out = "Leaves: "

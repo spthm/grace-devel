@@ -22,7 +22,7 @@ for leaf in binary_tree.leaves:
 print
 print "Node indices, and leaf indices if present:"
 for node in binary_tree.nodes:
-    print node.index
+    print "Node index:", node.index
     left, right = node.left, node.right
     out = 'Leaves: '
     if isinstance(left, LeafNode):
