@@ -178,7 +178,6 @@ class BinRadixTree(object):
         n_leaves = self._count_valid_nodes(self.leaves)
 
         # index_shifts[i] == number of nodes removed for j < i.
-        node_index_shifts = self._inclusive_null_node_scan(self.nodes)
         leaf_index_shifts = self._inclusive_null_node_scan(self.leaves)
 
         self.nodes = self._remove_null_nodes(self.nodes)
@@ -191,7 +190,7 @@ class BinRadixTree(object):
             # Might get this if there's a bug.
             raise ValueError("Compaction failed.  n_nodes != n_leaves - 1.")
 
-        self._shift_indices(node_index_shifts, leaf_index_shifts)
+        self._shift_indices(leaf_index_shifts)
 
     def update_node(self, node_index, end_index, split_index):
         # For self.n_per_leaf == 1, this is always true.
@@ -203,27 +202,23 @@ class BinRadixTree(object):
             # or is the would-be child of a would-be node.
             self._write_null_node(node_index)
 
-    def _shift_indices(self, node_shifts, leaf_shifts):
+    def _shift_indices(self, leaf_shifts):
         for node in self.nodes:
             left_index = node.left.index
-            if leaf_shifts[left_index] != node_shifts[left_index]:
-                raise ValueError("Nope.")
             if isinstance(node.left, LeafNode):
                 node.left = self.leaves[left_index - leaf_shifts[left_index]]
             else:
-                node.left = self.nodes[left_index - node_shifts[left_index]]
+                node.left = self.nodes[left_index - leaf_shifts[left_index]]
 
             right_index = node.right.index
             if isinstance(node.right, LeafNode):
                 node.right = self.leaves[right_index - leaf_shifts[right_index]]
             else:
-                right_shift_from_leaves = leaf_shifts[right_index-1]
-                right_shift_from_nodes = node_shifts[right_index]
-                if right_shift_from_nodes != right_shift_from_leaves:
-                    raise ValueError("Nope2.")
-                if right_index-1 != left_index:
-                    raise ValueError("Nope3.")
-                node.right = self.nodes[right_index - node_shifts[right_index]]
+                # NB: right_index-1 == left_index.
+                # We use this since we are fixing a node index, not a leaf index.
+                # Nodes are, conceptually, split between their left and right
+                # children => right child shifts same distance as left.
+                node.right = self.nodes[right_index - leaf_shifts[right_index-1]]
 
     def _inclusive_null_node_scan(self, array):
         running_total = 0
