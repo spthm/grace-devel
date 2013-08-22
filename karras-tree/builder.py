@@ -206,6 +206,8 @@ class BinRadixTree(object):
     def _shift_indices(self, node_shifts, leaf_shifts):
         for node in self.nodes:
             left_index = node.left.index
+            if leaf_shifts[left_index] != node_shifts[left_index]:
+                raise ValueError("Nope.")
             if isinstance(node.left, LeafNode):
                 node.left = self.leaves[left_index - leaf_shifts[left_index]]
             else:
@@ -218,9 +220,9 @@ class BinRadixTree(object):
                 right_shift_from_leaves = leaf_shifts[right_index-1]
                 right_shift_from_nodes = node_shifts[right_index]
                 if right_shift_from_nodes != right_shift_from_leaves:
-                    raise ValueError("Nope.")
-                if right_index-1 != left_index:
                     raise ValueError("Nope2.")
+                if right_index-1 != left_index:
+                    raise ValueError("Nope3.")
                 node.right = self.nodes[right_index - node_shifts[right_index]]
 
     def _inclusive_null_node_scan(self, array):
