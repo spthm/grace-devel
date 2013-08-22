@@ -30,3 +30,13 @@ for node in binary_tree.nodes:
     if isinstance(right, LeafNode):
         out += ', ' + str(right.index)
     print out
+
+print "Node indices, child indices, and leaf indices if present:"
+for node in binary_tree.nodes:
+    print "Node index: %d" % (node.index, )
+    left, right = node.left, node.right
+    print "Children: %d, %d" %(left.index, right.index)
+    leaves = tuple([child.index if child.is_leaf() else -1
+                    for child in (left, right)])
+    print "Leaves:   %d, %d" % leaves
+    print
