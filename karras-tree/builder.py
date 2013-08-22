@@ -48,7 +48,7 @@ class Node(object):
     def is_leaf(self):
         return False
 
-    def isNull(self):
+    def is_null(self):
         return self._index == -1
 
 class LeafNode(object):
@@ -81,7 +81,7 @@ class LeafNode(object):
     def is_leaf(self):
         return True
 
-    def isNull(self):
+    def is_null(self):
         return self._index == -1
 
 class BinRadixTree(object):
@@ -225,7 +225,7 @@ class BinRadixTree(object):
         N = len(array)
         prefix_sums = np.zeros(N, dtype=np.int32)
         for i in xrange(N):
-            if array[i].isNull():
+            if array[i].is_null():
                 running_total += 1
             prefix_sums[i] = running_total
         return prefix_sums
@@ -233,12 +233,12 @@ class BinRadixTree(object):
     def _count_valid_nodes(self, array=None):
         if array == None:
             array = self.nodes
-        return sum([1 for node in array if not node.isNull()])
+        return sum([1 for node in array if not node.is_null()])
 
     def _remove_null_nodes(self, array=None):
         if array == None:
             array = self.nodes
-        return [node for node in array if not node.isNull()]
+        return [node for node in array if not node.is_null()]
 
     def _node_direction(self, i):
         return np.sign(self._common_prefix(i, i+1) -
