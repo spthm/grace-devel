@@ -85,7 +85,9 @@ class LeafNode(object):
         return self._index == -1
 
 class BinRadixTree(object):
-    """Represents a binary radix tree.  Contains methods for tree construction."""
+    """
+    Represents a binary radix tree.  Contains methods for tree construction.
+    """
     def __init__(self, primitives=[], n_per_leaf=1):
         """
         Initialize BinRadixTree from a list of (x,y,z) primitive co-ordinates.
@@ -107,7 +109,9 @@ class BinRadixTree(object):
 
     @classmethod
     def from_primitives(cls, primitives):
-        "Construct a BinRadixTree from a list of (x,y,z) primitive co-ordinates."
+        """
+        Returns a binary tree from a list of (x,y,z) primitive co-ordinates.
+        """
         print("Allocating arrays, generating keys...")
         tree = cls(primitives)
         print("Sorting keys...")
@@ -119,7 +123,7 @@ class BinRadixTree(object):
     @classmethod
     def short_from_primitives(cls, primitives, n_per_leaf):
         """
-        Construct a short BinRadixTree from (x,y,z) positions and a max leaf size.
+        Returns a short binary tree from (x,y,z) positions and a max leaf size.
         """
         print("Allocating arrays, generating keys...")
         tree = cls(primitives, n_per_leaf)
@@ -136,7 +140,8 @@ class BinRadixTree(object):
         """
         # morton_key_3D expects (x, y, z) as arguments.
         # Spheres are stored as (x, y, z, r)
-        return [morton_keys.morton_key_3D(*prim[0:3]) for prim in self.primitives]
+        return [morton_keys.morton_key_3D(*prim[0:3])
+                for prim in self.primitives]
 
     def sort_primitives_by_keys(self):
         """
@@ -193,6 +198,12 @@ class BinRadixTree(object):
         self._shift_indices(leaf_index_shifts)
 
     def update_node(self, node_index, end_index, split_index):
+        """
+        Writes all attributes of the node spanning [node_index,end_index].
+
+        If the span range is less than the number of nodes per leaf, a null
+        node is written instead.
+        """
         # For self.n_per_leaf == 1, this is always true.
         # (A node spans >= 2 keys.)
         if abs(end_index - node_index) + 1 > self.n_per_leaf:
@@ -203,24 +214,49 @@ class BinRadixTree(object):
             self._write_null_node(node_index)
 
     def _shift_indices(self, leaf_shifts):
+        """
+        Finds the new, shifted children for all nodes.
+
+        leaf_shifts should be constructed such that:
+
+            new_leaf_index = current_index - leaf_shifts[current_index]
+
+        Though in the case that we have a right child which is not a node,
+        the calculation is:
+
+            new_node_index = current_index = leaf_shifts[current_index-1]
+        """
         for node in self.nodes:
             left_index = node.left.index
-            if isinstance(node.left, LeafNode):
-                node.left = self.leaves[left_index - leaf_shifts[left_index]]
+            if node.left.is_leaf():
+                new_index = left_index - leaf_shifts[left_index]
+                assert(node.left is self.leaves[new_index])
+                node.left._index = new_index
             else:
-                node.left = self.nodes[left_index - leaf_shifts[left_index]]
+                new_index = left_index - leaf_shifts[left_index]
+                assert(node.left is self.nodes[new_index])
+                node.left._index = new_index
 
             right_index = node.right.index
-            if isinstance(node.right, LeafNode):
-                node.right = self.leaves[right_index - leaf_shifts[right_index]]
+            if node.right.is_leaf():
+                new_index = right_index -leaf_shifts[right_index]
+                assert(node.right is self.leaves[new_index])
+                node.right._index = new_index
             else:
+                new_index = right_index - leaf_shifts[right_index-1]
+                assert(node.right is self.nodes[new_index])
                 # NB: right_index-1 == left_index.
                 # We use this since we are fixing a node index, not a leaf index.
                 # Nodes are, conceptually, split between their left and right
                 # children => right child shifts same distance as left.
-                node.right = self.nodes[right_index - leaf_shifts[right_index-1]]
+                node.right._index = new_index
 
     def _inclusive_null_node_scan(self, array):
+        """
+        Returns the cummulative sum of the number of null nodes in array.
+
+        Sum is inclusive.
+        """
         running_total = 0
         N = len(array)
         prefix_sums = np.zeros(N, dtype=np.int32)
@@ -230,17 +266,22 @@ class BinRadixTree(object):
             prefix_sums[i] = running_total
         return prefix_sums
 
-    def _count_valid_nodes(self, array=None):
-        if array == None:
-            array = self.nodes
+    def _count_valid_nodes(self, array):
+        """
+        Returns the number of valid (is_null == False) nodes in array.
+        """
         return sum([1 for node in array if not node.is_null()])
 
-    def _remove_null_nodes(self, array=None):
-        if array == None:
-            array = self.nodes
+    def _remove_null_nodes(self, array):
+        """
+        Returns all valid (is_null == False) nodes in array, preserving order.
+        """
         return [node for node in array if not node.is_null()]
 
     def _node_direction(self, i):
+        """
+        Returns the direction of the node starting at i.
+        """
         return np.sign(self._common_prefix(i, i+1) -
                        self._common_prefix(i, i-1))
 
@@ -258,7 +299,9 @@ class BinRadixTree(object):
         return prefix_length
 
     def _find_node_end(self, i, d):
-        "Returns the other end of the node starting at i, with direction d."
+        """
+        Returns the other end of the node starting at i, with direction d.
+        """
         # The lower bound for this node's prefix length comes from the
         # difference between its key and the key of its sibling.  (All keys
         # within this node must have a longer common prefix than this.)
@@ -283,7 +326,9 @@ class BinRadixTree(object):
         return i + l*d
 
     def _find_split_index(self, i, j, d):
-        "Returns the split index for node starting at i and ending at j, with direction d."
+        """
+        Returns the split index for node spanning [i,j], with direction d.
+        """
         # Perform a binary seach in [i,j] for the split position,
         # making use of the fact that everything before the split has a
         # longer common prefix than the node's prefix.
@@ -301,6 +346,9 @@ class BinRadixTree(object):
         return i + s*d + min(d,0)
 
     def _write_node(self, i, j, split_idx):
+        """
+        Writes all attributes of the node spanning [i,j], splitting at split_idx.
+        """
         # Output child nodes/leaves, and set parents/children where possible.
         # Leaves are processed only once, so we can explicity construct them
         # here.
@@ -329,5 +377,8 @@ class BinRadixTree(object):
         this_node.right = right
 
     def _write_null_node(self, i):
+        """
+        Writes the node starting at i as a null node.
+        """
         self.nodes[i] = Node.null()
 

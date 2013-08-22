@@ -8,6 +8,7 @@ N = 100
 spheres = np.array(np.random.rand(N,4), dtype=np.float32)
 spheres[:,3] /= float(N)
 
+#while True:
 short_tree = BinRadixTree.short_from_primitives(spheres, 10)
 binary_tree = BinRadixTree.from_primitives(spheres)
 
