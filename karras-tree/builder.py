@@ -1,4 +1,7 @@
+from operator import itemgetter
+
 import numpy as np
+
 import morton_keys
 import bits
 
@@ -133,7 +136,7 @@ class BinRadixTree(object):
         """
         # morton_key_3D expects (x, y, z) as arguments.
         # Spheres are stored as (x, y, z, r)
-        return [morton_keys.morton_key_3D(*pos[0:3]) for pos in self.primitives]
+        return [morton_keys.morton_key_3D(*prim[0:3]) for prim in self.primitives]
 
     def sort_primitives_by_keys(self):
         """
@@ -142,11 +145,11 @@ class BinRadixTree(object):
         The list of keys is also sorted, so key[i] == morton_key(primitive[i])
         after sorting.
         """
-        packed_tuple = zip(self.keys, self.primitives)
+        packed_list = zip(self.keys, self.primitives)
         # Sorts by first element (the keys).
-        packed_tuple.sort()
-        # Unpack and *convert to list* (zip outputs tuples).
-        self.keys, self.primitives = [list(t) for t in zip(*packed_tuple)]
+        packed_list.sort(key=itemgetter(0))
+        # Unpack and convert to lists (zip outputs a list of tuples).
+        self.keys, self.primitives = [list(t) for t in zip(*packed_list)]
 
     def build(self):
         """
