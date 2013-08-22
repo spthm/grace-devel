@@ -40,3 +40,6 @@ for node in binary_tree.nodes:
                     for child in (left, right)])
     print "Leaves:   %d, %d" % leaves
     print
+
+print "N nodes: ", len(binary_tree.nodes)
+print "N leaves:", len(binary_tree.leaves)

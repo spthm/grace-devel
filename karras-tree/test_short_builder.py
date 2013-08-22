@@ -36,6 +36,5 @@ for (node1, node2) in zip(short_tree.nodes, binary_tree.nodes):
     print "Leaves (full):    %d, %d" % full_leaves
     print
 
-print
-print len(short_tree.nodes), len(binary_tree.nodes)
-print len(short_tree.leaves), len(binary_tree.leaves)
+print "N nodes (short, full): ", len(short_tree.nodes), len(binary_tree.nodes)
+print "N leaves (short, full):", len(short_tree.leaves), len(binary_tree.leaves)
