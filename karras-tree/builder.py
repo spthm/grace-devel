@@ -112,7 +112,7 @@ class BinRadixTree(object):
         tree = cls(primitives)
         print("Sorting keys...")
         tree.sort_primitives_by_keys()
-        print("Building tree..")
+        print("Building tree...")
         tree.build()
         return tree
 
@@ -125,7 +125,7 @@ class BinRadixTree(object):
         tree = cls(primitives, n_per_leaf)
         print("Sorting keys...")
         tree.sort_primitives_by_keys()
-        print("Building short tree..")
+        print("Building short tree...")
         tree.build()
         tree.compact()
         return tree
@@ -178,7 +178,8 @@ class BinRadixTree(object):
         n_leaves = self._count_valid_nodes(self.leaves)
 
         # index_shifts[i] == number of nodes removed for j < i.
-        index_shifts = self._exclusive_prefix_null_sum(self.leaves)
+        node_index_shifts = self._inclusive_null_node_scan(self.nodes)
+        leaf_index_shifts = self._inclusive_null_node_scan(self.leaves)
 
         self.nodes = self._remove_null_nodes(self.nodes)
         self.leaves = self._remove_null_nodes(self.leaves)
@@ -190,7 +191,7 @@ class BinRadixTree(object):
             # Might get this if there's a bug.
             raise ValueError("Compaction failed.  n_nodes != n_leaves - 1.")
 
-        self._shift_indices(index_shifts)
+        self._shift_indices(node_index_shifts, leaf_index_shifts)
 
     def update_node(self, node_index, end_index, split_index):
         # For self.n_per_leaf == 1, this is always true.
@@ -202,38 +203,45 @@ class BinRadixTree(object):
             # or is the would-be child of a would-be node.
             self._write_null_node(node_index)
 
-    def _shift_indices(self, shifts):
+    def _shift_indices(self, node_shifts, leaf_shifts):
         for node in self.nodes:
             left_index = node.left.index
             if isinstance(node.left, LeafNode):
-                node.left = self.leaves[left_index - shifts[left_index]]
+                node.left = self.leaves[left_index - leaf_shifts[left_index]]
             else:
-                node.left = self.nodes[left_index - shifts[left_index]]
+                node.left = self.nodes[left_index - node_shifts[left_index]]
 
             right_index = node.right.index
             if isinstance(node.right, LeafNode):
-                node.right = self.leaves[right_index - shifts[right_index]]
+                node.right = self.leaves[right_index - leaf_shifts[right_index]]
             else:
-                node.right = self.nodes[right_index - shifts[right_index]]
+                right_shift_from_leaves = leaf_shifts[right_index-1]
+                right_shift_from_nodes = node_shifts[right_index]
+                if right_shift_from_nodes != right_shift_from_leaves:
+                    raise ValueError("Nope.")
+                if right_index-1 != left_index:
+                    raise ValueError("Nope2.")
+                node.right = self.nodes[right_index - node_shifts[right_index]]
 
-    def _exclusive_prefix_null_sum(self, array):
+    def _inclusive_null_node_scan(self, array):
         running_total = 0
-        prefix_sums = [0,]
-        for i in range(len(array)-1):
+        N = len(array)
+        prefix_sums = np.zeros(N, dtype=np.int32)
+        for i in xrange(N):
             if array[i].isNull():
                 running_total += 1
-            prefix_sums.append(running_total)
+            prefix_sums[i] = running_total
         return prefix_sums
 
     def _count_valid_nodes(self, array=None):
         if array == None:
             array = self.nodes
-        return sum([1 for node in array if node.index >= 0])
+        return sum([1 for node in array if not node.isNull()])
 
     def _remove_null_nodes(self, array=None):
         if array == None:
             array = self.nodes
-        return [node for node in array if node.index >= 0]
+        return [node for node in array if not node.isNull()]
 
     def _node_direction(self, i):
         return np.sign(self._common_prefix(i, i+1) -
