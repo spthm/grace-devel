@@ -1,8 +1,7 @@
 import numpy as np
 
 def space_by_1(unspaced, order=10):
-    """
-    Places one zero between each (binary) digit of an integer.
+    """Place one zero between each binary digit of an integer and return it.
     """
     spaced = 0
     for nth_bit in range(order):
@@ -11,8 +10,7 @@ def space_by_1(unspaced, order=10):
     return spaced
 
 def space_by_2(unspaced, order=10):
-    """
-    Places two zeroes between each (binary) digit of an integer.
+    """Place two zeroes between each binary digit of an integer and return it.
     """
     spaced = 0
     for nth_bit in range(order):
@@ -21,15 +19,13 @@ def space_by_2(unspaced, order=10):
     return spaced
 
 def map_to_int(value, order):
-    """
-    Converts a floating point value in [0,1] to an integer in [0, 2^order).
+    """Return a floating point value [0,1] mapped to an integer [0, 2^order).
     """
     span = 2**int(order) - 1
     return int(value * span)
 
 def common_prefix(a, b):
-    """
-    Finds the length of the longest common prefix of two integers a and b.
+    """Return the length of the longest common prefix of two integers a and b.
     """
     xor = a ^ b
     if xor > 0:
