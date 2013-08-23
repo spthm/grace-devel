@@ -6,12 +6,13 @@ import morton_keys
 import bits
 
 class Node(object):
-    def __init__(self, index, left, right, parent):
+    def __init__(self, index, left, right, parent, AABB=None):
         super(Node, self).__init__()
         self._index = index
         self._left = left
         self._right = right
         self._parent = parent
+        self._AABB = AABB
 
     @classmethod
     def null(cls):
@@ -45,6 +46,10 @@ class Node(object):
     def parent(self, parent_node):
         self._parent = parent_node
 
+    @property
+    def AABB(self):
+        return self._AABB
+
     def is_leaf(self):
         return False
 
@@ -52,11 +57,12 @@ class Node(object):
         return self._index == -1
 
 class LeafNode(object):
-    def __init__(self, index, parent_node, span=1):
+    def __init__(self, index, parent_node, span=1, AABB=None):
         super(LeafNode, self).__init__()
         self._index = index
         self._parent = parent_node
         self._span = span
+        self._AABB = AABB
 
     @classmethod
     def null(cls):
@@ -78,16 +84,23 @@ class LeafNode(object):
     def span(self):
         return self._span
 
+    @property
+    def AABB(self):
+        return self._AABB
+
     def is_leaf(self):
         return True
 
     def is_null(self):
         return self._index == -1
 
+class AABB(object):
+    def __init__(self, bottom, top):
+        self.bottom = bottom
+        self.top = top
 
 class BinRadixTree(object):
-    """
-    Represents binary radix tree.  Contains methods for tree construction.
+    """Represents binary radix tree.  Contains methods for tree construction.
 
     Instance variables:
         primitives --
@@ -112,14 +125,15 @@ class BinRadixTree(object):
         short_from_primitives(primitives, n_per_leaf)
         generate_keys()
         sort_primitives_by_keys()
-        compact()
         build()
+        compact()
+        find_AABBs()
         update_node(node_index, end_index, split_index)
 
     """
-    def __init__(self, primitives=[], n_per_leaf=1):
+    def __init__(self, primitives, n_per_leaf=1):
         """
-        Initialize BinRadixTree from a list of (x,y,z) primitive co-ordinates.
+        Initialize a binary tree from a list of (x,y,z) primitive co-ordinates.
 
         Morton keys are generated for the primitives, memory is allocated for
         the tree, but it is not constructed and the keys are not sorted.
@@ -139,8 +153,7 @@ class BinRadixTree(object):
 
     @classmethod
     def from_primitives(cls, primitives):
-        """
-        Build BinRadixTree from a list of (x,y,z) primitive co-ordinates.
+        """Build a binary tree from a list of (x,y,z) primitive co-ordinates.
 
         The same as the default constructor, but the keys and primitves are
         then sorted and the tree built.
@@ -152,6 +165,8 @@ class BinRadixTree(object):
         tree.sort_primitives_by_keys()
         print("Building tree...")
         tree.build()
+        print("Setting AABBs...")
+        tree.find_AABBs()
         return tree
 
     @classmethod
@@ -170,6 +185,7 @@ class BinRadixTree(object):
         print("Building short tree...")
         tree.build()
         tree.compact()
+        tree.find_AABBs()
         return tree
 
     def generate_keys(self):
@@ -193,7 +209,8 @@ class BinRadixTree(object):
         self.keys, self.primitives = [list(t) for t in zip(*packed_list)]
 
     def build(self):
-        """Build a binary radix tree from the list of primitives and their keys.
+        """
+        Build a binary radix tree from the list of primitives and their keys.
         """
         # This loop can be done in parallel.
         for node_index in range(self.n_nodes):
@@ -232,8 +249,22 @@ class BinRadixTree(object):
 
         self._shift_indices(leaf_index_shifts)
 
+    def find_AABBs(self):
+        for leaf_node in self.leaves:
+            leaf_node.AABB = self._get_leaf_AABB(leaf_node)
+
+            current_node = leaf_node.parent
+            child_AABB = leaf_node.AABB
+            while current_node is not None:
+                self._update_AABB(current_node, child_AABB)
+
+                child_AABB = current_node.AABB
+                current_node = current_node.parent
+
     def update_node(self, node_index, end_index, split_index):
-        """Write all attributes of the node spanning [node_index,end_index].
+        """
+        Write index attribute of the node spanning [node_index,end_index],
+        and assign its children.  This node is assigned as their parent.
 
         If the span range is less than the number of nodes per leaf, write a
         null node instead.
@@ -258,15 +289,20 @@ class BinRadixTree(object):
         Though in the case that we have a right child which is not a node,
         the calculation is:
 
-            new_node_index = current_index = leaf_shifts[current_index-1]
+            new_node_index = current_index - leaf_shifts[current_index-1]
 
         """
+        # NB: This loop checks that the new indices have been calculated
+        # properly, and updates a non-leaf node's index.
+        # Since node.left/right/parent are direct references to objects,
+        # they don't need to be fixed.
+        # Leaf indices remain unchanged since they tell us where in the list
+        # of primitives a leaf starts.
         for node in self.nodes:
             left_index = node.left.index
             if node.left.is_leaf():
                 new_index = left_index - leaf_shifts[left_index]
                 assert(node.left is self.leaves[new_index])
-                node.left._index = new_index
             else:
                 new_index = left_index - leaf_shifts[left_index]
                 assert(node.left is self.nodes[new_index])
@@ -276,7 +312,6 @@ class BinRadixTree(object):
             if node.right.is_leaf():
                 new_index = right_index -leaf_shifts[right_index]
                 assert(node.right is self.leaves[new_index])
-                node.right._index = new_index
             else:
                 new_index = right_index - leaf_shifts[right_index-1]
                 assert(node.right is self.nodes[new_index])
@@ -374,7 +409,9 @@ class BinRadixTree(object):
         return i + s*d + min(d,0)
 
     def _write_node(self, i, j, split_idx):
-        """Write all attributes of node spanning [i,j], splitting at split_idx.
+        """
+        Write index of the node spanning [i,j], splitting at split_idx,
+        assign its children, and assign their parent.
         """
         # Output child nodes/leaves, and set parents/children where possible.
         # Leaves are processed only once, so we can explicity construct them
@@ -407,3 +444,23 @@ class BinRadixTree(object):
         """Write the node starting at i as a null node."""
         self.nodes[i] = Node.null()
 
+    def _get_leaf_AABB(self, leaf):
+        """Return the AABB for the leaf."""
+        primitive = self.primitives[leaf.index]
+        pos, r = primitive[0:3], primitive[3]
+        box = AABB(pos-r, pos+r)
+        # In case we have n_per_leaf > 1, loop through primitives.
+        for i in range(1, leaf.span):
+            primitive = self.primitive[leaf.index+i]
+            pos, r = primitive[0:3], prim[3]
+            box.bottom = np.minimum(pos-r, box.bottom)
+            box.top = np.maximum(pos+r, box.top)
+        return box
+
+    def _update_AABB(self, node, new_box):
+        if node.AABB is None:
+            node.AABB = new_box
+        else:
+            # Node AABB has already been set by some subset of its primitives.
+            node.AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
+            node.AABB.top = np.maximum(node.AABB.top, new_box.top)
