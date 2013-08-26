@@ -140,7 +140,7 @@ class BinRadixTree(object):
 
         """
         super(BinRadixTree, self).__init__()
-        self.primitives = primitives
+        self.primitives = np.array(primitives)
         self.n_primitives = len(primitives)
         self.n_per_leaf = n_per_leaf
         self.n_nodes = self.n_primitives - 1
@@ -192,8 +192,9 @@ class BinRadixTree(object):
         """Return a list of morton keys, one for each primitive."""
         # morton_key_3D expects (x, y, z) as arguments.
         # Spheres are stored as (x, y, z, r)
-        return [morton_keys.morton_key_3D(*prim[0:3])
-                for prim in self.primitives]
+        keys = np.array([morton_keys.morton_key_3D(*prim[0:3])
+                         for prim in self.primitives])
+        return keys
 
     def sort_primitives_by_keys(self):
         """Sort the list of primitives by their morton keys.
@@ -206,7 +207,7 @@ class BinRadixTree(object):
         # Sorts by first element (the keys).
         packed_list.sort(key=itemgetter(0))
         # Unpack and convert to lists (zip outputs a list of tuples).
-        self.keys, self.primitives = [list(t) for t in zip(*packed_list)]
+        self.keys, self.primitives = [np.array(t) for t in zip(*packed_list)]
 
     def build(self):
         """
@@ -251,7 +252,7 @@ class BinRadixTree(object):
 
     def find_AABBs(self):
         for leaf_node in self.leaves:
-            leaf_node.AABB = self._get_leaf_AABB(leaf_node)
+            leaf_node._AABB = self._get_leaf_AABB(leaf_node)
 
             current_node = leaf_node.parent
             child_AABB = leaf_node.AABB
@@ -459,8 +460,8 @@ class BinRadixTree(object):
 
     def _update_AABB(self, node, new_box):
         if node.AABB is None:
-            node.AABB = new_box
+            node._AABB = new_box
         else:
             # Node AABB has already been set by some subset of its primitives.
-            node.AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
-            node.AABB.top = np.maximum(node.AABB.top, new_box.top)
+            node._AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
+            node._AABB.top = np.maximum(node.AABB.top, new_box.top)

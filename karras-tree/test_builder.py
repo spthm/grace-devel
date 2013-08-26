@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
@@ -46,19 +48,23 @@ for node in binary_tree.nodes:
 print "N nodes: ", len(binary_tree.nodes)
 print "N leaves:", len(binary_tree.leaves)
 
-# Make an AABB.
-cuboid = np.random.rand(2, 3)
-tmp = cuboid[0].copy()
-cuboid[0] = np.minimum(cuboid[1], tmp)
-cuboid[1] = np.maximum(cuboid[1], tmp)
+
+def plot_AABBs(cuboid, ax):
+    xx_yy_zz = zip(cuboid.bottom, cuboid.top)
+    vertices = np.array(list(itertools.product(*xx_yy_zz)))
+
+    for (start, end) in itertools.combinations(vertices, 2):
+        if sum(abs(end-start) > 0) == 1:
+            ax.plot3D(*zip(start, end), color='r')
 
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-ax.set_aspect('equal')
 
-from itertools import combinations, product
-for start, end in combinations(np.array(list(product(*zip(*cuboid)))), 2):
-    if sum(abs(end-start) > 0) == 1:
-        ax.plot3D(*zip(start, end), color='r')
+boxes = [node.AABB for node in binary_tree.nodes]
+map(lambda cuboid: plot_AABBs(cuboid, ax), boxes)
+
+primitives = binary_tree.primitives[:,:3]
+xs, ys, zs = zip(*primitives)
+ax.scatter(xs, ys, zs=zs, c='k')
 
 plt.show()
