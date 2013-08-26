@@ -1,4 +1,6 @@
 import numpy as np
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 
 from builder import BinRadixTree, LeafNode
 
@@ -43,3 +45,20 @@ for node in binary_tree.nodes:
 
 print "N nodes: ", len(binary_tree.nodes)
 print "N leaves:", len(binary_tree.leaves)
+
+# Make an AABB.
+cuboid = np.random.rand(2, 3)
+tmp = cuboid[0].copy()
+cuboid[0] = np.minimum(cuboid[1], tmp)
+cuboid[1] = np.maximum(cuboid[1], tmp)
+
+fig = plt.figure()
+ax = fig.add_subplot(111, projection='3d')
+ax.set_aspect('equal')
+
+from itertools import combinations, product
+for start, end in combinations(np.array(list(product(*zip(*cuboid)))), 2):
+    if sum(abs(end-start) > 0) == 1:
+        ax.plot3D(*zip(start, end), color='r')
+
+plt.show()
