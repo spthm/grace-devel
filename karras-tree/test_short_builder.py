@@ -12,6 +12,7 @@ spheres[:,3] /= float(N)
 short_tree = BinRadixTree.short_from_primitives(spheres, 10)
 binary_tree = BinRadixTree.from_primitives(spheres)
 
+print
 print "Keys: (short, full)"
 for (key1, key2) in zip(short_tree.keys, binary_tree.keys):
     print "{0:030b}".format(key1) + " " + "{0:030b}".format(key2)

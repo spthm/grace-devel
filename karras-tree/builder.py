@@ -253,14 +253,25 @@ class BinRadixTree(object):
     def find_AABBs(self):
         for leaf_node in self.leaves:
             leaf_node._AABB = self._get_leaf_AABB(leaf_node)
+            print leaf_node.AABB.bottom, leaf_node.AABB.top
 
             current_node = leaf_node.parent
-            child_AABB = leaf_node.AABB
+            child_AABB = AABB(leaf_node.AABB.bottom, leaf_node.AABB.top)
             while current_node is not None:
                 self._update_AABB(current_node, child_AABB)
 
                 child_AABB = current_node.AABB
                 current_node = current_node.parent
+        for leaf_node in self.leaves:
+            print leaf_node.AABB.bottom, leaf_node.AABB.top
+
+    def _update_AABB(self, node, new_box):
+        if node.AABB is None:
+            node._AABB = new_box
+        else:
+            # Node AABB has already been set by some subset of its primitives.
+            node._AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
+            node._AABB.top = np.maximum(node.AABB.top, new_box.top)
 
     def update_node(self, node_index, end_index, split_index):
         """
@@ -279,6 +290,42 @@ class BinRadixTree(object):
             # This node will be processed as a leaf by its parent,
             # or is the would-be child of a would-be node.
             self._write_null_node(node_index)
+
+    def _write_node(self, i, j, split_idx):
+        """
+        Write index of the node spanning [i,j], splitting at split_idx,
+        assign its children, and assign their parent.
+        """
+        # Output child nodes/leaves, and set parents/children where possible.
+        # Leaves are processed only once, so we can explicity construct them
+        # here.
+        # Nodes are processed twice (first by their parent, then by
+        # themselves), so we may only update their properties.
+        this_node = self.nodes[i]
+        this_node._index = i
+        left_child_span = split_idx - min(i,j) + 1
+        right_child_span = max(i,j) - split_idx
+
+        if left_child_span <= self.n_per_leaf:
+            left = self.leaves[split_idx] = LeafNode(split_idx, this_node,
+                                                     left_child_span)
+        else:
+            left = self.nodes[split_idx]
+            left.parent = this_node
+
+        if right_child_span <= self.n_per_leaf:
+            right = self.leaves[split_idx+1] = LeafNode(split_idx+1, this_node,
+                                                        right_child_span)
+        else:
+            right = self.nodes[split_idx+1]
+            right.parent = this_node
+
+        this_node.left = left
+        this_node.right = right
+
+    def _write_null_node(self, i):
+        """Write the node starting at i as a null node."""
+        self.nodes[i] = Node.null()
 
     def _shift_indices(self, leaf_shifts):
         """Find the new, shifted children for all nodes after compaction.
@@ -409,42 +456,6 @@ class BinRadixTree(object):
         # If d = -1, then we actually found split_idx + 1.
         return i + s*d + min(d,0)
 
-    def _write_node(self, i, j, split_idx):
-        """
-        Write index of the node spanning [i,j], splitting at split_idx,
-        assign its children, and assign their parent.
-        """
-        # Output child nodes/leaves, and set parents/children where possible.
-        # Leaves are processed only once, so we can explicity construct them
-        # here.
-        # Nodes are processed twice (first by their parent, then by
-        # themselves), so we may only update their properties.
-        this_node = self.nodes[i]
-        this_node._index = i
-        left_child_span = split_idx - min(i,j) + 1
-        right_child_span = max(i,j) - split_idx
-
-        if left_child_span <= self.n_per_leaf:
-            left = self.leaves[split_idx] = LeafNode(split_idx, this_node,
-                                                     left_child_span)
-        else:
-            left = self.nodes[split_idx]
-            left.parent = this_node
-
-        if right_child_span <= self.n_per_leaf:
-            right = self.leaves[split_idx+1] = LeafNode(split_idx+1, this_node,
-                                                        right_child_span)
-        else:
-            right = self.nodes[split_idx+1]
-            right.parent = this_node
-
-        this_node.left = left
-        this_node.right = right
-
-    def _write_null_node(self, i):
-        """Write the node starting at i as a null node."""
-        self.nodes[i] = Node.null()
-
     def _get_leaf_AABB(self, leaf):
         """Return the AABB for the leaf."""
         primitive = self.primitives[leaf.index]
@@ -453,15 +464,7 @@ class BinRadixTree(object):
         # In case we have n_per_leaf > 1, loop through primitives.
         for i in range(1, leaf.span):
             primitive = self.primitive[leaf.index+i]
-            pos, r = primitive[0:3], prim[3]
+            pos, r = primitive[0:3], primitive[3]
             box.bottom = np.minimum(pos-r, box.bottom)
             box.top = np.maximum(pos+r, box.top)
         return box
-
-    def _update_AABB(self, node, new_box):
-        if node.AABB is None:
-            node._AABB = new_box
-        else:
-            # Node AABB has already been set by some subset of its primitives.
-            node._AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
-            node._AABB.top = np.maximum(node.AABB.top, new_box.top)
