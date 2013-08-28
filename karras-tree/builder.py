@@ -6,12 +6,13 @@ import morton_keys
 import bits
 
 class Node(object):
-    def __init__(self, index, left, right, parent, AABB=None):
+    def __init__(self, index, left, right, parent, level=0, AABB=None):
         super(Node, self).__init__()
         self._index = index
         self._left = left
         self._right = right
         self._parent = parent
+        self._level = level
         self._AABB = AABB
 
     @classmethod
@@ -45,6 +46,10 @@ class Node(object):
     @parent.setter
     def parent(self, parent_node):
         self._parent = parent_node
+
+    @property
+    def level(self):
+        return self._level
 
     @property
     def AABB(self):
@@ -293,8 +298,8 @@ class BinRadixTree(object):
 
     def _write_node(self, i, j, split_idx):
         """
-        Write index of the node spanning [i,j], splitting at split_idx,
-        assign its children, and assign their parent.
+        Write index, level and child references of the node spanning [i,j],
+        splitting at split_idx, and assign it as the parent of its children.
         """
         # Output child nodes/leaves, and set parents/children where possible.
         # Leaves are processed only once, so we can explicity construct them
@@ -303,6 +308,7 @@ class BinRadixTree(object):
         # themselves), so we may only update their properties.
         this_node = self.nodes[i]
         this_node._index = i
+        this_node._level = self._common_prefix(i, j)
         left_child_span = split_idx - min(i,j) + 1
         right_child_span = max(i,j) - split_idx
 
@@ -438,7 +444,8 @@ class BinRadixTree(object):
         return i + l*d
 
     def _find_split_index(self, i, j, d):
-        """Return the split index for a node spanning [i,j], with direction d.
+        """
+        Return the split index for a node spanning [i,j], with direction d.
         """
         # Perform a binary seach in [i,j] for the split position,
         # making use of the fact that everything before the split has a

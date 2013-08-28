@@ -1,12 +1,13 @@
 import itertools
 
 import numpy as np
+import matplotlib as mpl
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 
 from builder import BinRadixTree, LeafNode
 
-N = 10
+N = 50
 
 # Store spheres as (x, y, z, r).
 spheres = np.array(np.random.rand(N,4), dtype=np.float32)
@@ -70,11 +71,16 @@ def plot_AABB(cuboid, ax, **kwargs):
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
 
+
 # Plot the AABBs.
+colour_map = mpl.cm.jet
+def colours(i):
+    i = i % 30
+    return colour_map(1.*i/30.)
 for node in binary_tree.nodes:
-    plot_AABB(node.AABB, ax, color='k')
+    plot_AABB(node.AABB, ax, color=colours(node.level))
 for leaf in binary_tree.leaves:
-    plot_AABB(leaf.AABB, ax, color='r')
+    plot_AABB(leaf.AABB, ax, color=colours(30))
 
 # Draw the spheres.
 # u and v are parametric variables.
@@ -97,6 +103,6 @@ for r, centre in zip(radii, centres):
     x = r*sphere_xs + centre[0]
     y = r*sphere_ys + centre[1]
     z = r*sphere_zs + centre[2]
-    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z), color='b')
+    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z), color='k')
 
 plt.show()
