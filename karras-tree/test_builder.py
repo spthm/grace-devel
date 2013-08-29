@@ -102,17 +102,15 @@ for tree in (binary_tree, short_tree):
     xs = np.outer(np.cos(u), np.sin(v))
     ys = np.outer(np.sin(u), np.sin(v))
     zs = np.outer(np.ones(len(u)), np.cos(v))
-    sphere_xs = np.concatenate((xs, xs.T))
-    sphere_ys = np.concatenate((ys, ys.T))
-    sphere_zs = np.concatenate((zs, zs.T))
+    xs, ys, zs = [np.concatenate((arr, arr.T)) for arr in (xs, ys, zs)]
 
     centres = tree.primitives[:,:3]
     radii = tree.primitives[:,3]
     for r, centre in zip(radii, centres):
-        x = r*sphere_xs + centre[0]
-        y = r*sphere_ys + centre[1]
-        z = r*sphere_zs + centre[2]
-        ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z),
-                  color=colours[30], alpha=0.5)
+        sphere_xs = r*xs + centre[0]
+        sphere_ys = r*ys + centre[1]
+        sphere_zs = r*zs + centre[2]
+        ax.plot3D(np.ravel(sphere_xs), np.ravel(sphere_ys),
+                  np.ravel(sphere_zs), color=colours[30], alpha=0.5)
 
 plt.show()
