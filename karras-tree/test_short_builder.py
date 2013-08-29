@@ -38,5 +38,19 @@ for (node1, node2) in zip(short_tree.nodes, binary_tree.nodes):
     print "Leaves (full):    %d, %d" % full_leaves
     print
 
+print "Node AABBs:"
+for (node1, node2) in zip(short_tree.nodes, binary_tree.nodes):
+    print "Node indices (short, full): %d, %d" % (node1.index, node2.index)
+    print "Bottom (short, full):", node1.AABB.bottom, node2.AABB.bottom
+    print "Top (short, full):", node1.AABB.top, node2.AABB.top
+    print
+
+print "Leaf AABBs:"
+for (leaf1, leaf2) in zip(short_tree.leaves, binary_tree.leaves):
+    print "Leaf indices (short, full): %d, %d" % (leaf1.index, node2.index)
+    print "Bottom (short, full):", leaf1.AABB.bottom, leaf2.AABB.bottom
+    print "Top (short, full):", leaf1.AABB.top, leaf2.AABB.top
+    print
+
 print "N nodes (short, full): ", len(short_tree.nodes), len(binary_tree.nodes)
 print "N leaves (short, full):", len(short_tree.leaves), len(binary_tree.leaves)

@@ -250,19 +250,20 @@ class BinRadixTree(object):
 
     def _get_leaf_AABB(self, leaf):
         """Return the AABB for the leaf."""
-        primitive = self.primitives[leaf.index]
+        primitive = self.primitives[leaf.start_index]
         pos, r = primitive[0:3], primitive[3]
         box = AABB(pos-r, pos+r)
         # In case we have n_per_leaf > 1, loop through primitives.
         for i in range(1, leaf.span):
-            primitive = self.primitives[leaf.index+i]
+            primitive = self.primitives[leaf.start_index+i]
             pos, r = primitive[0:3], primitive[3]
             box.bottom = np.minimum(pos-r, box.bottom)
             box.top = np.maximum(pos+r, box.top)
         return box
 
     def _inclusive_null_node_scan(self, array):
-        """Return the cummulative sum of the number of null nodes in array.
+        """
+        Return the cummulative sum of the number of null nodes in array.
 
         Sum is inclusive.
 
@@ -277,13 +278,15 @@ class BinRadixTree(object):
         return prefix_sums
 
     def _node_direction(self, i):
-        """Return the direction of the node starting (+1) or ending (-1) at i.
+        """
+        Return the direction of the node starting (+1) or ending (-1) at i.
         """
         return np.sign(self._common_prefix(i, i+1) -
                        self._common_prefix(i, i-1))
 
     def _remove_null_nodes(self, array):
-        """Return all non-null nodes in array, preserving the original order.
+        """
+        Return all non-null nodes in array, preserving the original order.
         """
         return [node for node in array if not node.is_null()]
 
@@ -350,19 +353,26 @@ class BinRadixTree(object):
         this_node = self.nodes[i]
         this_node._index = i
         this_node._level = self._common_prefix(i, j)
-        left_child_span = split_idx - min(i,j) + 1
+
+        left_child_start = min(i,j)
+        left_child_span = split_idx - left_child_start + 1
+        right_child_start = left_child_start + left_child_span
         right_child_span = max(i,j) - split_idx
 
         if left_child_span <= self.n_per_leaf:
-            left = self.leaves[split_idx] = LeafNode(split_idx, this_node,
-                                                     span=left_child_span)
+            left = LeafNode(split_idx, this_node, start=left_child_start,
+                            span=left_child_span)
+            self.leaves[split_idx] = left
+            assert(left.start_index + left.span - 1 < len(self.primitives))
         else:
             left = self.nodes[split_idx]
             left.parent = this_node
 
         if right_child_span <= self.n_per_leaf:
-            right = self.leaves[split_idx+1] = LeafNode(split_idx+1, this_node,
-                                                        span=right_child_span)
+            right = LeafNode(split_idx+1, this_node, start=right_child_start,
+                             span=right_child_span)
+            self.leaves[split_idx+1] = right
+            assert(right.start_index + right.span - 1 < len(self.primitives))
         else:
             right = self.nodes[split_idx+1]
             right.parent = this_node

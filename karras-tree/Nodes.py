@@ -61,14 +61,14 @@ class Node(object):
 
 class LeafNode(object):
     def __init__(self, index, parent_node,
-                 primitive_index=None, span=1, bbox=None):
+                 start=None, span=1, bbox=None):
         super(LeafNode, self).__init__()
         self._index = index
-        if primitive_index is None:
-            self._primitive_index = self.index
-        else:
-            self._primitive_index = primitive_index
         self._parent = parent_node
+        if start is None:
+            self._start_index = self.index
+        else:
+            self._start_index = start
         self._span = span
         self._AABB = bbox
 
@@ -81,8 +81,8 @@ class LeafNode(object):
         return self._index
 
     @property
-    def primitive_index(self):
-        return self._primitive_index
+    def start_index(self):
+        return self._start_index
 
     @property
     def parent(self):

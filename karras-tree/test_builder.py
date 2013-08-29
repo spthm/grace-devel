@@ -114,5 +114,4 @@ for r, centre in zip(radii, centres):
     ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z),
               color=colours[30], alpha=0.5)
 
-print max(radii)
 plt.show()
