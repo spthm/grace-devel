@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 from builder import BinRadixTree, LeafNode
 
-N = 50
+N = 25
 
 # Store spheres as (x, y, z, r).
 spheres = np.array(np.random.rand(N,4), dtype=np.float32)
@@ -36,15 +36,23 @@ for node in binary_tree.nodes:
     if isinstance(right, LeafNode):
         out += ', ' + str(right.index)
     print out
+    print
 
 print "Node indices, child indices, and leaf indices if present:"
 for node in binary_tree.nodes:
     print "Node index: %d" % (node.index, )
     left, right = node.left, node.right
     print "Children: %d, %d" %(left.index, right.index)
-    leaves = tuple([child.index if child.is_leaf() else -1
+    leaves = tuple([str(child.index) if child.is_leaf() else ' '
                     for child in (left, right)])
-    print "Leaves:   %d, %d" % leaves
+    print "Leaves:   %s, %s" % leaves
+    print
+
+print "Node AABBs:"
+for node in binary_tree.nodes:
+    print "Node index:", node.index
+    print "Bottom:", node.AABB.bottom
+    print "Top:   ", node.AABB.top
     print
 
 print "Leaf AABBs:"
@@ -73,14 +81,11 @@ ax = fig.add_subplot(111, projection='3d')
 
 
 # Plot the AABBs.
-colour_map = mpl.cm.jet
-def colours(i):
-    i = i % 30
-    return colour_map(1.*i/30.)
+colours = [mpl.cm.jet(1.*i/31.) for i in range(31)]
 for node in binary_tree.nodes:
-    plot_AABB(node.AABB, ax, color=colours(node.level))
+    plot_AABB(node.AABB, ax, color=colours[node.level%30])
 for leaf in binary_tree.leaves:
-    plot_AABB(leaf.AABB, ax, color=colours(30))
+    plot_AABB(leaf.AABB, ax, color=colours[30])
 
 # Draw the spheres.
 # u and v are parametric variables.
@@ -103,6 +108,6 @@ for r, centre in zip(radii, centres):
     x = r*sphere_xs + centre[0]
     y = r*sphere_ys + centre[1]
     z = r*sphere_zs + centre[2]
-    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z), color='k')
+    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z), color=colours[30])
 
 plt.show()

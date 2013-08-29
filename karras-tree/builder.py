@@ -258,7 +258,6 @@ class BinRadixTree(object):
     def find_AABBs(self):
         for leaf_node in self.leaves:
             leaf_node._AABB = self._get_leaf_AABB(leaf_node)
-            print leaf_node.AABB.bottom, leaf_node.AABB.top
 
             current_node = leaf_node.parent
             child_AABB = AABB(leaf_node.AABB.bottom, leaf_node.AABB.top)
@@ -267,8 +266,6 @@ class BinRadixTree(object):
 
                 child_AABB = current_node.AABB
                 current_node = current_node.parent
-        for leaf_node in self.leaves:
-            print leaf_node.AABB.bottom, leaf_node.AABB.top
 
     def _update_AABB(self, node, new_box):
         if node.AABB is None:
