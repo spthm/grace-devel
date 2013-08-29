@@ -263,7 +263,7 @@ class BinRadixTree(object):
 
     def _inclusive_null_node_scan(self, array):
         """
-        Return the cummulative sum of the number of null nodes in array.
+        Return the cumulative sum of the number of null nodes in array.
 
         Sum is inclusive.
 
