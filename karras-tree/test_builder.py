@@ -7,10 +7,11 @@ import matplotlib.pyplot as plt
 
 from builder import BinRadixTree, LeafNode
 
-N = 25
+N = 20
 
 # Store spheres as (x, y, z, r).
 spheres = np.array(np.random.rand(N,4), dtype=np.float32)
+# So we can see each sphere when there are lots of them!
 spheres[:,3] /= float(N)
 
 binary_tree = BinRadixTree.from_primitives(spheres)
@@ -78,14 +79,16 @@ def plot_AABB(cuboid, ax, **kwargs):
 # Set up the figure.
 fig = plt.figure()
 ax = fig.add_subplot(111, projection='3d')
-
+ax.set_xlim(1.0)
+ax.set_ylim(1.0)
+ax.set_zlim(1.0)
 
 # Plot the AABBs.
 colours = [mpl.cm.jet(1.*i/31.) for i in range(31)]
 for node in binary_tree.nodes:
     plot_AABB(node.AABB, ax, color=colours[node.level%30])
 for leaf in binary_tree.leaves:
-    plot_AABB(leaf.AABB, ax, color=colours[30])
+    plot_AABB(leaf.AABB, ax, color=colours[30], alpha=0.5)
 
 # Draw the spheres.
 # u and v are parametric variables.
@@ -108,6 +111,8 @@ for r, centre in zip(radii, centres):
     x = r*sphere_xs + centre[0]
     y = r*sphere_ys + centre[1]
     z = r*sphere_zs + centre[2]
-    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z), color=colours[30])
+    ax.plot3D(np.ravel(x), np.ravel(y), np.ravel(z),
+              color=colours[30], alpha=0.5)
 
+print max(radii)
 plt.show()

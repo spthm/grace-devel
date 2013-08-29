@@ -1,7 +1,7 @@
 class AABB(object):
     def __init__(self, bottom, top):
-        self.bottom = bottom
-        self.top = top
+        self.bottom = list(bottom)
+        self.top = list(top)
 
 class Node(object):
     def __init__(self, index, left, right, parent, level=0, AABB=None):
@@ -60,12 +60,17 @@ class Node(object):
         return self._index == -1
 
 class LeafNode(object):
-    def __init__(self, index, parent_node, span=1, AABB=None):
+    def __init__(self, index, parent_node,
+                 primitive_index=None, span=1, bbox=None):
         super(LeafNode, self).__init__()
         self._index = index
+        if primitive_index is None:
+            self._primitive_index = self.index
+        else:
+            self._primitive_index = primitive_index
         self._parent = parent_node
         self._span = span
-        self._AABB = AABB
+        self._AABB = bbox
 
     @classmethod
     def null(cls):
@@ -74,6 +79,10 @@ class LeafNode(object):
     @property
     def index(self):
         return self._index
+
+    @property
+    def primitive_index(self):
+        return self._primitive_index
 
     @property
     def parent(self):
