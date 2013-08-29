@@ -193,27 +193,6 @@ class BinRadixTree(object):
         tree.find_AABBs()
         return tree
 
-    def generate_keys(self):
-        """Return a list of morton keys, one for each primitive."""
-        # morton_key_3D expects (x, y, z) as arguments.
-        # Spheres are stored as (x, y, z, r)
-        keys = np.array([morton_keys.morton_key_3D(*prim[0:3])
-                         for prim in self.primitives])
-        return keys
-
-    def sort_primitives_by_keys(self):
-        """Sort the list of primitives by their morton keys.
-
-        The list of keys is also sorted, so key[i] == morton_key(primitive[i])
-        after sorting.
-
-        """
-        packed_list = zip(self.keys, self.primitives)
-        # Sorts by first element (the keys).
-        packed_list.sort(key=itemgetter(0))
-        # Unpack and convert to lists (zip outputs a list of tuples).
-        self.keys, self.primitives = [np.array(t) for t in zip(*packed_list)]
-
     def build(self):
         """
         Build a binary radix tree from the list of primitives and their keys.
@@ -267,13 +246,26 @@ class BinRadixTree(object):
                 child_AABB = current_node.AABB
                 current_node = current_node.parent
 
-    def _update_AABB(self, node, new_box):
-        if node.AABB is None:
-            node._AABB = new_box
-        else:
-            # Node AABB has already been set by some subset of its primitives.
-            node._AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
-            node._AABB.top = np.maximum(node.AABB.top, new_box.top)
+    def generate_keys(self):
+        """Return a list of morton keys, one for each primitive."""
+        # morton_key_3D expects (x, y, z) as arguments.
+        # Spheres are stored as (x, y, z, r)
+        keys = np.array([morton_keys.morton_key_3D(*prim[0:3])
+                         for prim in self.primitives])
+        return keys
+
+    def sort_primitives_by_keys(self):
+        """Sort the list of primitives by their morton keys.
+
+        The list of keys is also sorted, so key[i] == morton_key(primitive[i])
+        after sorting.
+
+        """
+        packed_list = zip(self.keys, self.primitives)
+        # Sorts by first element (the keys).
+        packed_list.sort(key=itemgetter(0))
+        # Unpack and convert to lists (zip outputs a list of tuples).
+        self.keys, self.primitives = [np.array(t) for t in zip(*packed_list)]
 
     def update_node(self, node_index, end_index, split_index):
         """
@@ -293,115 +285,6 @@ class BinRadixTree(object):
             # or is the would-be child of a would-be node.
             self._write_null_node(node_index)
 
-    def _write_node(self, i, j, split_idx):
-        """
-        Write index, level and child references of the node spanning [i,j],
-        splitting at split_idx, and assign it as the parent of its children.
-        """
-        # Output child nodes/leaves, and set parents/children where possible.
-        # Leaves are processed only once, so we can explicity construct them
-        # here.
-        # Nodes are processed twice (first by their parent, then by
-        # themselves), so we may only update their properties.
-        this_node = self.nodes[i]
-        this_node._index = i
-        this_node._level = self._common_prefix(i, j)
-        left_child_span = split_idx - min(i,j) + 1
-        right_child_span = max(i,j) - split_idx
-
-        if left_child_span <= self.n_per_leaf:
-            left = self.leaves[split_idx] = LeafNode(split_idx, this_node,
-                                                     left_child_span)
-        else:
-            left = self.nodes[split_idx]
-            left.parent = this_node
-
-        if right_child_span <= self.n_per_leaf:
-            right = self.leaves[split_idx+1] = LeafNode(split_idx+1, this_node,
-                                                        right_child_span)
-        else:
-            right = self.nodes[split_idx+1]
-            right.parent = this_node
-
-        this_node.left = left
-        this_node.right = right
-
-    def _write_null_node(self, i):
-        """Write the node starting at i as a null node."""
-        self.nodes[i] = Node.null()
-
-    def _shift_indices(self, leaf_shifts):
-        """Find the new, shifted children for all nodes after compaction.
-
-        leaf_shifts should be constructed such that:
-
-            new_leaf_index = current_index - leaf_shifts[current_index]
-
-        Though in the case that we have a right child which is not a node,
-        the calculation is:
-
-            new_node_index = current_index - leaf_shifts[current_index-1]
-
-        """
-        # NB: This loop checks that the new indices have been calculated
-        # properly, and updates a non-leaf node's index.
-        # Since node.left/right/parent are direct references to objects,
-        # they don't need to be fixed.
-        # Leaf indices remain unchanged since they tell us where in the list
-        # of primitives a leaf starts.
-        for node in self.nodes:
-            left_index = node.left.index
-            if node.left.is_leaf():
-                new_index = left_index - leaf_shifts[left_index]
-                assert(node.left is self.leaves[new_index])
-            else:
-                new_index = left_index - leaf_shifts[left_index]
-                assert(node.left is self.nodes[new_index])
-                node.left._index = new_index
-
-            right_index = node.right.index
-            if node.right.is_leaf():
-                new_index = right_index -leaf_shifts[right_index]
-                assert(node.right is self.leaves[new_index])
-            else:
-                new_index = right_index - leaf_shifts[right_index-1]
-                assert(node.right is self.nodes[new_index])
-                # NB: right_index-1 == left_index.
-                # We use this since we are fixing a node index, not a leaf index.
-                # Nodes are, conceptually, split between their left and right
-                # children => right child shifts same distance as left.
-                node.right._index = new_index
-
-    def _inclusive_null_node_scan(self, array):
-        """Return the cummulative sum of the number of null nodes in array.
-
-        Sum is inclusive.
-
-        """
-        running_total = 0
-        N = len(array)
-        prefix_sums = np.zeros(N, dtype=np.int32)
-        for i in xrange(N):
-            if array[i].is_null():
-                running_total += 1
-            prefix_sums[i] = running_total
-        return prefix_sums
-
-    def _count_valid_nodes(self, array):
-        """Return the number of non-null nodes in array."""
-        return sum([1 for node in array if not node.is_null()])
-
-    def _remove_null_nodes(self, array):
-        """Return all non-null nodes in array, preserving the original order.
-        """
-        return [node for node in array if not node.is_null()]
-
-    def _node_direction(self, i):
-        """Return the direction of the node starting (+1) or ending (-1) at i.
-        """
-        return np.sign(self._common_prefix(i, i+1) -
-                       self._common_prefix(i, i-1))
-
     def _common_prefix(self, i, j):
         """Return the longest common prefix of keys at indices i, j."""
         if j < 0 or j > self.n_primitives-1:
@@ -414,6 +297,10 @@ class BinRadixTree(object):
             # Identical keys.  Increase length of prefix using key indices.
             prefix_length += bits.common_prefix(i, j)
         return prefix_length
+
+    def _count_valid_nodes(self, array):
+        """Return the number of non-null nodes in array."""
+        return sum([1 for node in array if not node.is_null()])
 
     def _find_node_end(self, i, d):
         """Return the other end of the node starting at i, with direction d."""
@@ -472,3 +359,116 @@ class BinRadixTree(object):
             box.bottom = np.minimum(pos-r, box.bottom)
             box.top = np.maximum(pos+r, box.top)
         return box
+
+    def _inclusive_null_node_scan(self, array):
+        """Return the cummulative sum of the number of null nodes in array.
+
+        Sum is inclusive.
+
+        """
+        running_total = 0
+        N = len(array)
+        prefix_sums = np.zeros(N, dtype=np.int32)
+        for i in xrange(N):
+            if array[i].is_null():
+                running_total += 1
+            prefix_sums[i] = running_total
+        return prefix_sums
+
+    def _node_direction(self, i):
+        """Return the direction of the node starting (+1) or ending (-1) at i.
+        """
+        return np.sign(self._common_prefix(i, i+1) -
+                       self._common_prefix(i, i-1))
+
+    def _remove_null_nodes(self, array):
+        """Return all non-null nodes in array, preserving the original order.
+        """
+        return [node for node in array if not node.is_null()]
+
+    def _shift_indices(self, leaf_shifts):
+        """Find the new, shifted children for all nodes after compaction.
+
+        leaf_shifts should be constructed such that:
+
+            new_leaf_index = current_index - leaf_shifts[current_index]
+
+        Though in the case that we have a right child which is not a node,
+        the calculation is:
+
+            new_node_index = current_index - leaf_shifts[current_index-1]
+
+        """
+        # NB: This loop checks that the new indices have been calculated
+        # properly, and updates a non-leaf node's index.
+        # Since node.left/right/parent are direct references to objects,
+        # they don't need to be fixed.
+        # Leaf indices remain unchanged since they tell us where in the list
+        # of primitives a leaf starts.
+        for node in self.nodes:
+            left_index = node.left.index
+            if node.left.is_leaf():
+                new_index = left_index - leaf_shifts[left_index]
+                assert(node.left is self.leaves[new_index])
+            else:
+                new_index = left_index - leaf_shifts[left_index]
+                assert(node.left is self.nodes[new_index])
+                node.left._index = new_index
+
+            right_index = node.right.index
+            if node.right.is_leaf():
+                new_index = right_index -leaf_shifts[right_index]
+                assert(node.right is self.leaves[new_index])
+            else:
+                new_index = right_index - leaf_shifts[right_index-1]
+                assert(node.right is self.nodes[new_index])
+                # NB: right_index-1 == left_index.
+                # We use this since we are fixing a node index, not a leaf index.
+                # Nodes are, conceptually, split between their left and right
+                # children => right child shifts same distance as left.
+                node.right._index = new_index
+
+    def _update_AABB(self, node, new_box):
+        if node.AABB is None:
+            node._AABB = new_box
+        else:
+            # Node AABB has already been set by some subset of its primitives.
+            node._AABB.bottom = np.minimum(node.AABB.bottom, new_box.bottom)
+            node._AABB.top = np.maximum(node.AABB.top, new_box.top)
+
+    def _write_node(self, i, j, split_idx):
+        """
+        Write index, level and child references of the node spanning [i,j],
+        splitting at split_idx, and assign it as the parent of its children.
+        """
+        # Output child nodes/leaves, and set parents/children where possible.
+        # Leaves are processed only once, so we can explicity construct them
+        # here.
+        # Nodes are processed twice (first by their parent, then by
+        # themselves), so we may only update their properties.
+        this_node = self.nodes[i]
+        this_node._index = i
+        this_node._level = self._common_prefix(i, j)
+        left_child_span = split_idx - min(i,j) + 1
+        right_child_span = max(i,j) - split_idx
+
+        if left_child_span <= self.n_per_leaf:
+            left = self.leaves[split_idx] = LeafNode(split_idx, this_node,
+                                                     left_child_span)
+        else:
+            left = self.nodes[split_idx]
+            left.parent = this_node
+
+        if right_child_span <= self.n_per_leaf:
+            right = self.leaves[split_idx+1] = LeafNode(split_idx+1, this_node,
+                                                        right_child_span)
+        else:
+            right = self.nodes[split_idx+1]
+            right.parent = this_node
+
+        this_node.left = left
+        this_node.right = right
+
+    def _write_null_node(self, i):
+        """Write the node starting at i as a null node."""
+        self.nodes[i] = Node.null()
