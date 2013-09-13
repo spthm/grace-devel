@@ -360,8 +360,8 @@ class BinRadixTree(object):
         right_child_span = max(i,j) - split_idx
 
         if left_child_span <= self.n_per_leaf:
-            left = LeafNode(split_idx, this_node, start=left_child_start,
-                            span=left_child_span)
+            left = LeafNode(split_idx, this_node,
+                            start=left_child_start, span=left_child_span)
             self.leaves[split_idx] = left
             assert(left.start_index + left.span - 1 < len(self.primitives))
         else:
@@ -369,8 +369,8 @@ class BinRadixTree(object):
             left.parent = this_node
 
         if right_child_span <= self.n_per_leaf:
-            right = LeafNode(split_idx+1, this_node, start=right_child_start,
-                             span=right_child_span)
+            right = LeafNode(split_idx+1, this_node,
+                             start=right_child_start, span=right_child_span)
             self.leaves[split_idx+1] = right
             assert(right.start_index + right.span - 1 < len(self.primitives))
         else:
