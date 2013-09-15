@@ -1,3 +1,4 @@
+#include "Nodes.h"
 #include "bits.h"
 #include "morton.h"
 
@@ -23,12 +24,13 @@ __global__ void build_nodes_kernel(Node *nodes,
     if (index < n_keys) {
         key = keys[index];
 
-        // Calculate the direction of the node.
+        // direction == +1 => index is the first key in the node.
+        // direction == -1 => index is the last key in the node.
         prefix_left = common_prefix(index, index-1, keys, n_keys, n_bits);
         prefix_right = common_prefix(index, index+1, keys, n_keys, n_bits);
         direction = (prefix_right - prefix_left > 0) ? +1 : -1;
 
-        // Calculate the index of the other end of the node.
+        /* Calculate the index of the other end of the node. */
         // l_max is an upper limit to the distance between the two indices.
         l_max = 2;
         min_prefix = common_prefix(index, index-direction, keys, n_keys, n_bits);
@@ -49,11 +51,12 @@ __global__ void build_nodes_kernel(Node *nodes,
         }
         end_index = index + l*direction;
 
-        // Calculate the index of the split position within the node.
+        /* Calculate the index of the split position within the node. */
         node_prefix = common_prefix(index, end_index, keys, n_keys, n_bits);
         s = 0;
         t = (end_index - index) * direction;
         do {
+            // t = ceil(t/2.)
             t = (t+1) / 2;
             if (common_prefix(index, index + (s+t)*direction, keys, n_keys, n_bits)
                 > node_prefix) {
@@ -63,7 +66,7 @@ __global__ void build_nodes_kernel(Node *nodes,
         // If direction == -1 we actually found split_index + 1;
         split_index = index + s*direction + min(direction, 0);
 
-        // Update this node with the locations of its children.
+        /* Update this node with the locations of its children. */
         nodes[index].left = split_index;
         nodes[index].right = split_index+1;
         if (split_index == min(index, end_index) {
@@ -94,7 +97,7 @@ __global__ void find_AABBs_kernel(Node *nodes
                                   UInteger n_leaves,
                                   float *positions,
                                   float *extent,
-                                  int *AABB_flags)
+                                  unsigned char *AABB_flags)
 {
     unsigned int index, left_index, right_index;
     float x_min, y_min, z_min

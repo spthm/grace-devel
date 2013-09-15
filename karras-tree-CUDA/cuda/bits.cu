@@ -1,3 +1,5 @@
+namespace grace {
+
 template <typename UInteger>
 __host__ __device__ UInteger space_by_1(UInteger unspaced,
                                         int order) {
@@ -29,3 +31,5 @@ __host__ __device__ UInteger map_to_int(float value, int order) {
     UInteger span = (1u << order) - 1;
     return (UInteger) value * span;
 }
+
+} // namespace grace
