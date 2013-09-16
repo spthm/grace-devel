@@ -1,7 +1,5 @@
-#include "BinaryRadixTree.h"
+#include "binary_radix_tree.h"
 #include "nodes.h"
-
-using namespace std;
 
 namespace grace {
 
@@ -15,15 +13,17 @@ namespace grace {
  *
  */
 template <typename UInteger, typename Float>
-BinaryRadixTree::BinaryRadixTree(const Float *primitives, const int nPrimitives) :
-  primitives_(primitives),
-  nPrimitives_(nPrimitives),
-  nNodes_(nPrimitives-1),
-  nLeaves_(nPrimitives)
+BinaryRadixTree::BinaryRadixTree(const thrust::host_vector<Float> sphere_centres,
+                                 const thrust::host_vector<Float> sphere_radii)
 {
-    nodes_.resize(nPrimitives-1);
-    leaves_.resize(nPrimitives);
-    //TODO: Thrust copy *primitives to primitives_.
+    // TODO: Throw exception if sphere_radii.size() != sphere_centres.size().
+    n_leaves_ = (UInteger) sphere_radii.size();
+    n_nodes_ = n_leaves_ - 1;
+
+    d_nodes_.resize(n_nodes_);
+    d_leaves_.resize(n_leaves);
+    d_sphere_centres_ = sphere_centres;
+    d_sphere_radii_ = sphere_radii;
 }
 
 BinaryRadixTree::~BinaryRadixTree();
@@ -35,9 +35,9 @@ BinaryRadixTree::~BinaryRadixTree();
  */
 template <typename UInteger>
 void BinaryRadixTree::build(void) {
-    thrust::device_vector<UInteger> keys = generate_keys();
-    sort_primitives_by_keys(keys);
-    build_nodes(keys);
+    thrust::device_vector<UInteger> d_keys = generate_keys();
+    sort_primitives_by_keys(d_keys);
+    build_nodes(d_keys);
     find_AABBs();
 }
 

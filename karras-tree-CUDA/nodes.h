@@ -1,3 +1,5 @@
+#pragma once
+
 namespace grace {
 
 template <typename UInteger>
@@ -15,6 +17,7 @@ struct Node
     float bottom[3];
 };
 
+template <typename UInteger>
 struct Leaf
 {
     UInteger parent;

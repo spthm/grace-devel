@@ -18,13 +18,6 @@ def space_by_2(unspaced, order=10):
         spaced |= (isolated_nth_bit << 2*nth_bit)
     return spaced
 
-# TODO: Move this somwhere else.
-def map_to_int(value, order):
-    """Return a floating point value [0,1] mapped to an integer [0, 2^order).
-    """
-    span = 2**int(order) - 1
-    return int(value * span)
-
 def common_prefix(a, b):
     """Return the length of the longest common prefix of two integers a and b.
     """
