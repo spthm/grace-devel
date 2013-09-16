@@ -8,7 +8,7 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
                  thrust::device_vector<Leaf> d_leaves,
                  thrust::device_vector<UInteger> d_keys)
 {
-    UInteger n_keys = d_keys.size();
+    UInteger n_keys = (UInteger) d_keys.size();
     unsigned char n_bits_per_key = CHAR_BIT * sizeof(UInteger);
 
     build_nodes_kernel(thrust::raw_pointer_cast(d_nodes.data()),
@@ -25,9 +25,9 @@ void find_AABBs(thrust::device_vector<Node> d_nodes,
                 thrust::device_vector<float> d_sphere_centres,
                 thrust::device_vector<float> d_sphere_radii)
 {
-    thrust::device_vector<unsigned char> d_AABB_flags;
+    thrust::device_vector<unsigned int> d_AABB_flags;
 
-    UInteger n_leaves = d_leaves.size();
+    UInteger n_leaves = (UInteger) d_leaves.size();
     d_AABB_flags.resize(n_leaves);
 
     find_AABBs_kernel(thrust::raw_pointer_cast(d_nodes.data()),

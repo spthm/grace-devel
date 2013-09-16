@@ -1,4 +1,5 @@
-#include "Nodes.h"
+#include <thrust/device_vector.h>
+#include "../Nodes.h"
 #include "bits.h"
 #include "morton.h"
 
@@ -97,7 +98,7 @@ __global__ void find_AABBs_kernel(Node *nodes
                                   UInteger n_leaves,
                                   float *positions,
                                   float *extent,
-                                  unsigned char *AABB_flags)
+                                  unsigned int *AABB_flags)
 {
     unsigned int index, left_index, right_index;
     float x_min, y_min, z_min
