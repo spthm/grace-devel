@@ -14,7 +14,7 @@ namespace grace {
  * @param nPrimitives The number of primitives.
  *
  */
-template <typename Integer, typename Float>
+template <typename UInteger, typename Float>
 BinaryRadixTree::BinaryRadixTree(const Float *primitives, const int nPrimitives) :
   primitives_(primitives),
   nPrimitives_(nPrimitives),
@@ -33,12 +33,12 @@ BinaryRadixTree::~BinaryRadixTree();
  * Calculates the morton key of each primitive and uses them to build a binary
  * radix tree on the GPU.
  */
-template <typename Integer>
+template <typename UInteger>
 void BinaryRadixTree::build(void) {
-    thrust::device_vector<Integer> keys = generateKeys();
-    sortPrimitivesByKeys(keys);
-    buildNodes(keys);
-    findAABBs();
+    thrust::device_vector<UInteger> keys = generate_keys();
+    sort_primitives_by_keys(keys);
+    build_nodes(keys);
+    find_AABBs();
 }
 
 } // namespace grace

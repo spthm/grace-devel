@@ -1,12 +1,11 @@
-#include "Nodes.h"
-
 namespace grace {
 
+template <typename UInteger>
 struct Node
 {
-    unsigned int left;
-    unsigned int right;
-    unsigned int parent;
+    UInteger left;
+    UInteger right;
+    UInteger parent;
 
     bool left_leaf_flag;
     bool right_leaf_flag;
@@ -18,7 +17,7 @@ struct Node
 
 struct Leaf
 {
-    unsigned int parent;
+    UInteger parent;
 
     float top[3];
     float bottom[3];
