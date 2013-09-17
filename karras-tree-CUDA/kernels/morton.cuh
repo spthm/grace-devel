@@ -5,7 +5,7 @@ namepspace grace {
 namepspace gpu {
 
 template <typename UInteger, typename Float>
-struct morton_key_functor<UInteger, Float>
+class morton_key_functor<UInteger, Float>
 
 __host__ __device__ UInteger32 morton_key_30bit(UInteger32 x,
                                                 UInteger32 y,

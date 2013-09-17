@@ -1,14 +1,16 @@
-#include "../types"
+#include "../types.h"
+#include "bits.cuh"
+#include "morton.cuh"
 
 namespace grace {
 
 namespace gpu {
 
 template <typename UInteger, typename Float>
-struct morton_key_functor {};
+class morton_key_functor {};
 
 template <typename Float>
-struct morton_key_functor<UInteger32, Float>
+class morton_key_functor<UInteger32, Float>
 {
     const unsigned int span = (1u << 10) - 1;
     const Vector3<Float> scale;
@@ -32,7 +34,7 @@ struct morton_key_functor<UInteger32, Float>
 };
 
 template <typename Float>
-struct morton_key_functor<UInteger64, Float>
+class morton_key_functor<UInteger64, Float>
 {
     // span = 2^(order) - 1; order = floor(bits_in_key / 3)
     const unsigned int span = (1u << 21) - 1;
@@ -65,10 +67,12 @@ __host__ __device__ UInteger64 morton_key_63bit(UInteger32 x, UInteger32 y, UInt
 
 // Explicitly instantiate the morton_key_functor templates for these
 // parameter types only.
-template struct morton_key_functor<UInteger32, float>
-template struct morton_key_functor<UInteger32, double>
-template struct morton_key_functor<UInteger64, float>
-template struct morton_key_functor<UInteger64, double>
+template class morton_key_functor<UInteger32, float>;
+template class morton_key_functor<UInteger32, double>;
+template class morton_key_functor<UInteger32, long double>;
+template class morton_key_functor<UInteger64, float>;
+template class morton_key_functor<UInteger64, double>;
+template class morton_key_functor<UInteger64, long double>;
 
 } // namespace gpu
 

@@ -2,11 +2,9 @@ namespace grace {
 
 namespace gpu {
 
-template <typename UInteger>
-__device__ UInteger space_by_1(UInteger unspaced, int order=10);
+__host__ __device__ UInteger32 space_by_two_10bit(UInteger32 x);
 
-template <typename UInteger>
-__device__ UInteger space_by_2(UInteger unspaced, int order=10);
+__host__ __device__ UInteger32 space_by_two_21bit(UInteger32 x);
 
 template <typename UInteger>
 __device__ UInteger bit_prefix(UInteger a, UInteger b);

@@ -1,7 +1,8 @@
 #include <thrust/device_vector.h>
+
 #include "../nodes.h"
-#include "bits.h"
-#include "morton.h"
+#include "bits.cuh"
+#include "morton.cuh"
 
 namespace grace {
 
@@ -11,13 +12,13 @@ template <typename UInteger>
 __global__ void build_nodes_kernel(Node *nodes,
                                    Leaf *leaves,
                                    UInteger *keys,
-                                   Uinteger n_keys,
+                                   unsigned int n_keys,
                                    unsigned char n_bits)
 {
     unsigned int index, end_index, split_index;
     unsigned int prefix_left, prefix_right, min_prefix, node_prefix;
     int l_max, l, t, s;
-    UInteger left_child_index, right_child_index;
+    unsigned int left_child_index, right_child_index;
 
     // Index of this node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -92,10 +93,10 @@ __global__ void build_nodes_kernel(Node *nodes,
     }
 }
 
-template <typename UInteger, typename Float>
+template <typename Float>
 __global__ void find_AABBs_kernel(Node *nodes
                                   Leaf *leaves
-                                  UInteger n_leaves,
+                                  unsigned int n_leaves,
                                   Float *positions,
                                   Float *extent,
                                   unsigned int *AABB_flags)
@@ -162,14 +163,12 @@ __global__ void find_AABBs_kernel(Node *nodes
 
 }
 
-} // namespace gpu
-
 template <typename UInteger>
-__host__ __device__ unsigned int common_prefix(UInteger i,
-                                               UInteger j,
-                                               UInteger *keys,
-                                               UInteger n_keys,
-                                               unsigned char n_bits)
+__device__ unsigned int common_prefix(unsigned int i,
+                                      unsigned int j,
+                                      UInteger *keys,
+                                      unsigned int n_keys,
+                                      unsigned char n_bits)
 {
     if (i < 0 || i > n_keys || j < 0 || j > n_keys) {
         return -1;
@@ -184,12 +183,14 @@ __host__ __device__ unsigned int common_prefix(UInteger i,
     return prefix_length;
 }
 
+} // namespace gpu
+
 template <typename UInteger>
 void build_nodes(thrust::device_vector<Node> d_nodes,
                  thrust::device_vector<Leaf> d_leaves,
                  thrust::device_vector<UInteger> d_keys)
 {
-    UInteger n_keys = (UInteger) d_keys.size();
+    unsigned int n_keys = d_keys.size();
     unsigned char n_bits_per_key = CHAR_BIT * sizeof(UInteger);
 
     gpu::build_nodes_kernel(thrust::raw_pointer_cast(d_nodes.data()),
@@ -200,15 +201,15 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
 
 }
 
-template <typename UInteger>
+template <typename Float>
 void find_AABBs(thrust::device_vector<Node> d_nodes,
                 thrust::device_vector<Leaf> d_leaves,
-                thrust::device_vector<float> d_sphere_centres,
-                thrust::device_vector<float> d_sphere_radii)
+                thrust::device_vector<Float> d_sphere_centres,
+                thrust::device_vector<Float> d_sphere_radii)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
-    UInteger n_leaves = (UInteger) d_leaves.size();
+    unsigned int n_leaves = d_leaves.size();
     d_AABB_flags.resize(n_leaves);
 
     gpu::find_AABBs_kernel(thrust::raw_pointer_cast(d_nodes.data()),
@@ -219,4 +220,77 @@ void find_AABBs(thrust::device_vector<Node> d_nodes,
                            thrust::raw_pointer_cast(d_AABB_flags.data()) )
 }
 
+
 } // namespace grace
+
+// Instantiate the templates with types known to be used.
+namespace grace {
+
+namespace gpu {
+
+/* Build nodes with 32- or 64-bit keys. */
+template void build_nodes_kernel<UInteger32>(Node *nodes,
+                                             Leaf *leaves,
+                                             UInteger32 *keys,
+                                             unsigned int n_keys,
+                                             unsigned char n_bits);
+template void build_nodes_kernel<UInteger64>(Node *nodes,
+                                             Leaf *leaves,
+                                             UInteger64 *keys,
+                                             unsigned int n_keys,
+                                             unsigned char n_bits);
+
+/* Find AABBs with positions represented as floats, doubles or long doubles. */
+template void find_AABBs_kernel<float>(Node *nodes
+                                       Leaf *leaves
+                                       unsigned int n_leaves,
+                                       float *positions,
+                                       float *extent,
+                                       unsigned int *AABB_flags);
+template void find_AABBs_kernel<double>(Node *nodes
+                                        Leaf *leaves
+                                        unsigned int n_leaves,
+                                        double *positions,
+                                        double *extent,
+                                        unsigned int *AABB_flags);
+template void find_AABBs_kernel<long double>(Node *nodes
+                                             Leaf *leaves
+                                             unsigned int n_leaves,
+                                             long double *positions,
+                                             long double *extent,
+                                             unsigned int *AABB_flags);
+
+template unsigned int common_prefix<UInteger32>(unsigned int i,
+                                                unsigned int j,
+                                                UInteger32 *keys,
+                                                unsigned int n_keys,
+                                                unsigned char n_bits);
+template unsigned int common_prefix<UInteger64>(unsigned int i,
+                                                unsigned int j,
+                                                UInteger64 *keys,
+                                                unsigned int n_keys,
+                                                unsigned char n_bits);
+
+} // namespace gpu
+
+/* Build nodes with 32- or 64-bit keys. */
+template void build_nodes<UInteger32>(thrust::device_vector<Node> d_nodes,
+                                      thrust::device_vector<Leaf> d_leaves,
+                                      thrust::device_vector<UInteger32> d_keys);
+template void build_nodes<UInteger64>(thrust::device_vector<Node> d_nodes,
+                                      thrust::device_vector<Leaf> d_leaves,
+                                      thrust::device_vector<UInteger64> d_keys);
+
+/* Find AABBs with positions represented as floats, doubles or long doubles. */
+template void find_AABBs_kernel<float>(thrust::device_vector<Node> d_nodes,
+                                       thrust::device_vector<Leaf> d_leaves,
+                                       thrust::device_vector<float> d_sphere_centres,
+                                       thrust::device_vector<float> d_sphere_radii);
+template void find_AABBs_kernel<double>(thrust::device_vector<Node> d_nodes,
+                                       thrust::device_vector<Leaf> d_leaves,
+                                       thrust::device_vector<double> d_sphere_centres,
+                                       thrust::device_vector<double> d_sphere_radii);
+template void find_AABBs_kernel<long double>(thrust::device_vector<Node> d_nodes,
+                                       thrust::device_vector<Leaf> d_leaves,
+                                       thrust::device_vector<long double> d_sphere_centres,
+                                       thrust::device_vector<long double> d_sphere_radii);
