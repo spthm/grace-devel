@@ -3,3 +3,4 @@
 ray_test
 ray_test_float
 *.pyc
+*.DS_Store

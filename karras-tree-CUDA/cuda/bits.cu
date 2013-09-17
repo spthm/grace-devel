@@ -5,8 +5,7 @@ namespace grace {
 
 namespace gpu {
 
-template <typename UInteger>
-__device__ UInteger32 space_by_1(UInteger x) {
+__device__ UInteger32 space_by_1(UInteger32 x) {
     // Mask higher bits and cast to 32-bit unsigned integer.
     x = (UInteger32) x & 1023u;
     x = (x | (x << 8)) & 0x00FF00FF;
@@ -16,8 +15,7 @@ __device__ UInteger32 space_by_1(UInteger x) {
     return x;
 }
 
-template <typename UInteger>
-__device__ UInteger32 space_by_2(UInteger x) {
+__device__ UInteger32 space_by_2(UInteger32 x) {
     x = (UInteger32) x & 1023u;
     x = (x | (x << 16)) & 0x030000FF;
     x = (x | (x <<  8)) & 0x0300F00F;

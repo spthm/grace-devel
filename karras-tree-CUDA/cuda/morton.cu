@@ -3,35 +3,68 @@ namespace grace {
 namespace gpu {
 
 template <typename UInteger, typename Float>
-struct morton_key_functor
-{
-    const unsigned int order;
-    const UInteger span;
-    const Vector3<Float> AABB_inv;
+struct morton_key_functor {};
 
-    // order = floor(bits_in_key / 3)
+template <typename Float>
+struct morton_key_functor<UInteger32, Float>
+{
+    const UInteger32 span;
+    const Vector3<Float> scale;
+
+    // span = 2^(order) - 1; order = floor(bits_in_key / 3)
     morton_key_functor(Vector3<Float> AABB_bottom, Vector3<Float> AABB_top) :
-        order((unsigned int) CHAR_BIT * sizeof(UInterger) / 3),
-        span(1u << order - 1)
+        span((1u << 10) - 1)
     {
-        AABB_inv((Float) 1.0 / (AABB_top.x - AABB_bottom.x),
-                 (Float) 1.0 / (AABB_top.y - AABB_bottom.y),
-                 (Float) 1.0 / (AABB_top.z - AABB_bottom.z));
+        scale((Float)span / (AABB_top.x - AABB_bottom.x),
+              (Float)span / (AABB_top.y - AABB_bottom.y),
+              (Float)span / (AABB_top.z - AABB_bottom.z));
     }
 
-    __host__  __device__ Vector3<UInteger> operator() (const Vector3<Float> pos) {
+    __host__  __device__ UInteger32 operator() (const Vector3<Float> pos) {
 
-        UInteger x = (UInteger) pos.x * AABB_inv.x * span;
-        UInteger y = (UInteger) pos.y * AABB_inv.y * span;
-        UInteger z = (UInteger) pos.z * AABB_inv.z * span;
+        UInteger32 x = (UInteger32) pos.x * scale.x;
+        UInteger32 y = (UInteger32) pos.y * sclae.y;
+        UInteger32 z = (UInteger32) pos.z * scale.z;
 
-        morton_key(x, y, z, order);
+        return morton_key_30(x, y, z);
     }
 };
 
-template <typename UInteger>
-morton_key(UInteger x, UInteger y, UInteger z, unsigned int order) {
-    return spaced_by_2(z, order) << 2 | spaced_by_2(y, order) << 1 | spaced_by_2(x, order);
+template <typename Float>
+struct morton_key_functor<UInteger64, Float>
+{
+    const UInteger32 span;
+    const Vector3<Float> scale;
+
+    // span = 2^(order-1); order = floor(bits_in_key / 3)
+    morton_key_functor(Vector3<Float> AABB_bottom, Vector3<Float> AABB_top) :
+        span((1u << 21) - 1)
+    {
+        scale((Float)span / (AABB_top.x - AABB_bottom.x),
+              (Float)span / (AABB_top.y - AABB_bottom.y),
+              (Float)span / (AABB_top.z - AABB_bottom.z));
+    }
+
+    __host__  __device__ UInteger64 operator() (const Vector3<Float> pos) {
+
+        UInteger32 x = (UInteger32) pos.x * scale.x;
+        UInteger32 y = (UInteger32) pos.y * sclae.y;
+        UInteger32 z = (UInteger32) pos.z * scale.z;
+
+        return morton_key_63(x, y, z);
+    }
+};
+
+__host__ __device__ UInteger32 morton_key_30(UInteger32 x, UInteger32 y, UInteger32 z) {
+    return spaced_by_2(z&1023u) << 2 | spaced_by_2(y&1023u) << 1 | spaced_by_2(x&1023u);
+}
+
+// TODO: Fix this.  Currently it's actually morton_key_60.
+// Use templates on space_by_x and covert x/y/z to UInteger64 in
+// morton_key_functor?
+__host__ __device__ UInteger64 morton_key_63(UInteger32 x, UInteger32 y, UInteger32 z) {
+    return((UInteger64)morton_key_30(x, y, z) |
+           (UInteger64)morton_key_30(x >> 10, y >> 10, z >> 10) << 30);
 }
 
 
