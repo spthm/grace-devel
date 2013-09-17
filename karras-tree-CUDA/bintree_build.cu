@@ -1,5 +1,7 @@
 #include <thrust/device_vector.h>
 
+#include "kernels/bintree_build_kernels.cuh"
+
 namespace grace {
 
 template <typename UInteger>
