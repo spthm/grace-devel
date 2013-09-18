@@ -6,9 +6,6 @@ namespace grace {
 
 namespace gpu {
 
-template <typename UInteger, typename Float>
-class morton_key_functor {};
-
 template <typename Float>
 class morton_key_functor<UInteger32, Float>
 {

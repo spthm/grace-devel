@@ -2,12 +2,11 @@
 
 namespace grace {
 
-template <typename UInteger>
 struct Node
 {
-    UInteger left;
-    UInteger right;
-    UInteger parent;
+    unsigned int left;
+    unsigned int right;
+    unsigned int parent;
 
     bool left_leaf_flag;
     bool right_leaf_flag;
@@ -17,10 +16,9 @@ struct Node
     float bottom[3];
 };
 
-template <typename UInteger>
 struct Leaf
 {
-    UInteger parent;
+    unsigned int parent;
 
     float top[3];
     float bottom[3];

@@ -1,8 +1,10 @@
 #pragma once
 
+#include "../nodes.h"
+
 namespace grace {
 
-namesapce gpu {
+namespace gpu {
 
 template <typename UInteger>
 __global__ void build_nodes_kernel(Node *nodes,
@@ -12,15 +14,15 @@ __global__ void build_nodes_kernel(Node *nodes,
                                    unsigned char n_bits);
 
 template <typename Float>
-__global__ void find_AABBs_kernel(Node *nodes
-                                  Leaf *leaves
+__global__ void find_AABBs_kernel(Node *nodes,
+                                  Leaf *leaves,
                                   unsigned int n_leaves,
                                   Float *positions,
                                   Float *extent,
                                   unsigned int *AABB_flags);
 
 template <typename UInteger>
-__device__ unsigned int common_prefix(unsigned int i,
+__device__ int common_prefix(unsigned int i,
                                       unsigned int j,
                                       UInteger *keys,
                                       unsigned int n_keys,
