@@ -50,7 +50,8 @@ __global__ void build_nodes_kernel(Node* nodes,
         l = 0;
         t = l_max / 2;
         while (t >= 1) {
-            if (common_prefix(index, index + (UInteger) (l+t)*direction, keys, n_keys, n_bits) > min_prefix) {
+            if (common_prefix(index, index + (UInteger) (l+t)*direction, keys, n_keys, n_bits)
+                > min_prefix) {
                 l = l + 1;
             }
         }
@@ -97,14 +98,14 @@ __global__ void build_nodes_kernel(Node* nodes,
 }
 
 template <typename Float>
-__global__ void find_AABBs_kernel(Node *nodes,
-                                  Leaf *leaves,
+__global__ void find_AABBs_kernel(Node* nodes,
+                                  Leaf* leaves,
                                   unsigned int n_leaves,
-                                  Float *positions,
-                                  Float *extent,
-                                  unsigned int *AABB_flags)
+                                  Float* positions,
+                                  Float* extent,
+                                  unsigned int* AABB_flags)
 {
-    unsigned int index;
+    int index;
     float x_min, y_min, z_min;
     float x_max, y_max, z_max;
     float r;
