@@ -28,7 +28,7 @@ __host__ __device__ UInteger32 space_by_two_21bit(UInteger32 x) {
 }
 
 template <typename UInteger>
-__device__ UInteger bit_prefix(UInteger a, UInteger b) {
+__device__ UInteger bit_prefix(const UInteger a, const UInteger b) {
     return __clz(a^b);
 }
 

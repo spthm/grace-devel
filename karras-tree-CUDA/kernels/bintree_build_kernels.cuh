@@ -17,9 +17,9 @@ namespace gpu {
 template <typename UInteger>
 __global__ void build_nodes_kernel(Node* nodes,
                                    Leaf* leaves,
-                                   UInteger* keys,
-                                   unsigned int n_keys,
-                                   unsigned char n_bits)
+                                   const UInteger* keys,
+                                   const unsigned int n_keys,
+                                   const unsigned char n_bits)
 {
     int index, end_index, split_index;
     unsigned int prefix_left, prefix_right, min_prefix, node_prefix;
@@ -100,9 +100,9 @@ __global__ void build_nodes_kernel(Node* nodes,
 template <typename Float>
 __global__ void find_AABBs_kernel(Node* nodes,
                                   Leaf* leaves,
-                                  unsigned int n_leaves,
-                                  Float* positions,
-                                  Float* extent,
+                                  const unsigned int n_leaves,
+                                  const Float* positions,
+                                  const Float* extent,
                                   unsigned int* AABB_flags)
 {
     int index;
@@ -183,11 +183,11 @@ __global__ void find_AABBs_kernel(Node* nodes,
 }
 
 template <typename UInteger>
-__device__ int common_prefix(int i,
-                             int j,
-                             UInteger *keys,
-                             unsigned int n_keys,
-                             unsigned char n_bits)
+__device__ int common_prefix(const int i,
+                             const int j,
+                             const UInteger* keys,
+                             const unsigned int n_keys,
+                             const unsigned char n_bits)
 {
     if (i < 0 || i > n_keys || j < 0 || j > n_keys) {
         return -1;
@@ -211,7 +211,7 @@ __device__ int common_prefix(int i,
 template <typename UInteger>
 void build_nodes(thrust::device_vector<Node> d_nodes,
                  thrust::device_vector<Leaf> d_leaves,
-                 thrust::device_vector<UInteger> d_keys)
+                 const thrust::device_vector<UInteger> d_keys)
 {
     unsigned int n_keys = d_keys.size();
     unsigned char n_bits_per_key = CHAR_BIT * sizeof(UInteger);
@@ -227,8 +227,8 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
 template <typename Float>
 void find_AABBs(thrust::device_vector<Node> d_nodes,
                 thrust::device_vector<Leaf> d_leaves,
-                thrust::device_vector<Float> d_sphere_centres,
-                thrust::device_vector<Float> d_sphere_radii)
+                const thrust::device_vector<Float> d_sphere_centres,
+                const thrust::device_vector<Float> d_sphere_radii)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 

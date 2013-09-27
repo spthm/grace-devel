@@ -25,7 +25,8 @@ class morton_key_functor<UInteger32, Float>
     const Vector3<Float> scale;
 
     // span = 2^(order) - 1; order = floor(bits_in_key / 3)
-    morton_key_functor(Vector3<Float> AABB_bottom, Vector3<Float> AABB_top)
+    morton_key_functor(const Vector3<Float> AABB_bottom,
+                       const Vector3<Float> AABB_top)
     {
         scale((Float)span / (AABB_top.x - AABB_bottom.x),
               (Float)span / (AABB_top.y - AABB_bottom.y),
@@ -49,7 +50,8 @@ class morton_key_functor<UInteger64, Float>
     static const unsigned int span = (1u << 21) - 1;
     const Vector3<Float> scale;
 
-    morton_key_functor(Vector3<Float> AABB_bottom, Vector3<Float> AABB_top)
+    morton_key_functor(const Vector3<Float> AABB_bottom,
+                       const Vector3<Float> AABB_top)
     {
         scale((Float)span / (AABB_top.x - AABB_bottom.x),
               (Float)span / (AABB_top.y - AABB_bottom.y),
