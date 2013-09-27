@@ -5,13 +5,13 @@
 
 namespace grace {
 
-namespace gpu {
-
-__host__ __device__ UInteger32 morton_key_30bit(UInteger32 x, UInteger32 y, UInteger32 z) {
+template <typename UInteger>
+__host__ __device__ UInteger32 morton_key_30bit(UInteger x, UInteger y, UInteger z) {
     return space_by_two_10bit(z) << 2 | space_by_two_10bit(y) << 1 | space_by_two_10bit(x);
 }
 
-__host__ __device__ UInteger64 morton_key_63bit(UInteger32 x, UInteger32 y, UInteger32 z) {
+template <typename UInteger>
+__host__ __device__ UInteger64 morton_key_63bit(UInteger x, UInteger y, UInteger z) {
     return space_by_two_21bit(z) << 2 | space_by_two_21bit(y) << 1 | space_by_two_21bit(x);
 }
 
@@ -67,7 +67,5 @@ class morton_key_functor<UInteger64, Float>
         return morton_key_63bit(x, y, z);
     }
 };
-
-} // namespace gpu
 
 } // namespace grace
