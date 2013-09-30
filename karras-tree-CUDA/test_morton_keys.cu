@@ -1,6 +1,10 @@
 #include <iostream>
 #include <bitset>
 
+#include <thrust/random.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+
 #include "types.h"
 #include "kernels/bits.cuh"
 #include "kernels/morton.cuh"
@@ -111,5 +115,32 @@ int main(int argc, char* argv[]) {
     std::cout << "Key_64:                   " << (std::bitset<64>) key_64 << std::endl;
     std::cout << "space_by_two_21bit:       " << (std::bitset<64>) my_key_64 << std::endl;
     std::cout << "morton_key_63bit:         " << (std::bitset<64>) my_key_2_64 << std::endl;
+
+
+    /* Now compare thrust::transform to a CPU loop. */
+
+    thrust::default_random_engine rng(1234);
+    thrust::uniform_real_distribution<float> u01(0,1);
+
+    N = 10000;
+    thrust::host_vector<Vector3<float>> h_random(N);
+    thrust::host_vector<UInteger32> h_morton(N);
+
+    for (unsigned int i=0; i<N; i++) {
+        h_random[i].x = u01(rng);
+        h_random[i].y = u01(rng);
+        h_random[i].z = u01(rng);
+
+        h_morton[i] = grace::morton_key_30bit(h_random[i].x,
+                                              h_random[i].y,
+                                              h_random[i].z)
+    }
+
+    thrust::device_vector<Vector3<float>> d_random = h_random;
+    thrust::device_vector<UInteger32> d_morton(N);
+    thrust::transform(d_random.begin(),
+                      d_random.begin() + N,
+                      d_morton.begin(),
+                      morton_key_functor<UInteger32>() );
 
 }
