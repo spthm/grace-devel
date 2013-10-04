@@ -7,7 +7,6 @@
 
 #include "../types.h"
 #include "../kernels/bits.cuh"
-#include "../kernels/bintree_build_kernels.cuh"
 
 class bit_prefix_functor
 {
