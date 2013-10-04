@@ -52,7 +52,7 @@ __global__ void build_nodes_kernel(Node* nodes,
         l = 0;
         t = l_max / 2;
         while (t >= 1) {
-            if (common_prefix(index, index + (UInteger) (l+t)*direction,
+            if (common_prefix(index, index + (l+t)*direction,
                               keys, n_keys, n_bits) > min_prefix) {
                 l = l + 1;
             }
