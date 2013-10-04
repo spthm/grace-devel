@@ -1,8 +1,10 @@
 #pragma once
 
-#include "../types.h"
+#include <cmath>
 #include <iostream>
 #include <bitset>
+
+#include "../types.h"
 
 namespace grace {
 
@@ -30,11 +32,26 @@ __host__ __device__ UInteger64 space_by_two_21bit(UInteger x) {
     return x_64;
 }
 
+template <typename UInteger>
+__host__ __device__ UInteger bit_prefix(const UInteger a, const UInteger b) {
+    unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
+    UInteger x_or = a ^ b;
+    if (x_or > 0)
+        // Count leading zeros of the xor.
+        return n_bits - 1 - UInteger(floor(log2((float)x_or)));
+    else
+        // a == b
+        return n_bits;
+}
+
 namespace gpu {
 
+// TODO: Rename this to e.g. bit_prefix_length
 template <typename UInteger>
 __device__ UInteger bit_prefix(const UInteger a, const UInteger b) {
-    return __clz(a^b);
+    // sizeof is a compile time operator, so the conditional return should be
+    // optimized away at compile time.
+    return (CHAR_BIT * sizeof(UInteger)) > 32 ? __clzll(a^b) : __clz(a^b);
 }
 
 } // namespace gpu

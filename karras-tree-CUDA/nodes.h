@@ -1,24 +1,31 @@
 #pragma once
 
+#include "types.h"
+
 namespace grace {
 
 struct Node
 {
-    unsigned int left;
-    unsigned int right;
-    unsigned int parent;
+    // A 32-bit int allows for up to 2,147,483,647 > 1024^3.
+    // Since we likely can't fit more than 1024^3 particles on the GPU
+    // anyway, int32 should be sufficient for the indices.
+    // Could use UInteger32 and set the root node to 1.  Then common_prefix
+    // may return 0 for out-of-range results, rather than -1.
+    Integer32 left;
+    Integer32 right;
+    Integer32 parent;
 
     bool left_leaf_flag;
     bool right_leaf_flag;
 
-    // AABB.
+    // AABB.  floats should be sufficient (i.e. no need for double).
     float top[3];
     float bottom[3];
 };
 
 struct Leaf
 {
-    unsigned int parent;
+    Integer32 parent;
 
     float top[3];
     float bottom[3];

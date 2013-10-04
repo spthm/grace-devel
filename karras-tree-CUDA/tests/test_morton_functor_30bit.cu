@@ -17,6 +17,7 @@ int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
 
+
     /* Generate random floats in [0,1) on CPU and find the keys. */
 
     thrust::default_random_engine rng(1234);
@@ -38,6 +39,7 @@ int main(int argc, char* argv[]) {
         h_morton[i] = grace::morton_key_30bit(ix, iy, iz);
     }
 
+
     /* Calculate morton keys on GPU from the same floats. */
 
     // morton_key_functor requires AABB information.
@@ -50,6 +52,7 @@ int main(int argc, char* argv[]) {
                       d_random.begin() + N,
                       d_morton.begin(),
                       grace::morton_key_functor<UInteger32, float>(bottom, top) );
+
 
     /* Verify results are the same. */
 
@@ -74,7 +77,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (correct) {
-        std::cout << "All GPU keys match all host keys!" << std::endl;
+        std::cout << "All " << N << " GPU and host keys match!" << std::endl;
     }
 
     return 0;

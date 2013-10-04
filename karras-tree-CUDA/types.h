@@ -4,6 +4,8 @@
 
 #define UInteger32 uint32_t
 #define UInteger64 uint64_t
+#define Integer32 int32_t
+#define Integer64 int64_t
 
 namespace grace {
 

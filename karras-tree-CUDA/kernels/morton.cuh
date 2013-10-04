@@ -33,7 +33,7 @@ public:
               (Float)span / (AABB_top.y - AABB_bottom.y),
               (Float)span / (AABB_top.z - AABB_bottom.z)) {}
 
-    __host__  __device__ UInteger32 operator() (const Vector3<Float> pos) {
+    __host__  __device__ UInteger32 operator() (const Vector3<Float>& pos) {
 
         UInteger32 x = (UInteger32) (pos.x * scale.x);
         UInteger32 y = (UInteger32) (pos.y * scale.y);
@@ -58,7 +58,7 @@ public:
               (Float)span / (AABB_top.y - AABB_bottom.y),
               (Float)span / (AABB_top.z - AABB_bottom.z)) {}
 
-    __host__  __device__ UInteger64 operator() (const Vector3<Float> pos) {
+    __host__  __device__ UInteger64 operator() (const Vector3<Float>& pos) {
 
         UInteger32 x = (UInteger32) (pos.x * scale.x);
         UInteger32 y = (UInteger32) (pos.y * scale.y);

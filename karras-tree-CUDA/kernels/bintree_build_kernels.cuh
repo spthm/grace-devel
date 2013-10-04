@@ -2,6 +2,7 @@
 
 #include <thrust/device_vector.h>
 
+#include "../types.h"
 #include "../nodes.h"
 #include "bits.cuh"
 #include "morton.cuh"
@@ -21,10 +22,10 @@ __global__ void build_nodes_kernel(Node* nodes,
                                    const unsigned int n_keys,
                                    const unsigned char n_bits)
 {
-    int index, end_index, split_index;
+    Integer32 index, end_index, split_index;
     unsigned int prefix_left, prefix_right, min_prefix, node_prefix;
     unsigned int l_max, l, t, s;
-    char direction;
+    int direction;
 
     // Index of this node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -39,9 +40,10 @@ __global__ void build_nodes_kernel(Node* nodes,
         /* Calculate the index of the other end of the node. */
         // l_max is an upper limit to the distance between the two indices.
         l_max = 2;
-        min_prefix = common_prefix(index, index-direction, keys, n_keys, n_bits);
-        while (common_prefix(index, index + l_max*direction, keys, n_keys, n_bits)
-               > min_prefix) {
+        min_prefix = common_prefix(index, index-direction,
+                                   keys, n_keys, n_bits);
+        while (common_prefix(index, index + l_max*direction,
+                             keys, n_keys, n_bits) > min_prefix) {
             l_max = l_max * 2;
         }
         // Now find l, the distance between the indices, using a binary search.
@@ -50,8 +52,8 @@ __global__ void build_nodes_kernel(Node* nodes,
         l = 0;
         t = l_max / 2;
         while (t >= 1) {
-            if (common_prefix(index, index + (UInteger) (l+t)*direction, keys, n_keys, n_bits)
-                > min_prefix) {
+            if (common_prefix(index, index + (UInteger) (l+t)*direction,
+                              keys, n_keys, n_bits) > min_prefix) {
                 l = l + 1;
             }
         }
@@ -64,8 +66,8 @@ __global__ void build_nodes_kernel(Node* nodes,
         do {
             // t = ceil(t/2.)
             t = (t+1) / 2;
-            if (common_prefix(index, index + (s+t)*direction, keys, n_keys, n_bits)
-                > node_prefix) {
+            if (common_prefix(index, index + (s+t)*direction,
+                              keys, n_keys, n_bits) > node_prefix) {
                 s = s + t;
             }
         } while (t > 1);
@@ -100,16 +102,16 @@ __global__ void build_nodes_kernel(Node* nodes,
 template <typename Float>
 __global__ void find_AABBs_kernel(Node* nodes,
                                   Leaf* leaves,
-                                  const unsigned int n_leaves,
+                                  const UInteger32 n_leaves,
                                   const Float* positions,
                                   const Float* extent,
                                   unsigned int* AABB_flags)
 {
-    int index;
-    float x_min, y_min, z_min;
-    float x_max, y_max, z_max;
-    float r;
-    float *left_bottom, *right_bottom, *left_top, *right_top;
+    Integer32 index;
+    Float x_min, y_min, z_min;
+    Float x_max, y_max, z_max;
+    Float r;
+    Float *left_bottom, *right_bottom, *left_top, *right_top;
 
     // Leaf index.
     index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -182,9 +184,10 @@ __global__ void find_AABBs_kernel(Node* nodes,
     }
 }
 
+// TODO: Rename this to e.g. common_prefix_length
 template <typename UInteger>
-__device__ int common_prefix(const int i,
-                             const int j,
+__device__ int common_prefix(const Integer32 i,
+                             const Integer32 j,
                              const UInteger* keys,
                              const unsigned int n_keys,
                              const unsigned char n_bits)
@@ -213,14 +216,16 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
                  thrust::device_vector<Leaf> d_leaves,
                  const thrust::device_vector<UInteger> d_keys)
 {
-    unsigned int n_keys = d_keys.size();
+    UInteger32 n_keys = d_keys.size();
     unsigned char n_bits_per_key = CHAR_BIT * sizeof(UInteger);
 
-    gpu::build_nodes_kernel<<<1,1>>>((Node*)thrust::raw_pointer_cast(d_nodes.data()),
-                                     (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
-                                     (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
-                                     n_keys,
-                                     n_bits_per_key);
+    gpu::build_nodes_kernel<<<1,1>>>(
+        (Node*)thrust::raw_pointer_cast(d_nodes.data()),
+        (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
+        (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
+        n_keys,
+        n_bits_per_key
+    );
 
 }
 
@@ -232,15 +237,17 @@ void find_AABBs(thrust::device_vector<Node> d_nodes,
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
-    unsigned int n_leaves = d_leaves.size();
+    UInteger32 n_leaves = d_leaves.size();
     d_AABB_flags.resize(n_leaves);
 
-    gpu::find_AABBs_kernel<<<1,1>>>(thrust::raw_pointer_cast(d_nodes.data()),
-                                    thrust::raw_pointer_cast(d_leaves.data()),
-                                    n_leaves,
-                                    thrust::raw_pointer_cast(d_sphere_centres.data()),
-                                    thrust::raw_pointer_cast(d_sphere_radii.data()),
-                                    thrust::raw_pointer_cast(d_AABB_flags.data()) );
+    gpu::find_AABBs_kernel<<<1,1>>>(
+        thrust::raw_pointer_cast(d_nodes.data()),
+        thrust::raw_pointer_cast(d_leaves.data()),
+        n_leaves,
+        thrust::raw_pointer_cast(d_sphere_centres.data()),
+        thrust::raw_pointer_cast(d_sphere_radii.data()),
+        thrust::raw_pointer_cast(d_AABB_flags.data())
+    );
 }
 
 

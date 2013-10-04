@@ -75,7 +75,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (correct) {
-        std::cout << "All GPU 63-bit keys match all host keys!" << std::endl;
+        std::cout << "All " << N << " 63-bit GPU and host keys match!" << std::endl;
     }
 
     return 0;
