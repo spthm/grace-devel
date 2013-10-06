@@ -60,7 +60,10 @@ int main(int argc, char* argv[]) {
     /************************************/
     /* 64-bit ranadom key calculations. */
     /************************************/
+
     unsigned int  N = 10000;
+    std::cout << "Testing " << N << " random 64-bit integers...\n" << std::endl;
+
 
     /* Generate N random unsigned integers. */
 
@@ -89,7 +92,6 @@ int main(int argc, char* argv[]) {
 
     /* Compare device results to host bit-prefix function. */
 
-    std::cout << "Testing " << N << " random 64-bit integers...\n" << std::endl;
     bool correct = true;
     for (int i=0; i<N; i++) {
         UInteger64 prefix_length = grace::bit_prefix(h_As[i], h_Bs[i]);
