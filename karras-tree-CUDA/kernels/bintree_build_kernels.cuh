@@ -19,8 +19,7 @@ template <typename UInteger>
 __global__ void build_nodes_kernel(Node* nodes,
                                    Leaf* leaves,
                                    const UInteger* keys,
-                                   const unsigned int n_keys,
-                                   const unsigned char n_bits)
+                                   const unsigned int n_keys)
 {
     Integer32 index, end_index, split_index;
     unsigned int prefix_left, prefix_right, min_prefix, node_prefix;
@@ -33,17 +32,17 @@ __global__ void build_nodes_kernel(Node* nodes,
     if (index < n_keys && index >= 0) {
         // direction == +1 => index is the first key in the node.
         // direction == -1 => index is the last key in the node.
-        prefix_left = common_prefix(index, index-1, keys, n_keys, n_bits);
-        prefix_right = common_prefix(index, index+1, keys, n_keys, n_bits);
+        prefix_left = common_prefix(index, index-1, keys, n_keys);
+        prefix_right = common_prefix(index, index+1, keys, n_keys);
         direction = (prefix_right - prefix_left > 0) ? +1 : -1;
 
         /* Calculate the index of the other end of the node. */
         // l_max is an upper limit to the distance between the two indices.
         l_max = 2;
         min_prefix = common_prefix(index, index-direction,
-                                   keys, n_keys, n_bits);
+                                   keys, n_keys);
         while (common_prefix(index, index + l_max*direction,
-                             keys, n_keys, n_bits) > min_prefix) {
+                             keys, n_keys) > min_prefix) {
             l_max = l_max * 2;
         }
         // Now find l, the distance between the indices, using a binary search.
@@ -53,21 +52,21 @@ __global__ void build_nodes_kernel(Node* nodes,
         t = l_max / 2;
         while (t >= 1) {
             if (common_prefix(index, index + (l+t)*direction,
-                              keys, n_keys, n_bits) > min_prefix) {
+                              keys, n_keys) > min_prefix) {
                 l = l + 1;
             }
         }
         end_index = index + l*direction;
 
         /* Calculate the index of the split position within the node. */
-        node_prefix = common_prefix(index, end_index, keys, n_keys, n_bits);
+        node_prefix = common_prefix(index, end_index, keys, n_keys);
         s = 0;
         t = (end_index - index) * direction;
         do {
             // t = ceil(t/2.)
             t = (t+1) / 2;
             if (common_prefix(index, index + (s+t)*direction,
-                              keys, n_keys, n_bits) > node_prefix) {
+                              keys, n_keys) > node_prefix) {
                 s = s + t;
             }
         } while (t > 1);
@@ -189,18 +188,20 @@ template <typename UInteger>
 __device__ int common_prefix(const Integer32 i,
                              const Integer32 j,
                              const UInteger* keys,
-                             const unsigned int n_keys,
-                             const unsigned char n_bits)
+                             const unsigned int n_keys)
 {
-    if (i < 0 || i > n_keys || j < 0 || j > n_keys) {
+    // Should be optimized away by the compiler.
+    const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
+
+    if (i < 0 || i >= n_keys || j < 0 || j >= n_keys) {
         return -1;
     }
     UInteger key_i = keys[i];
     UInteger key_j = keys[j];
 
-    unsigned int prefix_length = bit_prefix(key_i, key_j);
+    int prefix_length = bit_prefix(key_i, key_j);
     if (prefix_length == n_bits) {
-        prefix_length += bit_prefix((UInteger)i, (UInteger)j);
+        prefix_length += bit_prefix((UInteger32)i, (UInteger32)j);
     }
     return prefix_length;
 }
@@ -217,14 +218,12 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
                  const thrust::device_vector<UInteger> d_keys)
 {
     UInteger32 n_keys = d_keys.size();
-    unsigned char n_bits_per_key = CHAR_BIT * sizeof(UInteger);
 
     gpu::build_nodes_kernel<<<1,1>>>(
         (Node*)thrust::raw_pointer_cast(d_nodes.data()),
         (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
         (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
-        n_bits_per_key
+        n_keys
     );
 
 }
