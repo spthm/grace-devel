@@ -29,7 +29,8 @@ __global__ void build_nodes_kernel(Node* nodes,
     // Index of this node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    if (index < n_keys && index >= 0) {
+    while (index < n_keys && index >= 0)
+    {
         // direction == +1 => index is the first key in the node.
         // direction == -1 => index is the last key in the node.
         prefix_left = common_prefix(index, index-1, keys, n_keys);
@@ -95,6 +96,8 @@ __global__ void build_nodes_kernel(Node* nodes,
             nodes[index].right_leaf_flag = false;
             nodes[split_index+1].parent = index;
         }
+
+        index = index + blockDim.x * gridDim.x;
     }
 }
 
@@ -115,7 +118,7 @@ __global__ void find_AABBs_kernel(Node* nodes,
     // Leaf index.
     index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    if (index < n_leaves && index >= 0) {
+    while (index < n_leaves && index >= 0) {
         // Find the AABB of each leaf (i.e. each primitive) and write it.
         r = extent[index];
         x_min = positions[index*3 + 0] - r;
@@ -137,7 +140,8 @@ __global__ void find_AABBs_kernel(Node* nodes,
         // Travel up the tree.  The second thread to reach a node writes
         // its AABB based on those of its children.  The first exists the loop.
         index = leaves[index].parent;
-        while (true) {
+        while (true)
+        {
             if (atomicAdd(&AABB_flags[index], 1) == 0) {
                 break;
             }
@@ -180,6 +184,8 @@ __global__ void find_AABBs_kernel(Node* nodes,
             }
             index = nodes[index].parent;
         }
+
+        index = index + blockDim.x * gridDim.x;
     }
 }
 
