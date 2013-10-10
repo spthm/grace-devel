@@ -230,9 +230,9 @@ __device__ int common_prefix(const Integer32 i,
 /**********************************************/
 
 template <typename UInteger>
-void build_nodes(thrust::device_vector<Node> d_nodes,
-                 thrust::device_vector<Leaf> d_leaves,
-                 const thrust::device_vector<UInteger> d_keys)
+void build_nodes(thrust::device_vector<Node>& d_nodes,
+                 thrust::device_vector<Leaf>& d_leaves,
+                 const thrust::device_vector<UInteger>& d_keys)
 {
     UInteger32 n_keys = d_keys.size();
 
@@ -251,10 +251,10 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
 }
 
 template <typename Float>
-void find_AABBs(thrust::device_vector<Node> d_nodes,
-                thrust::device_vector<Leaf> d_leaves,
-                const thrust::device_vector<Vector3<Float> > d_sphere_centres,
-                const thrust::device_vector<Float> d_sphere_radii)
+void find_AABBs(thrust::device_vector<Node>& d_nodes,
+                thrust::device_vector<Leaf>& d_leaves,
+                const thrust::device_vector<Vector3<Float> >& d_sphere_centres,
+                const thrust::device_vector<Float>& d_sphere_radii)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
