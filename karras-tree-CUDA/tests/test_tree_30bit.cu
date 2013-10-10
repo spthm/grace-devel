@@ -124,6 +124,17 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<int> d_debug(N-1);
 
     grace::build_nodes(d_nodes, d_leaves, d_keys);
+
+    thrust::host_vector<grace::Node> h_nodes = d_nodes;
+    int parent;
+    for (int i=0; i<N; i++) {
+        parent =  h_nodes[i].parent;
+        if (parent == 0) {
+            std::cout << "i: " << i << std::endl;
+            std::cout << "parent: " << parent << std::endl;
+        }
+    }
+
     grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
 
     thrust::host_vector<int> h_debug = d_debug;
