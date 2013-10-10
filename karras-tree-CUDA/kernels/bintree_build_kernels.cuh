@@ -22,14 +22,15 @@ __global__ void build_nodes_kernel(Node* nodes,
                                    const unsigned int n_keys)
 {
     Integer32 index, end_index, split_index;
-    unsigned int prefix_left, prefix_right, min_prefix, node_prefix;
-    unsigned int l_max, l, t, s;
+    int prefix_left, prefix_right, min_prefix;
+    unsigned int node_prefix;
+    unsigned int span_max, l, bit;
     int direction;
 
     // Index of this node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (index < n_keys && index >= 0)
+    while (index < (n_keys-1) && index >= 0)
     {
         // direction == +1 => index is the first key in the node.
         // direction == -1 => index is the last key in the node.
@@ -37,42 +38,50 @@ __global__ void build_nodes_kernel(Node* nodes,
         prefix_right = common_prefix(index, index+1, keys, n_keys);
         direction = (prefix_right - prefix_left > 0) ? +1 : -1;
 
-        /* Calculate the index of the other end of the node. */
-        // l_max is an upper limit to the distance between the two indices.
-        l_max = 2;
+        /* Calculate the index of the other end of the node.
+         * span_max is an upper limit to the distance between the two indices.
+         */
+        span_max = 2;
         min_prefix = common_prefix(index, index-direction,
                                    keys, n_keys);
-        while (common_prefix(index, index + l_max*direction,
+        while (common_prefix(index, index + span_max*direction,
                              keys, n_keys) > min_prefix) {
-            l_max = l_max * 2;
+            span_max = span_max * 2;
         }
-        // Now find l, the distance between the indices, using a binary search.
-        // (i.e. one bit at a time.)
+        /* Find the distance between the indices, l, using a binary search.
+         * (We find each bit t sequantially, starting with the most significant,
+         * span_max/2.)
+         */
         // TODO: Remove l, use end_index only if possible.
         l = 0;
-        t = l_max / 2;
-        while (t >= 1) {
-            if (common_prefix(index, index + (l+t)*direction,
+        bit = span_max / 2;
+        while (bit >= 1) {
+            if (common_prefix(index, index + (l+bit)*direction,
                               keys, n_keys) > min_prefix) {
-                l = l + 1;
+                l = l + bit;
             }
+            bit = bit / 2;
         }
         end_index = index + l*direction;
 
-        /* Calculate the index of the split position within the node. */
+        /* Find the index of the split position within the node, l, again
+         * using a binary search (see above).
+         * In this case, bit could be odd (i.e. not actually one bit), but the
+         * principle is the same.
+         */
         node_prefix = common_prefix(index, end_index, keys, n_keys);
-        s = 0;
-        t = (end_index - index) * direction;
+        bit = l;
+        l = 0;
         do {
-            // t = ceil(t/2.)
-            t = (t+1) / 2;
-            if (common_prefix(index, index + (s+t)*direction,
+            // bit = ceil(bit/2.) in case l odd.
+            bit = (bit+1) / 2;
+            if (common_prefix(index, index + (l+bit)*direction,
                               keys, n_keys) > node_prefix) {
-                s = s + t;
+                l = l + bit;
             }
-        } while (t > 1);
+        } while (bit > 1);
         // If direction == -1 we actually found split_index + 1;
-        split_index = index + s*direction + min(direction, 0);
+        split_index = index + l*direction + min(direction, 0);
 
         /* Update this node with the locations of its children. */
         nodes[index].left = split_index;
@@ -99,14 +108,15 @@ __global__ void build_nodes_kernel(Node* nodes,
 
         index = index + blockDim.x * gridDim.x;
     }
+    return;
 }
 
 template <typename Float>
 __global__ void find_AABBs_kernel(Node* nodes,
                                   Leaf* leaves,
                                   const UInteger32 n_leaves,
-                                  const Float* positions,
-                                  const Float* extent,
+                                  const Vector3<Float>* centres,
+                                  const Float* radii,
                                   unsigned int* AABB_flags)
 {
     Integer32 index;
@@ -118,12 +128,13 @@ __global__ void find_AABBs_kernel(Node* nodes,
     // Leaf index.
     index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (index < n_leaves && index >= 0) {
+    while (index < n_leaves)
+    {
         // Find the AABB of each leaf (i.e. each primitive) and write it.
-        r = extent[index];
-        x_min = positions[index*3 + 0] - r;
-        y_min = positions[index*3 + 1] - r;
-        z_min = positions[index*3 + 2] - r;
+        r = radii[index];
+        x_min = centres[index].x - r;
+        y_min = centres[index].y - r;
+        z_min = centres[index].z - r;
 
         x_max = x_min + 2*r;
         y_max = y_min + 2*r;
@@ -145,48 +156,48 @@ __global__ void find_AABBs_kernel(Node* nodes,
             if (atomicAdd(&AABB_flags[index], 1) == 0) {
                 break;
             }
-            else {
-                if (nodes[index].left_leaf_flag) {
-                    left_bottom = leaves[nodes[index].left].bottom;
-                    left_top = leaves[nodes[index].left].top;
-                }
-                else {
-                    left_bottom = nodes[nodes[index].left].bottom;
-                    left_top = nodes[nodes[index].left].top;
-                }
-                if (nodes[index].right_leaf_flag) {
-                    right_bottom = leaves[nodes[index].right].bottom;
-                    right_top = leaves[nodes[index].right].top;
-                }
-                else {
-                    right_bottom = nodes[nodes[index].right].bottom;
-                    right_top = nodes[nodes[index].right].top;
-                }
+            // else {
+            //     if (nodes[index].left_leaf_flag) {
+            //         left_bottom = leaves[nodes[index].left].bottom;
+            //         left_top = leaves[nodes[index].left].top;
+            //     }
+            //     else {
+            //         left_bottom = nodes[nodes[index].left].bottom;
+            //         left_top = nodes[nodes[index].left].top;
+            //     }
+            //     if (nodes[index].right_leaf_flag) {
+            //         right_bottom = leaves[nodes[index].right].bottom;
+            //         right_top = leaves[nodes[index].right].top;
+            //     }
+            //     else {
+            //         right_bottom = nodes[nodes[index].right].bottom;
+            //         right_top = nodes[nodes[index].right].top;
+            //     }
 
-                x_min = min(left_bottom[0], right_bottom[0]);
-                y_min = min(left_bottom[1], right_bottom[1]);
-                z_min = min(left_bottom[2], right_bottom[2]);
+            //     x_min = min(left_bottom[0], right_bottom[0]);
+            //     y_min = min(left_bottom[1], right_bottom[1]);
+            //     z_min = min(left_bottom[2], right_bottom[2]);
 
-                x_max = max(left_top[0], right_top[0]);
-                y_max = max(left_top[1], right_top[1]);
-                z_max = max(left_top[2], right_top[2]);
+            //     x_max = max(left_top[0], right_top[0]);
+            //     y_max = max(left_top[1], right_top[1]);
+            //     z_max = max(left_top[2], right_top[2]);
 
-                nodes[index].bottom[0] = x_min;
-                nodes[index].bottom[1] = y_min;
-                nodes[index].bottom[2] = z_min;
+            //     nodes[index].bottom[0] = x_min;
+            //     nodes[index].bottom[1] = y_min;
+            //     nodes[index].bottom[2] = z_min;
 
-                nodes[index].top[0] = x_max;
-                nodes[index].top[1] = y_max;
-                nodes[index].top[2] = z_max;
-            }
+            //     nodes[index].top[0] = x_max;
+            //     nodes[index].top[1] = y_max;
+            //     nodes[index].top[2] = z_max;
+            // }
             if (index == 0) {
                 break;
             }
             index = nodes[index].parent;
         }
-
         index = index + blockDim.x * gridDim.x;
     }
+    return;
 }
 
 // TODO: Rename this to e.g. common_prefix_length
@@ -225,7 +236,12 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
 {
     UInteger32 n_keys = d_keys.size();
 
-    gpu::build_nodes_kernel<<<1,1>>>(
+    int threads_per_block = 512;
+    int max_blocks = 112; // 7MPs * 16 blocks/MP for compute capability 3.0.
+    int blocks = min(max_blocks, (n_keys + threads_per_block-1)
+                                  / threads_per_block);
+
+    gpu::build_nodes_kernel<<<blocks,threads_per_block>>>(
         (Node*)thrust::raw_pointer_cast(d_nodes.data()),
         (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
         (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
@@ -237,15 +253,20 @@ void build_nodes(thrust::device_vector<Node> d_nodes,
 template <typename Float>
 void find_AABBs(thrust::device_vector<Node> d_nodes,
                 thrust::device_vector<Leaf> d_leaves,
-                const thrust::device_vector<Float> d_sphere_centres,
+                const thrust::device_vector<Vector3<Float> > d_sphere_centres,
                 const thrust::device_vector<Float> d_sphere_radii)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
     UInteger32 n_leaves = d_leaves.size();
-    d_AABB_flags.resize(n_leaves);
+    d_AABB_flags.resize(n_leaves-1);
 
-    gpu::find_AABBs_kernel<<<1,1>>>(
+    int threads_per_block = 512;
+    int max_blocks = 112; // 7MPs * 16 blocks/MP for compute capability 3.0.
+    int blocks = min(max_blocks, (n_leaves + threads_per_block-1)
+                                  / threads_per_block);
+
+    gpu::find_AABBs_kernel<<<blocks,threads_per_block>>>(
         thrust::raw_pointer_cast(d_nodes.data()),
         thrust::raw_pointer_cast(d_leaves.data()),
         n_leaves,
