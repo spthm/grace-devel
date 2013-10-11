@@ -214,7 +214,7 @@ __device__ int common_prefix(const Integer32 i,
     // Should be optimized away by the compiler.
     const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
 
-    if (i < 0 || i >= n_keys || j < 0 || j >= n_keys) {
+    if (j < 0 || j >= n_keys || i < 0 || i >= n_keys) {
         return -1;
     }
     UInteger key_i = keys[i];
