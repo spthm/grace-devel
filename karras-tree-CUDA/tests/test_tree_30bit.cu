@@ -111,9 +111,9 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres.begin());
 
 
-    thrust::host_vector<grace::Vector3<float> > h_centres = d_centres;
-    thrust::host_vector<float> h_radii = d_radii;
-    thrust::host_vector<UInteger32> h_keys = d_keys;
+    // thrust::host_vector<grace::Vector3<float> > h_centres = d_centres;
+    // thrust::host_vector<float> h_radii = d_radii;
+    // thrust::host_vector<UInteger32> h_keys = d_keys;
     // for (int i=0; i<N; i++) {
     //     std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
     //                        << std::setfill('0') << h_centres[i].x << std::endl;
@@ -131,9 +131,9 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<grace::Node> d_nodes(N-1);
     thrust::device_vector<grace::Leaf> d_leaves(N);
-    // thrust::device_vector<int> d_debug(N-1);
 
     grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
 
     // thrust::host_vector<grace::Node> h_nodes = d_nodes;
     // thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
@@ -152,14 +152,6 @@ int main(int argc, char* argv[]) {
     //     std::cout << "i:      " << i << std::endl;
     //     std::cout << "parent: " << h_leaves[i].parent << std::endl;
     //     std::cout << std::endl;
-    // }
-
-    // Hangs for N >= 57345
-    grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
-
-    // thrust::host_vector<int> h_debug = d_debug;
-    // for (int i=0; i<N-1; i++) {
-    //     std::cout << "debug: " << h_debug[i] << std::endl;
     // }
 
 

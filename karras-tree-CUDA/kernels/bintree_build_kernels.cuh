@@ -119,7 +119,7 @@ __global__ void find_AABBs_kernel(Node* nodes,
                                   const Float* radii,
                                   unsigned int* AABB_flags)
 {
-    Integer32 index;
+    Integer32 index, left_index, right_index;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
@@ -156,42 +156,46 @@ __global__ void find_AABBs_kernel(Node* nodes,
             if (atomicAdd(&AABB_flags[index], 1) == 0) {
                 break;
             }
-            // else {
-            //     if (nodes[index].left_leaf_flag) {
-            //         left_bottom = leaves[nodes[index].left].bottom;
-            //         left_top = leaves[nodes[index].left].top;
-            //     }
-            //     else {
-            //         left_bottom = nodes[nodes[index].left].bottom;
-            //         left_top = nodes[nodes[index].left].top;
-            //     }
-            //     if (nodes[index].right_leaf_flag) {
-            //         right_bottom = leaves[nodes[index].right].bottom;
-            //         right_top = leaves[nodes[index].right].top;
-            //     }
-            //     else {
-            //         right_bottom = nodes[nodes[index].right].bottom;
-            //         right_top = nodes[nodes[index].right].top;
-            //     }
+            else {
+                left_index = nodes[index].left;
+                right_index = nodes[index].right;
+                if (nodes[index].left_leaf_flag) {
+                    left_bottom = leaves[left_index].bottom;
+                    left_top = leaves[left_index].top;
+                }
+                else {
+                    left_bottom = nodes[left_index].bottom;
+                    left_top = nodes[left_index].top;
+                }
+                if (nodes[index].right_leaf_flag) {
+                    right_bottom = leaves[right_index].bottom;
+                    right_top = leaves[right_index].top;
+                }
+                else {
+                    right_bottom = nodes[right_index].bottom;
+                    right_top = nodes[right_index].top;
+                }
 
-            //     x_min = min(left_bottom[0], right_bottom[0]);
-            //     y_min = min(left_bottom[1], right_bottom[1]);
-            //     z_min = min(left_bottom[2], right_bottom[2]);
+                x_min = min(left_bottom[0], right_bottom[0]);
+                y_min = min(left_bottom[1], right_bottom[1]);
+                z_min = min(left_bottom[2], right_bottom[2]);
 
-            //     x_max = max(left_top[0], right_top[0]);
-            //     y_max = max(left_top[1], right_top[1]);
-            //     z_max = max(left_top[2], right_top[2]);
+                x_max = max(left_top[0], right_top[0]);
+                y_max = max(left_top[1], right_top[1]);
+                z_max = max(left_top[2], right_top[2]);
 
-            //     nodes[index].bottom[0] = x_min;
-            //     nodes[index].bottom[1] = y_min;
-            //     nodes[index].bottom[2] = z_min;
+                nodes[index].bottom[0] = x_min;
+                nodes[index].bottom[1] = y_min;
+                nodes[index].bottom[2] = z_min;
 
-            //     nodes[index].top[0] = x_max;
-            //     nodes[index].top[1] = y_max;
-            //     nodes[index].top[2] = z_max;
-            // }
+                nodes[index].top[0] = x_max;
+                nodes[index].top[1] = y_max;
+                nodes[index].top[2] = z_max;
+            }
             if (index == 0) {
-                break;
+                // If we get to here then the root node has just been processed,
+                // which means ALL other nodes have also been processed.
+                return;
             }
             index = nodes[index].parent;
         }
