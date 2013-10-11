@@ -10,7 +10,7 @@ import bits
 # => key =      1000110110111001
 
 x = int('0b00110101', 2)
-y = int('0b10101110', 2)z
+y = int('0b10101110', 2)
 
 true_spaced_x = int('0b0000010100010001', 2)
 true_spaced_y = int('0b0100010001010100', 2)
