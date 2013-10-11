@@ -154,6 +154,7 @@ int main(int argc, char* argv[]) {
     //     std::cout << std::endl;
     // }
 
+    // Hangs for N >= 57345
     grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
 
     // thrust::host_vector<int> h_debug = d_debug;
