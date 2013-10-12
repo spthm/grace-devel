@@ -95,6 +95,9 @@ int main(int argc, char* argv[]) {
     /* Generate the Morton key of each position. */
 
     thrust::device_vector<UInteger32> d_keys(N);
+    // Make a host copy of the pre-sorted keys, in case we want to sort
+    // anything else.
+    thrust::host_vector<UInteger32> h_keys(N);
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 
