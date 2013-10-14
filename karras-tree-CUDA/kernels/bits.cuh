@@ -9,7 +9,7 @@
 namespace grace {
 
 template <typename UInteger>
-__host__ __device__ UInteger32 space_by_two_10bit(UInteger x) {
+__host__ __device__ UInteger32 space_by_two_10bit(const UInteger& x) {
     // Mask high bits away first, and ensure we have enough bits.
     UInteger32 x_32 = (UInteger32)x & ((1u << 10) - 1);
     x_32 = (x_32 | (x_32 << 16)) & 0x030000FF;
@@ -21,7 +21,7 @@ __host__ __device__ UInteger32 space_by_two_10bit(UInteger x) {
 
 // Courtesy of http://stackoverflow.com/a/18529061/927046
 template <typename UInteger>
-__host__ __device__ UInteger64 space_by_two_21bit(UInteger x) {
+__host__ __device__ UInteger64 space_by_two_21bit(const UInteger& x) {
     // This spaced integer requires 3*21 = 63 bits
     UInteger64 x_64 = (UInteger64)x & ((1u << 21) - 1);
     x_64 = (x_64 | x_64 << 32) & 0x001f00000000ffff;
@@ -33,7 +33,7 @@ __host__ __device__ UInteger64 space_by_two_21bit(UInteger x) {
 }
 
 template <typename UInteger>
-__host__ __device__ UInteger bit_prefix(const UInteger a, const UInteger b) {
+__host__ __device__ UInteger bit_prefix(const UInteger& a, const UInteger& b) {
     unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
     UInteger x_or = a ^ b;
     if (x_or > 0)
@@ -48,8 +48,8 @@ namespace gpu {
 
 // TODO: Rename this to e.g. bit_prefix_length
 template <typename UInteger>
-__device__ UInteger bit_prefix(const UInteger a, const UInteger b) {
-    // sizeof is a compile time operator, so the conditional return should be
+__device__ UInteger bit_prefix(const UInteger& a, const UInteger& b) {
+    // sizeof is a compile-time operator, so the conditional return should be
     // optimized away at compile time.
     return (CHAR_BIT * sizeof(UInteger)) > 32 ? __clzll(a^b) : __clz(a^b);
 }

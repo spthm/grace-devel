@@ -240,10 +240,12 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
 {
     UInteger32 n_keys = d_keys.size();
 
-    int blocks = min(MAX_BLOCKS, (n_leaves + THREADS_PER_BLOCK-1)
-                                  / THREADS_PER_BLOCK);
+    int threads_per_block = 512;
+    int max_blocks = 112; // 7MPs * 16 blocks/MP for compute capability 3.0.
+    int blocks = min(max_blocks, (n_keys + threads_per_block-1)
+                                  / threads_per_block);
 
-    gpu::build_nodes_kernel<<<blocks,THREADS_PER_BLOCK>>>(
+    gpu::build_nodes_kernel<<<blocks,threads_per_block>>>(
         (Node*)thrust::raw_pointer_cast(d_nodes.data()),
         (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
         (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
@@ -263,10 +265,12 @@ void find_AABBs(thrust::device_vector<Node>& d_nodes,
     UInteger32 n_leaves = d_leaves.size();
     d_AABB_flags.resize(n_leaves-1);
 
-    int blocks = min(MAX_BLOCKS, (n_leaves + THREADS_PER_BLOCK-1)
-                                  / THREADS_PER_BLOCK);
+    int threads_per_block = 512;
+    int max_blocks = 112; // 7MPs * 16 blocks/MP for compute capability 3.0.
+    int blocks = min(max_blocks, (n_leaves + threads_per_block-1)
+                                  / threads_per_block);
 
-    gpu::find_AABBs_kernel<<<blocks,THREADS_PER_BLOCK>>>(
+    gpu::find_AABBs_kernel<<<blocks,threads_per_block>>>(
         thrust::raw_pointer_cast(d_nodes.data()),
         thrust::raw_pointer_cast(d_leaves.data()),
         n_leaves,
