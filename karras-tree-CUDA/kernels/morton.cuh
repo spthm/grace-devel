@@ -49,7 +49,7 @@ __global__ void morton_keys_kernel_63bit(const Float* xs,
                                          const Float* ys,
                                          const Float* zs,
                                          UInteger64* keys,
-                                         const UInteger64 n_keys,
+                                         const UInteger32 n_keys,
                                          const Vector3<Float> scale)
 {
     UInteger64 tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -68,16 +68,21 @@ __global__ void morton_keys_kernel_63bit(const Float* xs,
 } // namespace gpu
 
 template <typename UInteger, typename Float>
-thrust::device_vector<UInteger> morton_keys(
-            const thrust::device_vector<Float>& d_xs,
-            const thrust::device_vector<Float>& d_ys,
-            const thrust::device_vector<Float>& d_zs,
-            const Vector3<Float>& AABB_bottom,
-            const Vector3<Float>& AABB_top)
+void morton_keys();
+
+template <typename Float>
+void morton_keys<UInteger32, Float>(const thrust::device_vector<Float>& d_xs,
+                                    const thrust::device_vector<Float>& d_ys,
+                                    const thrust::device_vector<Float>& d_zs,
+                                    thrust::device_vector<UInteger32>& d_keys;
+                                    const Vector3<Float>& AABB_bottom,
+                                    const Vector3<Float>& AABB_top)
 {
-    Vector3<Float> scale;
-    unsigned int span = (CHAR_BIT * sizeof(UInteger) > 32 ? (1u << 10) : (1u << 21)) - 1;
-    UInteger n_keys = d_xs.size();
+    unsigned int span = (1u << 10) - 1;
+    Vector3<Float> scale((Float)span / (AABB_top.x - AABB_bottom.x)
+                         (Float)span / (AABB_top.y - AABB_bottom.y)
+                         (Float)span / (AABB_top.z - AABB_bottom.z));
+    UInteger32 n_keys = d_xs.size();
 
     scale.x = span / (AABB_top.x - AABB_bottom.x);
     scale.y = span / (AABB_top.y - AABB_bottom.y);
@@ -86,26 +91,38 @@ thrust::device_vector<UInteger> morton_keys(
     int blocks = min(MAX_BLOCKS, (n_leaves + THREADS_PER_BLOCK-1)
                                   / THREADS_PER_BLOCK);
 
-    if (span > 1023) {
-        thrust::device_vector<UInteger64> d_keys(n_keys);
-        gpu::morton_keys_kernel_30bit<<<blocks, MAX_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_xs.data()),
-            thrust::raw_pointer_cast(d_ys.data()),
-            thrust::raw_pointer_cast(d_zs.data()),
-            thrust::raw_pointer_cast(d_keys.data()),
-            n_keys,
-            scale);
-    }
-    else {
-        thrust::device_vector<UInteger32> d_keys(n_keys);
-        gpu::morton_keys_kernel_63bit<<<blocks, MAX_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_xs.data()),
-            thrust::raw_pointer_cast(d_ys.data()),
-            thrust::raw_pointer_cast(d_zs.data()),
-            thrust::raw_pointer_cast(d_keys.data()),
-            n_keys,
-            scale);
-    }
+    d_keys.resize(n_keys);
+    gpu::morton_keys_kernel_30bit<<<blocks, MAX_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_xs.data()),
+        thrust::raw_pointer_cast(d_ys.data()),
+        thrust::raw_pointer_cast(d_zs.data()),
+        thrust::raw_pointer_cast(d_keys.data()),
+        n_keys,
+        scale);
+}
+
+template <typename Float>
+void morton_keys<UInteger64, Float>(const thrust::device_vector<Float>& d_xs,
+                                    const thrust::device_vector<Float>& d_ys,
+                                    const thrust::device_vector<Float>& d_zs,
+                                    thrust::device_vector<UInteger64>& d_keys;
+                                    const Vector3<Float>& AABB_bottom,
+                                    const Vector3<Float>& AABB_top)
+{
+    unsigned int span = (1u << 21) - 1;
+    Vector3<Float> scale((Float)span / (AABB_top.x - AABB_bottom.x)
+                         (Float)span / (AABB_top.y - AABB_bottom.y)
+                         (Float)span / (AABB_top.z - AABB_bottom.z));
+    UInteger32 n_keys = d_xs.size();
+
+    d_keys.resize(n_keys);
+    gpu::morton_keys_kernel_63bit<<<blocks, MAX_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_xs.data()),
+        thrust::raw_pointer_cast(d_ys.data()),
+        thrust::raw_pointer_cast(d_zs.data()),
+        thrust::raw_pointer_cast(d_keys.data()),
+        n_keys,
+        scale);
 }
 
 } // namespace grace

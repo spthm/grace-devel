@@ -19,7 +19,7 @@ template <typename UInteger>
 __global__ void build_nodes_kernel(Node* nodes,
                                    Leaf* leaves,
                                    const UInteger* keys,
-                                   const unsigned int n_keys)
+                                   const UInteger32 n_keys)
 {
     Integer32 index, end_index, split_index;
     int prefix_left, prefix_right, min_prefix;
@@ -209,7 +209,7 @@ template <typename UInteger>
 __device__ int common_prefix(const Integer32 i,
                              const Integer32 j,
                              const UInteger* keys,
-                             const unsigned int n_keys)
+                             const UInteger32 n_keys)
 {
     // Should be optimized away by the compiler.
     const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
