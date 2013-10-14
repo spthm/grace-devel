@@ -107,8 +107,7 @@ int main(int argc, char* argv[]) {
                       grace::morton_key_functor<UInteger32, float>(bottom, top) );
 
 
-    /* Sort the position vectors by their keys. Note that this leaves the
-     * radii UN-sorted, but for the purposes of this we don't care.
+    /* Sort the position vectors by their keys.
      */
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres.begin());
