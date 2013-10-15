@@ -115,7 +115,9 @@ template <typename Float>
 __global__ void find_AABBs_kernel(Node* nodes,
                                   Leaf* leaves,
                                   const UInteger32 n_leaves,
-                                  const Vector3<Float>* centres,
+                                  const Float* xs,
+                                  const Float* ys,
+                                  const Float* zs
                                   const Float* radii,
                                   unsigned int* AABB_flags)
 {
@@ -132,9 +134,9 @@ __global__ void find_AABBs_kernel(Node* nodes,
     {
         // Find the AABB of each leaf (i.e. each primitive) and write it.
         r = radii[index];
-        x_min = centres[index].x - r;
-        y_min = centres[index].y - r;
-        z_min = centres[index].z - r;
+        x_min = xs[index] - r;
+        y_min = ys[index] - r;
+        z_min = zs[index] - r;
 
         x_max = x_min + 2*r;
         y_max = y_min + 2*r;
@@ -255,7 +257,9 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
 template <typename Float>
 void find_AABBs(thrust::device_vector<Node>& d_nodes,
                 thrust::device_vector<Leaf>& d_leaves,
-                const thrust::device_vector<Vector3<Float> >& d_sphere_centres,
+                const thrust::device_vector<Float>& d_sphere_xs,
+                const thrust::device_vector<Float>& d_sphere_ys,
+                const thrust::device_vector<Float>& d_sphere_zs,
                 const thrust::device_vector<Float>& d_sphere_radii)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
@@ -270,7 +274,9 @@ void find_AABBs(thrust::device_vector<Node>& d_nodes,
         thrust::raw_pointer_cast(d_nodes.data()),
         thrust::raw_pointer_cast(d_leaves.data()),
         n_leaves,
-        thrust::raw_pointer_cast(d_sphere_centres.data()),
+        thrust::raw_pointer_cast(d_sphere_xs.data()),
+        thrust::raw_pointer_cast(d_sphere_ys.data()),
+        thrust::raw_pointer_cast(d_sphere_zs.data()),
         thrust::raw_pointer_cast(d_sphere_radii.data()),
         thrust::raw_pointer_cast(d_AABB_flags.data())
     );
