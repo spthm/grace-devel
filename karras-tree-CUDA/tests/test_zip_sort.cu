@@ -8,7 +8,7 @@
 #include <thrust/iterator/zip_iterator.h>
 
 #include "../types.h"
-#include "../kernels/morton_vector3.cuh"
+#include "../kernels/morton.cuh"
 
 __host__ __device__ unsigned int hash(unsigned int a)
 {
@@ -21,24 +21,24 @@ __host__ __device__ unsigned int hash(unsigned int a)
     return a;
 }
 
-class random_vector3_functor
+class random_pos_functor
 {
-    // Constructed on the host.
-    grace::Vector3<float> random_vector3;
+    const int offset;
 
 public:
-    __host__ __device__ grace::Vector3<float> operator() (unsigned int n)
+    random_pos_functor(const int offset_) : offset(offset_) {}
+
+    __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(n);
+        unsigned int seed = hash(3*n);
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
+        for (int i=0; i<offset; i++) {
+            rng.discard(1);
+        }
 
-        random_vector3.x = u01(rng);
-        random_vector3.y = u01(rng);
-        random_vector3.z = u01(rng);
-
-        return random_vector3;
+        return u01(rng);
     }
 };
 
@@ -53,7 +53,7 @@ int main(int argc, char* argv[]) {
     float total_time_gather = 0;
 
 
-    /* Generate N random position vectors, i.e. 3*N random floats in [0,1) */
+    /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
     unsigned int N;
     unsigned int Niter;
@@ -66,39 +66,50 @@ int main(int argc, char* argv[]) {
     else
         Niter = 10000;
     std::cout << "Will generate " << N << " random points for " << Niter
-              << " iteration" << ((Niter > 1) ? "s" : "") << "...\n" << std::endl;
-
-    thrust::host_vector<Vector3f> h_centres(N);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      h_centres.begin(),
-                      random_vector3_functor() );
-
-
-    /* Copy centres vector into separate x, y, z vectors. */
+              << " iteration" << ((Niter > 1) ? "s" : "") << "...\n"
+              << std::endl;
 
     thrust::host_vector<float> h_x_centres(N);
     thrust::host_vector<float> h_y_centres(N);
     thrust::host_vector<float> h_z_centres(N);
 
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      h_x_centres.begin(),
+                      random_pos_functor(0) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      h_y_centres.begin(),
+                      random_pos_functor(1) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      h_z_centres.begin(),
+                      random_pos_functor(2) );
+
+
+    /* Copy centres into a host vector of Vector3s. */
+
+    thrust::host_vector<Vector3f> h_centres(N);
     for (int i=0; i<N; i++) {
-        h_x_centres[i] = h_centres[i].x;
-        h_y_centres[i] = h_centres[i].y;
-        h_z_centres[i] = h_centres[i].z;
+        h_centres[i].x = h_x_centres[i];
+        h_centres[i].y = h_y_centres[i];
+        h_centres[i].z = h_z_centres[i];
     }
 
 
     /* Generate the Morton key of each position. */
 
-    thrust::host_vector<UInteger32> h_keys(N);
+    thrust::device_vector<float> d_x_centres = h_x_centres;
+    thrust::device_vector<float> d_y_centres = h_y_centres;
+    thrust::device_vector<float> d_z_centres = h_z_centres;
+    thrust::device_vector<UInteger32> d_keys(N);
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 
-    thrust::transform(h_centres.begin(),
-                      h_centres.end(),
-                      h_keys.begin(),
-                      grace::morton_key_functor<UInteger32, float>(bottom, top));
+    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
+                       d_keys, bottom, top);
+
+    thrust::host_vector<float> h_keys = d_keys;
 
 
     /* Sort the centres vector, and the separate x, y, z vectors using a zip
@@ -106,20 +117,12 @@ int main(int argc, char* argv[]) {
      * taken for each method.
      */
 
-    thrust::device_vector<Vector3f> d_centres;
-    thrust::device_vector<float> d_x_centres;
-    thrust::device_vector<float> d_y_centres;
-    thrust::device_vector<float> d_z_centres;
-    thrust::device_vector<float> d_keys;
-
 
     /* Measure time for sorting the Vector3. */
 
+    thrust::device_vector<Vector3f> d_centres = h_centres;
     std::cout << "Running Vector3 sort iterations..." << std::endl;
     for (int i=0; i<Niter; i++) {
-        d_centres = h_centres;
-        d_keys = h_keys;
-
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
         cudaEventRecord(start, 0);
@@ -134,6 +137,9 @@ int main(int argc, char* argv[]) {
 
         cudaEventDestroy(start);
         cudaEventDestroy(stop);
+
+        d_centres = h_centres;
+        d_keys = h_keys;
     }
 
 
@@ -141,11 +147,6 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Running zip iterator sort iterations..." << std::endl;
     for (int i=0; i<Niter; i++) {
-        d_x_centres = h_x_centres;
-        d_y_centres = h_y_centres;
-        d_z_centres = h_z_centres;
-        d_keys = h_keys;
-
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
         cudaEventRecord(start, 0);
@@ -166,6 +167,11 @@ int main(int argc, char* argv[]) {
 
         cudaEventDestroy(start);
         cudaEventDestroy(stop);
+
+        d_x_centres = h_x_centres;
+        d_y_centres = h_y_centres;
+        d_z_centres = h_z_centres;
+        d_keys = h_keys;
     }
 
 
@@ -175,11 +181,6 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<int> d_indices(N);
     thrust::device_vector<float> d_tmp(N);
     for (int i=0; i<Niter; i++) {
-        d_x_centres = h_x_centres;
-        d_y_centres = h_y_centres;
-        d_z_centres = h_z_centres;
-        d_keys = h_keys;
-
         thrust::sequence(d_indices.begin(), d_indices.end());
 
         cudaEventCreate(&start);
@@ -214,6 +215,11 @@ int main(int argc, char* argv[]) {
 
         cudaEventDestroy(start);
         cudaEventDestroy(stop);
+
+        d_x_centres = h_x_centres;
+        d_y_centres = h_y_centres;
+        d_z_centres = h_z_centres;
+        d_keys = h_keys;
     }
 
     std::cout << "Mean time taken for Vector3:            "
