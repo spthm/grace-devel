@@ -10,7 +10,8 @@
 
 #include "../types.h"
 #include "../nodes.h"
-#include "../kernels/bintree_build_kernels_vector3.cuh"
+#include "../kernels/morton.cuh"
+#include "../kernels/bintree_build_kernels.cuh"
 
 // See:
 // https://code.google.com/p/thrust/source/browse/examples/monte_carlo.cu
@@ -40,11 +41,15 @@ public:
 
     __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(3*n + offset);
+        unsigned int seed = hash(3*n);
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
-        return random_u01(rng);
+        for (int i=0; i<offset; i++) {
+            rng.discard(1);
+        }
+
+        return u01(rng);
     }
 };
 
@@ -66,16 +71,33 @@ int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
 
-    /* Generate N random position vectors, i.e. 3*N random floats in [0,1) */
+    /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
-    unsigned int N = (unsigned int) std::strtol(argv[1], NULL, 10);
+    unsigned int N;
+    if (argc > 1) {
+        N = (unsigned int) std::strtol(argv[1], NULL, 10);
+    }
+    else {
+        N = 10000;
+    }
     std::cout << "Will generate " << N << " random points." << std::endl;
-    thrust::device_vector<Vector3f> d_centres(N);
+
+    thrust::device_vector<float> d_x_centres(N);
+    thrust::device_vector<float> d_y_centres(N);
+    thrust::device_vector<float> d_z_centres(N);
 
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
-                      d_centres.begin(),
-                      random_vector3_functor() );
+                      d_x_centres.begin(),
+                      random_pos_functor(0) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      d_y_centres.begin(),
+                      random_pos_functor(1) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      d_z_centres.begin(),
+                      random_pos_functor(2) );
 
 
     /* Generate N random radii as floats in [0,1). */
@@ -91,34 +113,52 @@ int main(int argc, char* argv[]) {
     /* Generate the Morton key of each position. */
 
     thrust::device_vector<UInteger32> d_keys(N);
-    // Make a host copy of the pre-sorted keys, in case we want to sort
-    // anything else.
-    thrust::host_vector<UInteger32> h_keys(N);
+
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 
-    thrust::transform(d_centres.begin(),
-                      d_centres.end(),
-                      d_keys.begin(),
-                      grace::morton_key_functor<UInteger32, float>(bottom, top) );
+    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
+                      d_keys, bottom, top);
 
 
-    /* Sort the position vectors by their keys.
-     */
+    /* Sort the position vectors by their keys. */
 
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres.begin());
+    thrust::device_vector<int> d_indices(N);
+    thrust::device_vector<float> d_tmp(N);
+    thrust::sequence(d_indices.begin(), d_indices.end());
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
+
+    thrust::gather(d_indices.begin(),
+                   d_indices.end(),
+                   d_x_centres.begin(),
+                   d_tmp.begin());
+    d_x_centres = d_tmp;
+
+    thrust::gather(d_indices.begin(),
+                   d_indices.end(),
+                   d_y_centres.begin(),
+                   d_tmp.begin());
+    d_y_centres = d_tmp;
+
+    thrust::gather(d_indices.begin(),
+                   d_indices.end(),
+                   d_z_centres.begin(),
+                   d_tmp.begin());
+    d_z_centres = d_tmp;
 
 
-    // thrust::host_vector<grace::Vector3<float> > h_centres = d_centres;
+    // thrust::host_vector<float> h_x_centres = d_x_centres;
+    // thrust::host_vector<float> h_y_centres = d_y_centres;
+    // thrust::host_vector<float> h_z_centres = d_z_centres;
     // thrust::host_vector<float> h_radii = d_radii;
     // thrust::host_vector<UInteger32> h_keys = d_keys;
     // for (int i=0; i<N; i++) {
     //     std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].x << std::endl;
+    //                        << std::setfill('0') << h_x_centres[i] << std::endl;
     //     std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].y << std::endl;
+    //                        << std::setfill('0') << h_y_centres[i] << std::endl;
     //     std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].z << std::endl;
+    //                        << std::setfill('0') << h_z_centres[i] << std::endl;
     //     std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
     //                        << std::setfill('0') << h_radii[i] << std::endl;
     //     std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
@@ -131,7 +171,8 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<grace::Leaf> d_leaves(N);
 
     grace::build_nodes(d_nodes, d_leaves, d_keys);
-    grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
+    grace::find_AABBs(d_nodes, d_leaves,
+                      d_x_centres, d_y_centres, d_z_centres, d_radii);
 
     // thrust::host_vector<grace::Node> h_nodes = d_nodes;
     // thrust::host_vector<grace::Leaf> h_leaves = d_leaves;

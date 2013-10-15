@@ -5,7 +5,7 @@
 #include "../types.h"
 #include "../nodes.h"
 #include "bits.cuh"
-#include "morton_vector3.cuh"
+#include "morton.cuh"
 
 namespace grace {
 
