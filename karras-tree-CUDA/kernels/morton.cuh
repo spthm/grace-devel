@@ -33,9 +33,9 @@ __global__ void morton_keys_kernel(const Float* xs,
 {
     UInteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
     while (tid < n_keys) {
-        UInteger x = (UInteger) scale.x * xs[tid];
-        UInteger y = (UInteger) scale.y * ys[tid];
-        UInteger z = (UInteger) scale.z * zs[tid];
+        UInteger x = (UInteger) (scale.x * xs[tid]);
+        UInteger y = (UInteger) (scale.y * ys[tid]);
+        UInteger z = (UInteger) (scale.z * zs[tid]);
 
         keys[tid] = morton_key(x, y, z);
 
@@ -54,7 +54,6 @@ void morton_keys(const thrust::device_vector<Float>& d_xs,
                  const Vector3<Float>& AABB_bottom,
                  const Vector3<Float>& AABB_top)
 {
-    // Should be optimized away by the compiler.
     unsigned int span = CHAR_BIT * sizeof(UInteger) > 32 ?
                             ((1u << 21) - 1) : ((1u << 10) - 1);
     Vector3<Float> scale((Float)span / (AABB_top.x - AABB_bottom.x),
