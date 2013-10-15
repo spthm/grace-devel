@@ -31,28 +31,24 @@ __host__ __device__ unsigned int hash(unsigned int a)
     return a;
 }
 
-class random_vector3_functor
+class random_pos_functor
 {
-    // Constructed on the host.
-    grace::Vector3<float> random_vector3;
+    const int offset;
 
 public:
-    __host__ __device__ grace::Vector3<float> operator() (unsigned int n)
+    random_pos_functor(const int offset_) : offset(offset_) {}
+
+    __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(n);
+        unsigned int seed = hash(3*n + offset);
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
-
-        random_vector3.x = u01(rng);
-        random_vector3.y = u01(rng);
-        random_vector3.z = u01(rng);
-
-        return random_vector3;
+        return random_u01(rng);
     }
 };
 
-class random_float_functor
+class random_radius_functor
 {
 public:
     __host__ __device__ float operator() (unsigned int n)
