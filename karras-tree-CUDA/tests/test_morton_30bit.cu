@@ -3,7 +3,7 @@
 
 #include "../types.h"
 #include "../kernels/bits.cuh"
-#include "../kernels/morton_vector3.cuh"
+#include "../kernels/morton.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     /* 30-bit keys and binary representation. */
 
     UInteger32 my_key = my_spaced_x | my_spaced_y << 1 | my_spaced_z << 2;
-    UInteger32 my_key_2 = grace::morton_key_30bit(x, y, z);
+    UInteger32 my_key_2 = grace::morton_key(x, y, z);
 
     /* Print everything. */
 
@@ -59,6 +59,23 @@ int main(int argc, char* argv[]) {
     std::cout << "Key:                   " << (std::bitset<32>) key << std::endl;
     std::cout << "space_by_two_10bit:    " << (std::bitset<32>) my_key << std::endl;
     std::cout << "morton_key_30bit:      " << (std::bitset<32>) my_key_2 << "\n\n" << std::endl;
+
+    bool correct = true;
+    if (my_spaced_x != spaced_x) {
+        std::cout << "x failed!" << std::endl;
+        correct = false;
+    }
+    if (my_spaced_y != spaced_y) {
+        std::cout << "y failed!" << std::endl;
+        correct = false;
+    }
+    if (my_spaced_z != spaced_z) {
+        std::cout << "z failed!" << std::endl;
+        correct = false;
+    }
+    if (correct) {
+        std::cout << "\nAll correct!" << std::endl;
+    }
 
     return 0;
 }
