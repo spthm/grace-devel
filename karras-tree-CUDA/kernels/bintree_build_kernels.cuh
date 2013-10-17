@@ -117,7 +117,7 @@ __global__ void find_AABBs_kernel(Node* nodes,
                                   const UInteger32 n_leaves,
                                   const Float* xs,
                                   const Float* ys,
-                                  const Float* zs
+                                  const Float* zs,
                                   const Float* radii,
                                   unsigned int* AABB_flags)
 {
@@ -242,7 +242,7 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
 {
     UInteger32 n_keys = d_keys.size();
 
-    int blocks = min(MAX_BLOCKS, (n_leaves + THREADS_PER_BLOCK-1)
+    int blocks = min(MAX_BLOCKS, (n_keys + THREADS_PER_BLOCK-1)
                                   / THREADS_PER_BLOCK);
 
     gpu::build_nodes_kernel<<<blocks,THREADS_PER_BLOCK>>>(

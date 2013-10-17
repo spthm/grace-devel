@@ -95,9 +95,6 @@ int main(int argc, char* argv[]) {
     /* Generate the Morton key of each position. */
 
     thrust::device_vector<UInteger32> d_keys(N);
-    // Make a host copy of the pre-sorted keys, in case we want to sort
-    // anything else.
-    thrust::host_vector<UInteger32> h_keys(N);
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 
@@ -113,21 +110,21 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres.begin());
 
 
-    // thrust::host_vector<grace::Vector3<float> > h_centres = d_centres;
-    // thrust::host_vector<float> h_radii = d_radii;
-    // thrust::host_vector<UInteger32> h_keys = d_keys;
-    // for (int i=0; i<N; i++) {
-    //     std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].x << std::endl;
-    //     std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].y << std::endl;
-    //     std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_centres[i].z << std::endl;
-    //     std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_radii[i] << std::endl;
-    //     std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
-    //     std::cout << std::endl;
-    // }
+    thrust::host_vector<grace::Vector3<float> > h_centres = d_centres;
+    thrust::host_vector<float> h_radii = d_radii;
+    thrust::host_vector<UInteger32> h_keys = d_keys;
+    for (int i=0; i<N; i++) {
+        std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_centres[i].x << std::endl;
+        std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_centres[i].y << std::endl;
+        std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_centres[i].z << std::endl;
+        std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_radii[i] << std::endl;
+        std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
+        std::cout << std::endl;
+    }
 
     /* Build the tree from the keys. */
 
@@ -137,24 +134,26 @@ int main(int argc, char* argv[]) {
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_centres, d_radii);
 
-    // thrust::host_vector<grace::Node> h_nodes = d_nodes;
-    // thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
-    // std::cout << "Nodes:\n" << std::endl;
-    // for (int i=0; i<(N-1); i++) {
-    //     std::cout << "i:      " << i << std::endl;
-    //     std::cout << "left leaf flag: " << h_nodes[i].left_leaf_flag << std::endl;
-    //     std::cout << "left:   " << h_nodes[i].left << std::endl;
-    //     std::cout << "right leaf flag: " << h_nodes[i].right_leaf_flag << std::endl;
-    //     std::cout << "right:  " << h_nodes[i].right << std::endl;
-    //     std::cout << "parent: " << h_nodes[i].parent << std::endl;
-    //     std::cout << std::endl;
-    // }
-    // std::cout << "Leaves:\n" << std::endl;
-    // for (int i=0; i<N; i++) {
-    //     std::cout << "i:      " << i << std::endl;
-    //     std::cout << "parent: " << h_leaves[i].parent << std::endl;
-    //     std::cout << std::endl;
-    // }
+    thrust::host_vector<grace::Node> h_nodes = d_nodes;
+    thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
+    std::cout << "Nodes:\n" << std::endl;
+    for (int i=0; i<(N-1); i++) {
+        std::cout << "i:               " << i << std::endl;
+        std::cout << "left leaf flag:  "
+                  << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
+        std::cout << "left:   " << h_nodes[i].left << std::endl;
+        std::cout << "right leaf flag: "
+                  << (h_nodes[i].right_leaf_flag ? "True" : "False") << std::endl;
+        std::cout << "right:           " << h_nodes[i].right << std::endl;
+        std::cout << "parent:          " << h_nodes[i].parent << std::endl;
+        std::cout << std::endl;
+    }
+    std::cout << "Leaves:\n" << std::endl;
+    for (int i=0; i<N; i++) {
+        std::cout << "i:      " << i << std::endl;
+        std::cout << "parent: " << h_leaves[i].parent << std::endl;
+        std::cout << std::endl;
+    }
 
 
 }

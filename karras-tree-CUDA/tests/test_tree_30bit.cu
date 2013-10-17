@@ -32,38 +32,29 @@ __host__ __device__ unsigned int hash(unsigned int a)
     return a;
 }
 
-class random_pos_functor
+class random_float_functor
 {
-    const int offset;
+    const float scale;
+    const unsigned int offset;
 
 public:
-    random_pos_functor(const int offset_) : offset(offset_) {}
+    random_float_functor() : offset(0), scale(1.0) {}
+    explicit random_float_functor(const unsigned int offset_) :
+        offset(offset_), scale(1.0) {}
+    explicit random_float_functor(const float scale_) : scale(scale_), offset(0) {}
+    random_float_functor(const unsigned int offset_,
+                         const float scale_) :
+        offset(offset_), scale(scale_) {}
 
     __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(3*n);
+        unsigned int seed = hash(n);
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
-        for (int i=0; i<offset; i++) {
-            rng.discard(1);
-        }
+        rng.discard(offset);
 
-        return u01(rng);
-    }
-};
-
-class random_radius_functor
-{
-public:
-    __host__ __device__ float operator() (unsigned int n)
-    {
-
-        unsigned int seed = hash(n);
-        thrust::default_random_engine rng(seed);
-        thrust::uniform_real_distribution<float> u0p1(0,0.1);
-
-        return u0p1(rng);
+        return scale*u01(rng);
     }
 };
 
@@ -89,15 +80,15 @@ int main(int argc, char* argv[]) {
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_x_centres.begin(),
-                      random_pos_functor(0) );
+                      random_float_functor(0u) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_y_centres.begin(),
-                      random_pos_functor(1) );
+                      random_float_functor(1u) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_z_centres.begin(),
-                      random_pos_functor(2) );
+                      random_float_functor(2u) );
 
 
     /* Generate N random radii as floats in [0,1). */
@@ -107,7 +98,7 @@ int main(int argc, char* argv[]) {
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_radii.begin(),
-                      random_float_functor() );
+                      random_float_functor(0.1f) );
 
 
     /* Generate the Morton key of each position. */
@@ -147,23 +138,23 @@ int main(int argc, char* argv[]) {
     d_z_centres = d_tmp;
 
 
-    // thrust::host_vector<float> h_x_centres = d_x_centres;
-    // thrust::host_vector<float> h_y_centres = d_y_centres;
-    // thrust::host_vector<float> h_z_centres = d_z_centres;
-    // thrust::host_vector<float> h_radii = d_radii;
-    // thrust::host_vector<UInteger32> h_keys = d_keys;
-    // for (int i=0; i<N; i++) {
-    //     std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_x_centres[i] << std::endl;
-    //     std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_y_centres[i] << std::endl;
-    //     std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_z_centres[i] << std::endl;
-    //     std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
-    //                        << std::setfill('0') << h_radii[i] << std::endl;
-    //     std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
-    //     std::cout << std::endl;
-    // }
+    thrust::host_vector<float> h_x_centres = d_x_centres;
+    thrust::host_vector<float> h_y_centres = d_y_centres;
+    thrust::host_vector<float> h_z_centres = d_z_centres;
+    thrust::host_vector<float> h_radii = d_radii;
+    thrust::host_vector<UInteger32> h_keys = d_keys;
+    for (int i=0; i<N; i++) {
+        std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_x_centres[i] << std::endl;
+        std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_y_centres[i] << std::endl;
+        std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_z_centres[i] << std::endl;
+        std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
+                           << std::setfill('0') << h_radii[i] << std::endl;
+        std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
+        std::cout << std::endl;
+    }
 
     /* Build the tree from the keys. */
 
@@ -174,24 +165,26 @@ int main(int argc, char* argv[]) {
     grace::find_AABBs(d_nodes, d_leaves,
                       d_x_centres, d_y_centres, d_z_centres, d_radii);
 
-    // thrust::host_vector<grace::Node> h_nodes = d_nodes;
-    // thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
-    // std::cout << "Nodes:\n" << std::endl;
-    // for (int i=0; i<(N-1); i++) {
-    //     std::cout << "i:      " << i << std::endl;
-    //     std::cout << "left leaf flag: " << h_nodes[i].left_leaf_flag << std::endl;
-    //     std::cout << "left:   " << h_nodes[i].left << std::endl;
-    //     std::cout << "right leaf flag: " << h_nodes[i].right_leaf_flag << std::endl;
-    //     std::cout << "right:  " << h_nodes[i].right << std::endl;
-    //     std::cout << "parent: " << h_nodes[i].parent << std::endl;
-    //     std::cout << std::endl;
-    // }
-    // std::cout << "Leaves:\n" << std::endl;
-    // for (int i=0; i<N; i++) {
-    //     std::cout << "i:      " << i << std::endl;
-    //     std::cout << "parent: " << h_leaves[i].parent << std::endl;
-    //     std::cout << std::endl;
-    // }
+    thrust::host_vector<grace::Node> h_nodes = d_nodes;
+    thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
+    std::cout << "Nodes:\n" << std::endl;
+    for (int i=0; i<(N-1); i++) {
+        std::cout << "i:               " << i << std::endl;
+        std::cout << "left leaf flag:  "
+                  << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
+        std::cout << "left:            " << h_nodes[i].left << std::endl;
+        std::cout << "right leaf flag: "
+                  << (h_nodes[i].right_leaf_flag ? "True": "False") << std::endl;
+        std::cout << "right:           " << h_nodes[i].right << std::endl;
+        std::cout << "parent:          " << h_nodes[i].parent << std::endl;
+        std::cout << std::endl;
+    }
+    std::cout << "Leaves:\n" << std::endl;
+    for (int i=0; i<N; i++) {
+        std::cout << "i:      " << i << std::endl;
+        std::cout << "parent: " << h_leaves[i].parent << std::endl;
+        std::cout << std::endl;
+    }
 
 
 }

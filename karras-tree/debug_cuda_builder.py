@@ -56,7 +56,7 @@ for i in range(len(spheres)-1):
         parent = 0
     else:
         parent = parent.index
-    print "Parent:         ", parent
+    print "parent:         ", parent
     print
 
 print "Leaves:"
@@ -67,7 +67,7 @@ for i in range(len(spheres)):
         parent = 0
     else:
         parent = parent.index
-    print "Parent:", parent
+    print "parent:", parent
     print
 
 
