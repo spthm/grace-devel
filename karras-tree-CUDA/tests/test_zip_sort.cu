@@ -30,13 +30,11 @@ public:
 
     __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(3*n);
+        unsigned int seed = hash(n);
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
-        for (int i=0; i<offset; i++) {
-            rng.discard(1);
-        }
+        rng.discard(offset);
 
         return u01(rng);
     }
