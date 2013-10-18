@@ -2,6 +2,8 @@
 #include <iomanip>
 #include <bitset>
 #include <cstdlib>
+#include <cstring>
+#include <fstream>
 
 #include <thrust/random.h>
 #include <thrust/device_vector.h>
@@ -39,9 +41,12 @@ class random_float_functor
 
 public:
     random_float_functor() : offset(0), scale(1.0) {}
+
     explicit random_float_functor(const unsigned int offset_) :
         offset(offset_), scale(1.0) {}
+
     explicit random_float_functor(const float scale_) : scale(scale_), offset(0) {}
+
     random_float_functor(const unsigned int offset_,
                          const float scale_) :
         offset(offset_), scale(scale_) {}
@@ -61,10 +66,20 @@ public:
 int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
+    std::ofstream outfile;
+    thrust::host_vector<float> h_write_f;
+    thrust::host_vector<UInteger32> h_write_uint;
+
+    outfile.setf(std::ios::fixed, std::ios::floatfield);
+    outfile.precision(10);
+    outfile.width(11);
+    outfile.fill('0');
+
 
     /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
     unsigned int N;
+    bool save = false;
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
@@ -72,6 +87,13 @@ int main(int argc, char* argv[]) {
         N = 10000;
     }
     std::cout << "Will generate " << N << " random points." << std::endl;
+
+    if (argc > 2) {
+        if (strcmp("save", argv[2]) == 0) {
+            save = true;
+            std::cout << "Will save random floating point data." << std::endl;
+        }
+    }
 
     thrust::device_vector<float> d_x_centres(N);
     thrust::device_vector<float> d_y_centres(N);
@@ -101,7 +123,40 @@ int main(int argc, char* argv[]) {
                       random_float_functor(0.1f) );
 
 
-    /* Generate the Morton key of each position. */
+    /* Save randomly generated data if requested. */
+
+    if (save) {
+        h_write_f = d_x_centres;
+        outfile.open("indata/x_fdata.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_f[i] << std::endl;
+        }
+        outfile.close();
+
+        h_write_f = d_y_centres;
+        outfile.open("indata/y_fdata.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_f[i] << std::endl;
+        }
+        outfile.close();
+
+        h_write_f = d_z_centres;
+        outfile.open("indata/z_fdata.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_f[i] << std::endl;
+        }
+        outfile.close();
+
+        h_write_f = d_radii;
+        outfile.open("indata/r_fdata.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_f[i] << std::endl;
+        }
+        outfile.close();
+    }
+
+
+    /* Generate the Morton key of each position and save them, unsorted. */
 
     thrust::device_vector<UInteger32> d_keys(N);
 
@@ -111,8 +166,21 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
                       d_keys, bottom, top);
 
+    h_write_uint = d_keys;
+    outfile.open("outdata/unsorted_keys_base10.txt");
+    for (unsigned int i=0; i<N; i++) {
+        outfile << h_write_uint[i] << std::endl;
+    }
+    outfile.close();
 
-    /* Sort the position vectors by their keys. */
+    outfile.open("outdata/unsorted_keys_base2.txt");
+    for (unsigned int i=0; i<N; i++) {
+        outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+    }
+    outfile.close();
+
+
+    /* Sort the position vectors by their keys and save sorted keys. */
 
     thrust::device_vector<int> d_indices(N);
     thrust::device_vector<float> d_tmp(N);
@@ -137,24 +205,19 @@ int main(int argc, char* argv[]) {
                    d_tmp.begin());
     d_z_centres = d_tmp;
 
-
-    thrust::host_vector<float> h_x_centres = d_x_centres;
-    thrust::host_vector<float> h_y_centres = d_y_centres;
-    thrust::host_vector<float> h_z_centres = d_z_centres;
-    thrust::host_vector<float> h_radii = d_radii;
-    thrust::host_vector<UInteger32> h_keys = d_keys;
-    for (int i=0; i<N; i++) {
-        std::cout << "x: " << std::fixed << std::setw(15) << std::setprecision(15)
-                           << std::setfill('0') << h_x_centres[i] << std::endl;
-        std::cout << "y: " << std::fixed << std::setw(15) << std::setprecision(15)
-                           << std::setfill('0') << h_y_centres[i] << std::endl;
-        std::cout << "z: " << std::fixed << std::setw(15) << std::setprecision(15)
-                           << std::setfill('0') << h_z_centres[i] << std::endl;
-        std::cout << "r: " << std::fixed << std::setw(15) << std::setprecision(15)
-                           << std::setfill('0') << h_radii[i] << std::endl;
-        std::cout << "Key: " << (std::bitset<32>) h_keys[i] << std::endl;
-        std::cout << std::endl;
+    h_write_uint = d_keys;
+    outfile.open("outdata/sorted_keys_base10.txt");
+    for (unsigned int i=0; i<N; i++) {
+        outfile << h_write_uint[i] << std::endl;
     }
+    outfile.close();
+
+    outfile.open("outdata/sorted_keys_base2.txt");
+    for (unsigned int i=0; i<N; i++) {
+        outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+    }
+    outfile.close();
+
 
     /* Build the tree from the keys. */
 
@@ -165,26 +228,42 @@ int main(int argc, char* argv[]) {
     grace::find_AABBs(d_nodes, d_leaves,
                       d_x_centres, d_y_centres, d_z_centres, d_radii);
 
+
+    /* Save node and leaf data. */
+
     thrust::host_vector<grace::Node> h_nodes = d_nodes;
     thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
-    std::cout << "Nodes:\n" << std::endl;
-    for (int i=0; i<(N-1); i++) {
-        std::cout << "i:               " << i << std::endl;
-        std::cout << "left leaf flag:  "
+
+    outfile.open("outdata/nodes.txt");
+    for (unsigned int i=0; i<N-1; i++) {
+        outfile << "i:               " << i << std::endl;
+        outfile << "left leaf flag:  "
                   << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
-        std::cout << "left:            " << h_nodes[i].left << std::endl;
-        std::cout << "right leaf flag: "
+        outfile << "left:            " << h_nodes[i].left << std::endl;
+        outfile << "right leaf flag: "
                   << (h_nodes[i].right_leaf_flag ? "True": "False") << std::endl;
-        std::cout << "right:           " << h_nodes[i].right << std::endl;
-        std::cout << "parent:          " << h_nodes[i].parent << std::endl;
-        std::cout << std::endl;
+        outfile << "right:           " << h_nodes[i].right << std::endl;
+        outfile << "parent:          " << h_nodes[i].parent << std::endl;
+        outfile << "AABB_bottom:     " << h_nodes[i].bottom[0] << ", "
+                                       << h_nodes[i].bottom[1] << ", "
+                                       << h_nodes[i].bottom[2] << std::endl;
+        outfile << "AABB_top:        " << h_nodes[i].top[0] << ", "
+                                       << h_nodes[i].top[1] << ", "
+                                       << h_nodes[i].top[2] << std::endl;
+        outfile << std::endl;
     }
-    std::cout << "Leaves:\n" << std::endl;
-    for (int i=0; i<N; i++) {
-        std::cout << "i:      " << i << std::endl;
-        std::cout << "parent: " << h_leaves[i].parent << std::endl;
-        std::cout << std::endl;
+    outfile.close();
+
+    outfile.open("outdata/leaves.txt");
+    for (unsigned int i=0; i<N-1; i++) {
+        outfile << "i:           " << i << std::endl;
+        outfile << "parent:      " << h_leaves[i].parent << std::endl;
+        outfile << "AABB_bottom: " << h_leaves[i].bottom[0] << ", "
+                                   << h_leaves[i].bottom[1] << ", "
+                                   << h_leaves[i].bottom[2] << std::endl;
+        outfile << "AABB_top:    " << h_leaves[i].top[0] << ", "
+                                   << h_leaves[i].top[1] << ", "
+                                   << h_leaves[i].top[2] << std::endl;
+        outfile << std::endl;
     }
-
-
 }
