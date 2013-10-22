@@ -84,6 +84,7 @@ __global__ void build_nodes_kernel(Node* nodes,
         split_index = index + l*direction + min(direction, 0);
 
         /* Update this node with the locations of its children. */
+        nodes[index].level = node_prefix;
         nodes[index].left = split_index;
         nodes[index].right = split_index+1;
         if (split_index == min(index, end_index)) {
@@ -142,13 +143,13 @@ __global__ void find_AABBs_kernel(Node* nodes,
         y_max = y_min + 2*r;
         z_max = z_min + 2*r;
 
-        leaves[index].bottom[0] = x_min;
-        leaves[index].bottom[1] = y_min;
-        leaves[index].bottom[2] = z_min;
+        atomicExch(&(leaves[index].bottom[0]), x_min);
+        atomicExch(&(leaves[index].bottom[1]), y_min);
+        atomicExch(&(leaves[index].bottom[2]), z_min);
 
-        leaves[index].top[0] = x_max;
-        leaves[index].top[1] = y_max;
-        leaves[index].top[2] = z_max;
+        atomicExch(&(leaves[index].top[0]), x_max);
+        atomicExch(&(leaves[index].top[1]), y_max);
+        atomicExch(&(leaves[index].top[2]), z_max);
 
         // Travel up the tree.  The second thread to reach a node writes
         // its AABB based on those of its children.  The first exists the loop.
@@ -186,13 +187,13 @@ __global__ void find_AABBs_kernel(Node* nodes,
                 y_max = max(left_top[1], right_top[1]);
                 z_max = max(left_top[2], right_top[2]);
 
-                nodes[index].bottom[0] = x_min;
-                nodes[index].bottom[1] = y_min;
-                nodes[index].bottom[2] = z_min;
+                atomicExch(&(nodes[index].bottom[0]), x_min);
+                atomicExch(&(nodes[index].bottom[1]), y_min);
+                atomicExch(&(nodes[index].bottom[2]), z_min);
 
-                nodes[index].top[0] = x_max;
-                nodes[index].top[1] = y_max;
-                nodes[index].top[2] = z_max;
+                atomicExch(&(nodes[index].top[0]), x_max);
+                atomicExch(&(nodes[index].top[1]), y_max);
+                atomicExch(&(nodes[index].top[2]), z_max);
             }
             if (index == 0) {
                 // If we get to here then the root node has just been processed,

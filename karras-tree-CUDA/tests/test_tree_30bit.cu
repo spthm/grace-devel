@@ -205,6 +205,12 @@ int main(int argc, char* argv[]) {
                    d_tmp.begin());
     d_z_centres = d_tmp;
 
+    thrust::gather(d_indices.begin(),
+                   d_indices.end(),
+                   d_radii.begin(),
+                   d_tmp.begin());
+    d_radii = d_tmp;
+
     h_write_uint = d_keys;
     outfile.open("outdata/sorted_keys_base10.txt");
     for (unsigned int i=0; i<N; i++) {
@@ -237,11 +243,12 @@ int main(int argc, char* argv[]) {
     outfile.open("outdata/nodes.txt");
     for (unsigned int i=0; i<N-1; i++) {
         outfile << "i:               " << i << std::endl;
+        outfile << "level:           " << h_nodes[i].level << std::endl;
         outfile << "left leaf flag:  "
-                  << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
+                << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
         outfile << "left:            " << h_nodes[i].left << std::endl;
         outfile << "right leaf flag: "
-                  << (h_nodes[i].right_leaf_flag ? "True": "False") << std::endl;
+                << (h_nodes[i].right_leaf_flag ? "True": "False")<< std::endl;
         outfile << "right:           " << h_nodes[i].right << std::endl;
         outfile << "parent:          " << h_nodes[i].parent << std::endl;
         outfile << "AABB_bottom:     " << h_nodes[i].bottom[0] << ", "
