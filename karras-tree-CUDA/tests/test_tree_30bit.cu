@@ -255,7 +255,7 @@ int main(int argc, char* argv[]) {
     outfile.close();
 
     outfile.open("outdata/leaves.txt");
-    for (unsigned int i=0; i<N-1; i++) {
+    for (unsigned int i=0; i<N; i++) {
         outfile << "i:           " << i << std::endl;
         outfile << "parent:      " << h_leaves[i].parent << std::endl;
         outfile << "AABB_bottom: " << h_leaves[i].bottom[0] << ", "
