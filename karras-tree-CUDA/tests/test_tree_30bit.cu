@@ -71,8 +71,8 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<UInteger32> h_write_uint;
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(10);
-    outfile.width(11);
+    outfile.precision(6);
+    outfile.width(8);
     outfile.fill('0');
 
 

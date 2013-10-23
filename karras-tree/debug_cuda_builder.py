@@ -87,6 +87,10 @@ for (i, key) in enumerate(binary_tree.keys):
         print "Differ at bit %d." %(common_prefix(key, cuda_key),)
         print "(x, y, z): (%f, %f, %f)" \
             %(spheres[i][0], spheres[i][1], spheres[i][2])
+        print "(x, y, z): (%f, %f, %f)" \
+            %(binary_tree.primitives[i][0],
+              binary_tree.primitives[i][1],
+              binary_tree.primitives[i][2])
         print
 
 binary_tree.sort_primitives_by_keys()
