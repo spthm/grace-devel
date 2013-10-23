@@ -85,7 +85,8 @@ for (i, key) in enumerate(binary_tree.keys):
         print "Python unsorted key [%d] != CUDA unsorted key [%d]." %(i, i)
         print "{0:032b}".format(key) + " != {0:032b}".format(cuda_key)
         print "Differ at bit %d." %(common_prefix(key, cuda_key),)
-        print "(x, y, z): (%f, %f, %f)" %(spheres[0], spheres[1], spheres[2])
+        print "(x, y, z): (%f, %f, %f)" \
+            %(spheres[i][0], spheres[i][1], spheres[i][2])
         print
 
 binary_tree.sort_primitives_by_keys()
