@@ -13,7 +13,7 @@ with open("../karras-tree-CUDA/tests/indata/z_fdata.txt") as f:
 with open("../karras-tree-CUDA/tests/indata/r_fdata.txt") as f:
     rdata = [np.float32(line.strip()) for line in f]
 
-spheres = np.array(zip(xdata, ydata, zdata, rdata))
+spheres = np.array(zip(xdata, ydata, zdata, rdata), dtype=np.float32)
 
 with open("../karras-tree-CUDA/tests/outdata/unsorted_keys_base10.txt") as f:
     unsorted_keys = [int(line.strip()) for line in f]

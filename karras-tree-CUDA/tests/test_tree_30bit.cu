@@ -36,25 +36,42 @@ __host__ __device__ unsigned int hash(unsigned int a)
 
 class random_float_functor
 {
-    const float scale;
     const unsigned int offset;
+    const float scale;
+    const unsigned int seed_factor;
 
 public:
-    random_float_functor() : offset(0), scale(1.0) {}
+    random_float_functor() : offset(0u), seed_factor(1u), scale(1.0) {}
 
     explicit random_float_functor(const unsigned int offset_) :
-        offset(offset_), scale(1.0) {}
+        offset(offset_), scale(1.0), seed_factor(1u) {}
 
     explicit random_float_functor(const float scale_) :
-        scale(scale_), offset(0) {}
+        offset(0u), scale(scale_), seed_factor(1u) {}
 
-    random_float_functor(const unsigned int offset_,
-                         const float scale_) :
-        offset(offset_), scale(scale_) {}
+    explicit random_float_functor(const unsigned int offset_,
+                                  const float scale_) :
+        offset(offset_), scale(scale_), seed_factor(1u) {}
+
+    explicit random_float_functor(const unsigned int offset_,
+                                  const unsigned int seed_factor_) :
+        offset(offset_), scale(1.0), seed_factor(seed_factor_) {}
+
+    explicit random_float_functor(const float scale_,
+                                 const unsigned int seed_factor_) :
+        offset(0u), scale(scale_), seed_factor(seed_factor_) {}
+
+    explicit random_float_functor(const unsigned int offset_,
+                                  const float scale_,
+                                  const unsigned int seed_factor_) :
+        offset(offset_), scale(scale_), seed_factor(seed_factor_) {}
 
     __host__ __device__ float operator() (unsigned int n)
     {
-        unsigned int seed = hash(n);
+        unsigned int seed = n;
+        for (int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
         thrust::default_random_engine rng(seed);
         thrust::uniform_real_distribution<float> u01(0,1);
 
@@ -81,6 +98,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int N;
     bool save = false;
+    unsigned int seed_factor;
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
@@ -96,6 +114,10 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    if (argc > 3) {
+        seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
+
     thrust::device_vector<float> d_x_centres(N);
     thrust::device_vector<float> d_y_centres(N);
     thrust::device_vector<float> d_z_centres(N);
@@ -103,15 +125,15 @@ int main(int argc, char* argv[]) {
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_x_centres.begin(),
-                      random_float_functor(0u) );
+                      random_float_functor(0u, seed_factor) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_y_centres.begin(),
-                      random_float_functor(1u) );
+                      random_float_functor(1u, seed_factor) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_z_centres.begin(),
-                      random_float_functor(2u) );
+                      random_float_functor(2u, seed_factor) );
 
 
     /* Generate N random radii as floats in [0,1). */
@@ -121,7 +143,7 @@ int main(int argc, char* argv[]) {
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_radii.begin(),
-                      random_float_functor(0.1f) );
+                      random_float_functor(0.1f, seed_factor) );
 
 
     /* Save randomly generated data if requested. */
