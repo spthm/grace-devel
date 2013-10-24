@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
             save_out = true;
             std::cout << "Will save key, node and leaf data." << std::endl;
         }
-        else if (strcmp("inout", argv[2] == 0) {
+        else if (strcmp("inout", argv[2]) == 0) {
             save_in = true;
             save_out = true;
             std::cout << "Will save all data." << std::endl;
