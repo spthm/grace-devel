@@ -122,15 +122,17 @@ __global__ void find_AABBs_kernel(Node* nodes,
                                   const Float* radii,
                                   unsigned int* AABB_flags)
 {
-    Integer32 index, left_index, right_index;
+    Integer32 tid, index, left_index, right_index;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
     Float *left_bottom, *right_bottom, *left_top, *right_top;
+    bool first_arrival;
+
+    tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Leaf index.
-    index = threadIdx.x + blockIdx.x * blockDim.x;
-
+    index = tid;
     while (index < n_leaves)
     {
         // Find the AABB of each leaf (i.e. each primitive) and write it.
@@ -143,20 +145,23 @@ __global__ void find_AABBs_kernel(Node* nodes,
         y_max = y_min + 2*r;
         z_max = z_min + 2*r;
 
-        atomicExch(&(leaves[index].bottom[0]), x_min);
-        atomicExch(&(leaves[index].bottom[1]), y_min);
-        atomicExch(&(leaves[index].bottom[2]), z_min);
+        leaves[index].bottom[0] = x_min;
+        leaves[index].bottom[1] = y_min;
+        leaves[index].bottom[2] = z_min;
 
-        atomicExch(&(leaves[index].top[0]), x_max);
-        atomicExch(&(leaves[index].top[1]), y_max);
-        atomicExch(&(leaves[index].top[2]), z_max);
+        leaves[index].top[0] = x_max;
+        leaves[index].top[1] = y_max;
+        leaves[index].top[2] = z_max;
+
+        __threadfence();
 
         // Travel up the tree.  The second thread to reach a node writes
         // its AABB based on those of its children.  The first exists the loop.
         index = leaves[index].parent;
+        first_arrival = (atomicAdd(&AABB_flags[index], 1) == 0);
         while (true)
         {
-            if (atomicAdd(&AABB_flags[index], 1) == 0) {
+            if (first_arrival) {
                 break;
             }
             else {
@@ -187,22 +192,28 @@ __global__ void find_AABBs_kernel(Node* nodes,
                 y_max = max(left_top[1], right_top[1]);
                 z_max = max(left_top[2], right_top[2]);
 
-                atomicExch(&(nodes[index].bottom[0]), x_min);
-                atomicExch(&(nodes[index].bottom[1]), y_min);
-                atomicExch(&(nodes[index].bottom[2]), z_min);
+                nodes[index].bottom[0] = x_min;
+                nodes[index].bottom[1] = y_min;
+                nodes[index].bottom[2] = z_min;
 
-                atomicExch(&(nodes[index].top[0]), x_max);
-                atomicExch(&(nodes[index].top[1]), y_max);
-                atomicExch(&(nodes[index].top[2]), z_max);
+                nodes[index].top[0] = x_max;
+                nodes[index].top[1] = y_max;
+                nodes[index].top[2] = z_max;
+
+                __threadfence();
+
+                // If index == 0 then nodes[index].parent == 0.
+                index = nodes[index].parent;
+                first_arrival = (atomicAdd(&AABB_flags[index], 1) == 0);
             }
-            if (index == 0) {
+            if (index == 0 && AABB_flags[index] > 2) {
                 // If we get to here then the root node has just been processed,
                 // which means ALL other nodes have also been processed.
                 return;
             }
-            index = nodes[index].parent;
         }
-        index = index + blockDim.x * gridDim.x;
+        tid = tid + blockDim.x * gridDim.x;
+        index = tid;
     }
     return;
 }
