@@ -117,6 +117,9 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
+    else {
+        seed_factor = 1u;
+    }
 
     thrust::device_vector<float> d_x_centres(N);
     thrust::device_vector<float> d_y_centres(N);
