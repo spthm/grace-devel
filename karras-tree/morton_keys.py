@@ -6,7 +6,7 @@ def map_to_int(value, order):
     """Return a floating point value [0,1] mapped to an integer [0, 2^order).
     """
     span = 2**int(order) - 1
-    return int(value * span)
+    return int(value * np.float32(span))
 
 def morton_key_2D(x, y, order=10):
     """Return the Morton key of two integers x and y."""

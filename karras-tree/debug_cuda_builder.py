@@ -5,13 +5,13 @@ from builder import BinRadixTree, LeafNode
 from bits import common_prefix
 
 with open("../karras-tree-CUDA/tests/indata/x_fdata.txt") as f:
-    xdata = [float(line.strip()) for line in f]
+    xdata = [np.float32(line.strip()) for line in f]
 with open("../karras-tree-CUDA/tests/indata/y_fdata.txt") as f:
-    ydata = [float(line.strip()) for line in f]
+    ydata = [np.float32(line.strip()) for line in f]
 with open("../karras-tree-CUDA/tests/indata/z_fdata.txt") as f:
-    zdata = [float(line.strip()) for line in f]
+    zdata = [np.float32(line.strip()) for line in f]
 with open("../karras-tree-CUDA/tests/indata/r_fdata.txt") as f:
-    rdata = [float(line.strip()) for line in f]
+    rdata = [np.float32(line.strip()) for line in f]
 
 spheres = np.array(zip(xdata, ydata, zdata, rdata))
 
@@ -39,10 +39,10 @@ with open("../karras-tree-CUDA/tests/outdata/nodes.txt") as f:
         right_leaf_flags.append(f.readline().split()[3] == "True")
         right_indices.append(int(f.readline().split()[1]))
         node_parent_indices.append(int(f.readline().split()[1]))
-        node_AABBs_bottom.append([float(float_string.rstrip(','))
+        node_AABBs_bottom.append([np.float32(float_string.rstrip(','))
                                   for float_string
                                   in f.readline().split()[1:]])
-        node_AABBs_top.append([float(float_string.rstrip(','))
+        node_AABBs_top.append([np.float32(float_string.rstrip(','))
                                for float_string
                                in f.readline().split()[1:]])
         f.readline() # Blank
@@ -57,10 +57,10 @@ with open("../karras-tree-CUDA/tests/outdata/leaves.txt") as f:
     while line:
         leaf_indices.append(int(line.split()[1]))
         leaf_parent_indices.append(int(f.readline().split()[1]))
-        leaf_AABBs_bottom.append([float(float_string.rstrip(','))
+        leaf_AABBs_bottom.append([np.float32(float_string.rstrip(','))
                                   for float_string
                                   in f.readline().split()[1:]])
-        leaf_AABBs_top.append([float(float_string.rstrip(','))
+        leaf_AABBs_top.append([np.float32(float_string.rstrip(','))
                                for float_string
                                in f.readline().split()[1:]])
         f.readline()
@@ -85,12 +85,8 @@ for (i, key) in enumerate(binary_tree.keys):
         print "Python unsorted key [%d] != CUDA unsorted key [%d]." %(i, i)
         print "{0:032b}".format(key) + " != {0:032b}".format(cuda_key)
         print "Differ at bit %d." %(common_prefix(key, cuda_key),)
-        print "(x, y, z): (%f, %f, %f)" \
+        print "(x, y, z): (%.9f, %.9f, %.9f)" \
             %(spheres[i][0], spheres[i][1], spheres[i][2])
-        print "(x, y, z): (%f, %f, %f)" \
-            %(binary_tree.primitives[i][0],
-              binary_tree.primitives[i][1],
-              binary_tree.primitives[i][2])
         print
 
 binary_tree.sort_primitives_by_keys()
@@ -164,14 +160,14 @@ for (i, leaf) in enumerate(binary_tree.leaves):
 binary_tree.find_AABBs()
 for (i, node) in enumerate(binary_tree.nodes):
     AABB_diffs = np.array(node.AABB.bottom) - np.array(node_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-9:
+    if max(abs(AABB_diffs)) > 1E-6:
         print "Python node bottom AABB [%d] != CUDA node bottom AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(node.AABB.bottom), node_AABBs_bottom[i])
         print
 
     AABB_diffs = np.array(node.AABB.top) - np.array(node_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-9:
+    if max(abs(AABB_diffs)) > 1E-6:
         print "Python node top AABB [%d] != CUDA node top AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(node.AABB.top), node_AABBs_top[i])
@@ -179,14 +175,14 @@ for (i, node) in enumerate(binary_tree.nodes):
 
 for (i, leaf) in enumerate(binary_tree.leaves):
     AABB_diffs = np.array(leaf.AABB.bottom) - np.array(leaf_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-9:
+    if max(abs(AABB_diffs)) > 1E-6:
         print "Python leaf bottom AABB [%d] != CUDA leaf bottom AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(leaf.AABB.bottom), leaf_AABBs_bottom[i])
         print
 
     AABB_diffs = np.array(leaf.AABB.top) - np.array(leaf_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-9:
+    if max(abs(AABB_diffs)) > 1E-6:
         print "Python leaf top AABB [%d] != CUDA leaf top AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(leaf.AABB.top), leaf_AABBs_top[i])

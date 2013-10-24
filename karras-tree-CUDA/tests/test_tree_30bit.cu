@@ -45,7 +45,8 @@ public:
     explicit random_float_functor(const unsigned int offset_) :
         offset(offset_), scale(1.0) {}
 
-    explicit random_float_functor(const float scale_) : scale(scale_), offset(0) {}
+    explicit random_float_functor(const float scale_) :
+        scale(scale_), offset(0) {}
 
     random_float_functor(const unsigned int offset_,
                          const float scale_) :
@@ -71,8 +72,8 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<UInteger32> h_write_uint;
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(6);
-    outfile.width(8);
+    outfile.precision(9);
+    outfile.width(11);
     outfile.fill('0');
 
 
