@@ -97,8 +97,9 @@ int main(int argc, char* argv[]) {
     /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
     unsigned int N;
-    bool save = false;
-    unsigned int seed_factor;
+    bool save_in = false;
+    bool save_out = false;
+    unsigned int seed_factor = 1u;
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
@@ -108,17 +109,23 @@ int main(int argc, char* argv[]) {
     std::cout << "Will generate " << N << " random points." << std::endl;
 
     if (argc > 2) {
-        if (strcmp("save", argv[2]) == 0) {
-            save = true;
+        if (strcmp("in", argv[2]) == 0) {
+            save_in = true;
             std::cout << "Will save random floating point data." << std::endl;
+        }
+        else if (strcmp("out", argv[2]) == 0) {
+            save_out = true;
+            std::cout << "Will save key, node and leaf data." << std::endl;
+        }
+        else if (strcmp("inout", argv[2] == 0) {
+            save_in = true;
+            save_out = true;
+            std::cout << "Will save all data." << std::endl;
         }
     }
 
     if (argc > 3) {
         seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
-    }
-    else {
-        seed_factor = 1u;
     }
 
     thrust::device_vector<float> d_x_centres(N);
@@ -151,7 +158,7 @@ int main(int argc, char* argv[]) {
 
     /* Save randomly generated data if requested. */
 
-    if (save) {
+    if (save_in) {
         h_write_f = d_x_centres;
         outfile.open("indata/x_fdata.txt");
         for (unsigned int i=0; i<N; i++) {
@@ -192,18 +199,20 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
                       d_keys, bottom, top);
 
-    h_write_uint = d_keys;
-    outfile.open("outdata/unsorted_keys_base10.txt");
-    for (unsigned int i=0; i<N; i++) {
-        outfile << h_write_uint[i] << std::endl;
-    }
-    outfile.close();
+    if (save_out) {
+        h_write_uint = d_keys;
+        outfile.open("outdata/unsorted_keys_base10.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_uint[i] << std::endl;
+        }
+        outfile.close();
 
-    outfile.open("outdata/unsorted_keys_base2.txt");
-    for (unsigned int i=0; i<N; i++) {
-        outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+        outfile.open("outdata/unsorted_keys_base2.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+        }
+        outfile.close();
     }
-    outfile.close();
 
 
     /* Sort the position vectors by their keys and save sorted keys. */
@@ -237,18 +246,20 @@ int main(int argc, char* argv[]) {
                    d_tmp.begin());
     d_radii = d_tmp;
 
-    h_write_uint = d_keys;
-    outfile.open("outdata/sorted_keys_base10.txt");
-    for (unsigned int i=0; i<N; i++) {
-        outfile << h_write_uint[i] << std::endl;
-    }
-    outfile.close();
+    if (save_out) {
+        h_write_uint = d_keys;
+        outfile.open("outdata/sorted_keys_base10.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << h_write_uint[i] << std::endl;
+        }
+        outfile.close();
 
-    outfile.open("outdata/sorted_keys_base2.txt");
-    for (unsigned int i=0; i<N; i++) {
-        outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+        outfile.open("outdata/sorted_keys_base2.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << (std::bitset<32>) h_write_uint[i] << std::endl;
+        }
+        outfile.close();
     }
-    outfile.close();
 
 
     /* Build the tree from the keys. */
@@ -266,37 +277,39 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<grace::Node> h_nodes = d_nodes;
     thrust::host_vector<grace::Leaf> h_leaves = d_leaves;
 
-    outfile.open("outdata/nodes.txt");
-    for (unsigned int i=0; i<N-1; i++) {
-        outfile << "i:               " << i << std::endl;
-        outfile << "level:           " << h_nodes[i].level << std::endl;
-        outfile << "left leaf flag:  "
-                << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
-        outfile << "left:            " << h_nodes[i].left << std::endl;
-        outfile << "right leaf flag: "
-                << (h_nodes[i].right_leaf_flag ? "True": "False")<< std::endl;
-        outfile << "right:           " << h_nodes[i].right << std::endl;
-        outfile << "parent:          " << h_nodes[i].parent << std::endl;
-        outfile << "AABB_bottom:     " << h_nodes[i].bottom[0] << ", "
-                                       << h_nodes[i].bottom[1] << ", "
-                                       << h_nodes[i].bottom[2] << std::endl;
-        outfile << "AABB_top:        " << h_nodes[i].top[0] << ", "
-                                       << h_nodes[i].top[1] << ", "
-                                       << h_nodes[i].top[2] << std::endl;
-        outfile << std::endl;
-    }
-    outfile.close();
+    if (save_out) {
+        outfile.open("outdata/nodes.txt");
+        for (unsigned int i=0; i<N-1; i++) {
+            outfile << "i:               " << i << std::endl;
+            outfile << "level:           " << h_nodes[i].level << std::endl;
+            outfile << "left leaf flag:  "
+                    << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
+            outfile << "left:            " << h_nodes[i].left << std::endl;
+            outfile << "right leaf flag: "
+                    << (h_nodes[i].right_leaf_flag ? "True": "False")<< std::endl;
+            outfile << "right:           " << h_nodes[i].right << std::endl;
+            outfile << "parent:          " << h_nodes[i].parent << std::endl;
+            outfile << "AABB_bottom:     " << h_nodes[i].bottom[0] << ", "
+                                           << h_nodes[i].bottom[1] << ", "
+                                           << h_nodes[i].bottom[2] << std::endl;
+            outfile << "AABB_top:        " << h_nodes[i].top[0] << ", "
+                                           << h_nodes[i].top[1] << ", "
+                                           << h_nodes[i].top[2] << std::endl;
+            outfile << std::endl;
+        }
+        outfile.close();
 
-    outfile.open("outdata/leaves.txt");
-    for (unsigned int i=0; i<N; i++) {
-        outfile << "i:           " << i << std::endl;
-        outfile << "parent:      " << h_leaves[i].parent << std::endl;
-        outfile << "AABB_bottom: " << h_leaves[i].bottom[0] << ", "
-                                   << h_leaves[i].bottom[1] << ", "
-                                   << h_leaves[i].bottom[2] << std::endl;
-        outfile << "AABB_top:    " << h_leaves[i].top[0] << ", "
-                                   << h_leaves[i].top[1] << ", "
-                                   << h_leaves[i].top[2] << std::endl;
-        outfile << std::endl;
+        outfile.open("outdata/leaves.txt");
+        for (unsigned int i=0; i<N; i++) {
+            outfile << "i:           " << i << std::endl;
+            outfile << "parent:      " << h_leaves[i].parent << std::endl;
+            outfile << "AABB_bottom: " << h_leaves[i].bottom[0] << ", "
+                                       << h_leaves[i].bottom[1] << ", "
+                                       << h_leaves[i].bottom[2] << std::endl;
+            outfile << "AABB_top:    " << h_leaves[i].top[0] << ", "
+                                       << h_leaves[i].top[1] << ", "
+                                       << h_leaves[i].top[2] << std::endl;
+            outfile << std::endl;
+        }
     }
 }
