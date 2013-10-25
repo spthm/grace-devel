@@ -96,15 +96,12 @@ int main(int argc, char* argv[]) {
 
     /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
-    unsigned int N;
+    unsigned int N = 100000;
     bool save_in = false;
     bool save_out = false;
     unsigned int seed_factor = 1u;
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
-    }
-    else {
-        N = 10000;
     }
     std::cout << "Will generate " << N << " random points." << std::endl;
 

@@ -156,7 +156,7 @@ __global__ void find_AABBs_kernel(Node* nodes,
         __threadfence();
 
         // Travel up the tree.  The second thread to reach a node writes
-        // its AABB based on those of its children.  The first exists the loop.
+        // its AABB based on those of its children.  The first exits the loop.
         index = leaves[index].parent;
         first_arrival = (atomicAdd(&AABB_flags[index], 1) == 0);
         while (true)
