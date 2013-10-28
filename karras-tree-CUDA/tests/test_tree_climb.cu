@@ -16,34 +16,6 @@ struct Node
     float data;
 };
 
-
-//** Could improve performance by having 'data' its own array (i.e. the
-//** read/writes to the other variables within Node can be still optimized).
-
-//* Using atomics forces a global read(?), but would then require
-//* a second write.  E.g. atomicAdd(&node[i].data, 0.0f).
-//* Need to profile that on Fermi AND Kepler.
-
-// Alternatively, a hacky "keep polling until != 0.0f" could be done, which
-// most of the time will evaluate to false on the first attempt.
-
-//*** OR, read, and if == 0.0f, then atomicAdd as above.
-//*** if (data == 0.0f) should be quicker than always doing atomicAdd.
-
-//* Inline PTX on the data = node.data to specify skipping of L1?  Or do this
-//* in the case that node.data == 0.0f.  That may be the fastest solution!
-
-// Declaring the variable in the struct as volatile seems like a bad idea
-// for all use cases *except* construction (e.g. in tracing it may produce
-// a large performance hit).
-
-// See:
-// http://stackoverflow.com/questions/14484739/
-// http://stackoverflow.com/questions/5540217
-// https://devtalk.nvidia.com/default/topic/490973/ (second page)
-// https://devtalk.nvidia.com/default/topic/489987/
-// http://stackoverflow.com/questions/11275744
-
 __global__ void volatile_node(volatile Node *nodes,
                               const unsigned int n_nodes,
                               const unsigned int start,
@@ -92,7 +64,7 @@ __global__ void volatile_node(volatile Node *nodes,
     return;
 }
 
-__global__ void separate_volatile_data(Node *nodes,
+__global__ void separate_volatile_data(const Node *nodes,
                                        volatile float* node_data,
                                        const unsigned int n_nodes,
                                        const unsigned int start,
