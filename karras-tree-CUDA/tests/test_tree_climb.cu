@@ -7,324 +7,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-struct Node
-{
-    int left;
-    int right;
-    int parent;
-
-    float data;
-};
-
-__global__ void volatile_node(volatile Node *nodes,
-                              const unsigned int n_nodes,
-                              const unsigned int start,
-                              unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data = min(nodes[left].data, nodes[right].data);
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
-__global__ void separate_volatile_data(const Node *nodes,
-                                       volatile float* node_data,
-                                       const unsigned int n_nodes,
-                                       const unsigned int start,
-                                       unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data = min(node_data[left], node_data[right]);
-
-            node_data[index] = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
-__global__ void atomic_read(Node *nodes,
-                            const unsigned int n_nodes,
-                            const unsigned int start,
-                            unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data = min(atomicAdd(&nodes[left].data, 0.0f),
-                       atomicAdd(&nodes[right].data, 0.0f));
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
-__global__ void atomic_read_conditional(Node *nodes,
-                                        const unsigned int n_nodes,
-                                        const unsigned int start,
-                                        unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data, data_left, data_right;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data_left = nodes[left].data;
-            data_right = nodes[right].data;
-            // Check if the data is exactly 0.  Re-read from global/L2 if so.
-            // If it is still zero, then the actual data must be exactly 0.
-            if (data_left == 0.0f)
-                data_left = atomicAdd(&nodes[left].data, 0.0f);
-            if (data_right == 0.0f)
-                data_right = atomicAdd(&nodes[right].data, 0.0f);
-
-            data = min(data_left, data_right);
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
-__global__ void asm_read(Node *nodes,
-                         const unsigned int n_nodes,
-                         const unsigned int start,
-                         unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data, data_left, data_right;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "r"(&nodes[left].data));
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "r"(&nodes[right].data));
-
-            data = min(data_left, data_right);
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
-__global__ void asm_read_conditional(Node *nodes,
-                                     const unsigned int n_nodes,
-                                     const unsigned int start,
-                                     unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data, data_left, data_right;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data_left = nodes[left].data;
-            data_right = nodes[right].data;
-
-            if (data_left == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "r"(&nodes[left].data));
-            if (data_right == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "r"(&nodes[right].data));
-
-            data = min(data_left, data_right);
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
+#include "test_tree_climb_kernels.cuh"
 
 // Thomas Wang hash.
 __host__ __device__ unsigned int hash(unsigned int a)
@@ -353,12 +36,21 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-    std::ofstream outfile;
-    outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(9);
+    cudaEvent_t start, stop;
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    float volatile_node_t, separate_volatile_data_t;
+    float atomic_read_t, atomic_read_conditional_t;
+    float asm_read_t, asm_read_conditional_t;
+    float elapsed_time;
+
+    std::setprecision(5);
+
+    /* Initialize run parameters. */
 
     unsigned int levels = 17;
     unsigned int N = (1u << levels) - 1; // 2^17 - 1 = 131071.
+    unsigned int N_iter = 100;
     if (argc > 1) {
         // N needs to be expressable as SUM_{i=0}^{n}(2^i) for our tree
         // generating step, i.e. all bits up to some n set, all others unset.
@@ -373,10 +65,18 @@ int main(int argc, char* argv[]) {
             N = (1u << levels) - 1;
         }
     }
+    if (argc > 2) {
+        N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
+    }
     std::cout << "Will generate " << N << " nodes, " << levels << " levels."
               << std::endl;
+    std::cout << "Will complete " << N_iter << " iterations." << std::endl;
+
+
+    /* Build tree on host. */
 
     thrust::host_vector<Node> h_nodes(N);
+    thrust::host_vector<float> h_node_data(N);
     thrust::host_vector<float> h_data(1u << (levels-1));
 
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
@@ -398,58 +98,159 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    // Set up final level, including assigning data and setting flags.
+    // Set up final level, including assigning data.
     int final_start = (1u << (levels-1)) - 1;
     for (int i=final_start; i<N; i++) {
         h_nodes[i].left = h_nodes[i].right = -1;
-        h_nodes[i].data = h_data[i-final_start];
+        h_nodes[i].data = h_node_data[i] = h_data[i-final_start];
         h_nodes[i].level = levels - 1;
     }
 
     thrust::device_vector<Node> d_nodes = h_nodes;
+    thrust::device_vector<float> d_node_data = h_node_data;
     thrust::device_vector<unsigned int> d_flags(N);
-    propagate_data<<<112,512>>>(
-        thrust::raw_pointer_cast(d_nodes.data()),
-        N,
-        final_start,
-        thrust::raw_pointer_cast(d_flags.data()));
-    h_nodes = d_nodes;
 
-    outfile.open("threadfence.txt");
-    for (int i=0; i<N; i++) {
-        outfile << "i:      " << i << std::endl;
-        outfile << "level:  " << h_nodes[i].level << std::endl;
-        outfile << "left:   " << h_nodes[i].left << std::endl;
-        outfile << "right:  " << h_nodes[i].right << std::endl;
-        outfile << "parent: " << h_nodes[i].parent << std::endl;
-        outfile << "data:   " << h_nodes[i].data << std::endl;
+
+    /* Test the kernels. */
+
+    for (int i=0; i<N_iter; i++) {
+        cudaEventRecord(start);
+        volatile_node<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        volatile_node_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        separate_volatile_data<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_node_data = h_node_data;
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        separate_volatile_data_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        atomic_read<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        atomic_read_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        atomic_read_conditional<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        atomic_read_conditional_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        asm_read<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        asm_read_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        asm_read_conditional<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        asm_read_conditional_t += elapsed_time;
     }
-    outfile.close();
-
-    // Starting at final-level-but-one, add data to all nodes.  Ensure no 0s.
-    for (int level=levels-2; level>=0; level--) {
-        int level_start = (1u << level) - 1;
-        int level_end = (1u << (level+1)) - 1;
-
-        for (int i=level_start; i<level_end; i++) {
-            h_nodes[i].data = min(h_nodes[h_nodes[i].left].data,
-                                  h_nodes[h_nodes[i].right].data);
-            if (h_nodes[i].data == 0.0f) {
-                std::cout << "data at [" << i << "] = " << h_nodes[i].data
-                          << ".  Tree construction bug!" << std::endl;
-            }
-        }
-    }
 
 
-    unsigned int minimum = thrust::reduce(d_flags.begin(),
-                                          d_flags.end(),
-                                          10u,
-                                          thrust::minimum<unsigned int>());
-    unsigned int maximum = thrust::reduce(d_flags.begin(),
-                                          d_flags.end(),
-                                          0u,
-                                          thrust::maximum<unsigned int>());
-    std::cout << "Minimum flag: " << minimum << std::endl;
-    std::cout << "Maximum flag: " << maximum << std::endl;
+    volatile_node_t /= N_iter;
+    separate_volatile_data_t /= N_iter;
+    atomic_read_t /= N_iter;
+    atomic_read_conditional_t /= N_iter;
+    asm_read_t /= N_iter;
+    asm_read_conditional_t /= N_iter;
+
+    std::cout << "Time for volatile Node* nodes:      "
+        << volatile_node_t << "ms." << std::endl;
+    std::cout << "Time for volatile float* node_data: "
+        << separate_volatile_data_t << "ms." << std::endl;
+    std::cout << "Time for atomicAdd():               "
+        << atomic_read_t << "ms." << std::endl;
+    std::cout << "Time for conditional atomicAdd():   "
+        << atomic_read_conditional_t << "ms." << std::endl;
+    std::cout << "Time for inline PTX:                "
+        << asm_read_t << "ms." << std::endl;
+    std::cout << "Time for conditional inline PTX:    "
+        << asm_read_conditional_t << "ms." << std::endl;
+
+    // // Starting at final-level-but-one, add data to all nodes.  Ensure no 0s.
+    // for (int level=levels-2; level>=0; level--) {
+    //     int level_start = (1u << level) - 1;
+    //     int level_end = (1u << (level+1)) - 1;
+
+    //     for (int i=level_start; i<level_end; i++) {
+    //         h_nodes[i].data = min(h_nodes[h_nodes[i].left].data,
+    //                               h_nodes[h_nodes[i].right].data);
+    //         if (h_nodes[i].data == 0.0f) {
+    //             std::cout << "data at [" << i << "] = " << h_nodes[i].data
+    //                       << ".  Tree construction bug!" << std::endl;
+    //         }
+    //     }
+    // }
+
+
+    // unsigned int minimum = thrust::reduce(d_flags.begin(),
+    //                                       d_flags.end(),
+    //                                       10u,
+    //                                       thrust::minimum<unsigned int>());
+    // unsigned int maximum = thrust::reduce(d_flags.begin(),
+    //                                       d_flags.end(),
+    //                                       0u,
+    //                                       thrust::maximum<unsigned int>());
+    // std::cout << "Minimum flag: " << minimum << std::endl;
+    // std::cout << "Maximum flag: " << maximum << std::endl;
 }
