@@ -35,16 +35,64 @@ public:
     }
 };
 
-int main(int argc, char* argv[]) {
-    cudaEvent_t start, stop;
-    cudaEventCreate(&start);
-    cudaEventCreate(&stop);
-    float volatile_node_t, separate_volatile_data_t;
-    float atomic_read_t, atomic_read_conditional_t;
-    float asm_read_t, asm_read_conditional_t;
-    float separate_asm_read_t, separate_asm_read_conditional_t;
-    float elapsed_time;
+void check_flags(const thrust::device_vector<unsigned int>& d_flags,
+                 const char kernel_type[])
+{
+    unsigned int minimum = thrust::reduce(d_flags.begin(),
+                                          d_flags.end(),
+                                          10u,
+                                          thrust::minimum<unsigned int>());
+    unsigned int maximum = thrust::reduce(d_flags.begin(),
+                                          d_flags.end(),
+                                          0u,
+                                          thrust::maximum<unsigned int>());
+    if (minimum != 2) {
+        std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
+        std::cout << "Minimum flag: " << minimum << " != 2." << std::endl;
+    }
+    if (maximum != 2) {
+        std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
+        std::cout << "Maximum flag: " << maximum << " != 2." << std::endl;
+    }
+}
 
+void check_nodes(const thrust::device_vector<Node>& d_nodes,
+                 const thrust::host_vector<Node>& h_reference,
+                 const thrust::device_vector<unsigned int>& d_flags,
+                 const char kernel_type[])
+{
+    thrust::host_vector<Node> h_nodes = d_nodes;
+    for (int i=0; i<h_reference.size(); i++) {
+        if (h_nodes[i].data != h_reference[i].data) {
+            std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
+            std::cout << "Device node[" << i << "].data != reference."
+                      << std::endl;
+            std::cout << h_nodes[i].data << " != " << h_reference[i].data
+                      << std::endl;
+        }
+    }
+    check_flags(d_flags, kernel_type);
+}
+
+void check_data(const thrust::device_vector<float>& d_node_data,
+                const thrust::host_vector<Node>& h_reference,
+                const thrust::device_vector<unsigned int>& d_flags,
+                const char kernel_type[])
+{
+    thrust::host_vector<float> h_node_data = d_node_data;
+    for (int i=0; i<h_reference.size(); i++) {
+        if (h_node_data[i] != h_reference[i].data) {
+            std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
+            std::cout << "Device node[" << i << "].data != reference."
+                      << std::endl;
+            std::cout << h_node_data[i] << " != " << h_reference[i].data
+                      << std::endl;
+        }
+    }
+    check_flags(d_flags, kernel_type);
+}
+
+int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::setprecision(5);
     std::setfill('0');
@@ -52,17 +100,18 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int levels = 17;
-    unsigned int N_iter = 100;
-    if (argc > 1) {
+    unsigned int N_iter = 10;
+    if (argc > 2) {
+        levels = (unsigned int) std::strtol(argv[1], NULL, 10);
+        N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
+    }
+    else if (argc > 1) {
         // N needs to be expressable as SUM_{i=0}^{n}(2^i) for our tree
         // generating step, i.e. all bits up to some n set, all others unset.
         levels = (unsigned int) std::strtol(argv[1], NULL, 10);
         if (levels > 32) {
             levels = 32;
         }
-    }
-    if (argc > 2) {
-        N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     unsigned int N = (1u << levels) - 1; // 2^17 - 1 = 131071.
     std::cout << "Will generate " << N << " nodes in " << levels << " levels."
@@ -89,22 +138,49 @@ int main(int argc, char* argv[]) {
 
         for (int i=level_start; i<level_end; i++) {
             int child_index = level_end + 2 * (i - level_start);
-            h_nodes[i].left = h_nodes_nodata[i].left = child_index;
-            h_nodes[i].right = h_nodes_nodata[i].right = child_index + 1;
-            h_nodes[child_index].parent = h_nodes[child_index+1].parent = i;
+            h_nodes[i].left = child_index;
+            h_nodes[i].right = child_index + 1;
+            h_nodes[child_index].parent = i;
+            h_nodes[child_index+1].parent = i;
+            h_nodes[i].level = level;
+
+            h_nodes_nodata[i].left = child_index;
+            h_nodes_nodata[i].right = child_index + 1;
             h_nodes_nodata[child_index].parent = i;
             h_nodes_nodata[child_index+1].parent = i;
-            h_nodes[i].level = h_nodes_nodata[i].level = level;
+            h_nodes_nodata[i].level = level;
         }
     }
 
     // Set up final level, including assigning data.
     int final_start = (1u << (levels-1)) - 1;
     for (int i=final_start; i<N; i++) {
-        h_nodes[i].left = h_nodes[i].right = -1;
-        h_nodes_nodata[i].left = h_nodes_nodata[i].right = -1;
-        h_nodes[i].data = h_node_data[i] = h_data[i-final_start];
-        h_nodes[i].level = h_nodes_nodata[i].level = levels - 1;
+        h_nodes[i].left = -1;
+        h_nodes[i].right = -1;
+        h_nodes[i].data = h_data[i-final_start];
+        h_nodes[i].level = levels - 1;
+
+        h_nodes_nodata[i].left = -1;
+        h_nodes_nodata[i].right = -1;
+        h_node_data[i] = h_data[i-final_start];
+        h_nodes_nodata[i].level = levels - 1;
+    }
+
+    // Build a reference tree, with correct data, on the CPU.
+    // Start at final-but-one level.
+    thrust::host_vector<Node> h_nodes_ref = h_nodes;
+    for (int level=levels-2; level>=0; level--) {
+        int level_start = (1u << level) - 1;
+        int level_end = (1u << (level+1)) - 1;
+
+        for (int i=level_start; i<level_end; i++) {
+            h_nodes_ref[i].data = min(h_nodes_ref[h_nodes_ref[i].left].data,
+                                      h_nodes_ref[h_nodes_ref[i].right].data);
+            if (h_nodes_ref[i].data == 0.0f) {
+                std::cout << "data at [" << i << "] = " << h_nodes[i].data
+                          << ".  Tree construction bug!" << std::endl;
+            }
+        }
     }
 
     thrust::device_vector<Node> d_nodes = h_nodes;
@@ -114,190 +190,97 @@ int main(int argc, char* argv[]) {
 
 
     /* Test the kernels. */
+    int threads_per_block = 512;
+    int blocks = min(112, (N + threads_per_block-1)/threads_per_block);
 
     for (int i=0; i<N_iter; i++) {
-        cudaEventRecord(start);
-        volatile_node<<<112,512>>>(
+        volatile_node<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_nodes(d_nodes, h_nodes_ref, d_flags,
+                    "volatile node");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        volatile_node_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        separate_volatile_data<<<112,512>>>(
+        separate_volatile_data<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes_nodata.data()),
             thrust::raw_pointer_cast(d_node_data.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_data(d_node_data, h_nodes_ref, d_flags,
+                   "separate volatile data");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_node_data = h_node_data;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        separate_volatile_data_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        atomic_read<<<112,512>>>(
+        atomic_read<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_nodes(d_nodes, h_nodes_ref, d_flags,
+                    "atomicAdd()");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        atomic_read_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        atomic_read_conditional<<<112,512>>>(
+        atomic_read_conditional<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_nodes(d_nodes, h_nodes_ref, d_flags,
+                    "conditional atomicAdd()");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        atomic_read_conditional_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        asm_read<<<112,512>>>(
+        asm_read<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_nodes(d_nodes, h_nodes_ref, d_flags,
+                    "PTX load");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        asm_read_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        asm_read_conditional<<<112,512>>>(
+        asm_read_conditional<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_nodes(d_nodes, h_nodes_ref, d_flags,
+                    "conditional PTX load");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        asm_read_conditional_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        separate_asm_read<<<112,512>>>(
+        separate_asm_read<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes_nodata.data()),
             thrust::raw_pointer_cast(d_node_data.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_data(d_node_data, h_nodes_ref, d_flags,
+                   "separate PTX load");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_node_data = h_node_data;
 
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        separate_asm_read_t += elapsed_time;
 
-
-        cudaEventRecord(start);
-        separate_asm_read_conditional<<<112,512>>>(
+        separate_asm_read_conditional<<<blocks,threads_per_block>>>(
             thrust::raw_pointer_cast(d_nodes_nodata.data()),
             thrust::raw_pointer_cast(d_node_data.data()),
             N,
             final_start,
             thrust::raw_pointer_cast(d_flags.data()));
-        cudaEventRecord(stop);
-
+        check_data(d_node_data, h_nodes_ref, d_flags,
+                   "conditional separate PTX load");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        d_node_data = h_node_data;
-
-        cudaEventSynchronize(stop);
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        separate_asm_read_conditional_t += elapsed_time;
-    }
-
-
-    volatile_node_t /= N_iter;
-    separate_volatile_data_t /= N_iter;
-    atomic_read_t /= N_iter;
-    atomic_read_conditional_t /= N_iter;
-    asm_read_t /= N_iter;
-    asm_read_conditional_t /= N_iter;
-    separate_asm_read_t /= N_iter;
-    separate_asm_read_conditional_t /= N_iter;
-
-    std::cout << "Time for volatile Node:                        "
-        << volatile_node_t << "ms." << std::endl;
-    std::cout << "Time for separate volatile data:               "
-        << separate_volatile_data_t << "ms." << std::endl;
-    std::cout << "Time for atomicAdd():                          "
-        << atomic_read_t << "ms." << std::endl;
-    std::cout << "Time for conditional atomicAdd():              "
-        << atomic_read_conditional_t << "ms." << std::endl;
-    std::cout << "Time for inline PTX:                           "
-        << asm_read_t << "ms." << std::endl;
-    std::cout << "Time for conditional inline PTX:               "
-        << asm_read_conditional_t << "ms." << std::endl;
-    std::cout << "Time for separate data inline PTX:             "
-        << separate_asm_read_t << "ms." << std::endl;
-    std::cout << "Time for separate data conditional inline PTX: "
-        << separate_asm_read_conditional_t << "ms." << std::endl;
-
-    // // Starting at final-level-but-one, add data to all nodes.  Ensure no 0s.
-    // for (int level=levels-2; level>=0; level--) {
-    //     int level_start = (1u << level) - 1;
-    //     int level_end = (1u << (level+1)) - 1;
-
-    //     for (int i=level_start; i<level_end; i++) {
-    //         h_nodes[i].data = min(h_nodes[h_nodes[i].left].data,
-    //                               h_nodes[h_nodes[i].right].data);
-    //         if (h_nodes[i].data == 0.0f) {
-    //             std::cout << "data at [" << i << "] = " << h_nodes[i].data
-    //                       << ".  Tree construction bug!" << std::endl;
-    //         }
-    //     }
-    // }
-
-
-    // unsigned int minimum = thrust::reduce(d_flags.begin(),
-    //                                       d_flags.end(),
-    //                                       10u,
-    //                                       thrust::minimum<unsigned int>());
-    // unsigned int maximum = thrust::reduce(d_flags.begin(),
-    //                                       d_flags.end(),
-    //                                       0u,
-    //                                       thrust::maximum<unsigned int>());
-    // std::cout << "Minimum flag: " << minimum << std::endl;
-    // std::cout << "Maximum flag: " << maximum << std::endl;
+        d_node_data = h_node_data;    }
 }

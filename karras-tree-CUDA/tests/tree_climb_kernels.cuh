@@ -33,7 +33,7 @@ __global__ void volatile_node(volatile Node *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -66,7 +66,7 @@ __global__ void volatile_node(volatile Node *nodes,
     return;
 }
 
-__global__ void separate_volatile_data(const NodeNoData *nodes,
+__global__ void separate_volatile_data(const NodeNoData* nodes,
                                        volatile float* node_data,
                                        const unsigned int n_nodes,
                                        const unsigned int start,
@@ -82,7 +82,7 @@ __global__ void separate_volatile_data(const NodeNoData *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -115,7 +115,7 @@ __global__ void separate_volatile_data(const NodeNoData *nodes,
     return;
 }
 
-__global__ void atomic_read(Node *nodes,
+__global__ void atomic_read(Node* nodes,
                             const unsigned int n_nodes,
                             const unsigned int start,
                             unsigned int* flags)
@@ -130,7 +130,7 @@ __global__ void atomic_read(Node *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -164,7 +164,7 @@ __global__ void atomic_read(Node *nodes,
     return;
 }
 
-__global__ void atomic_read_conditional(Node *nodes,
+__global__ void atomic_read_conditional(Node* nodes,
                                         const unsigned int n_nodes,
                                         const unsigned int start,
                                         unsigned int* flags)
@@ -179,7 +179,7 @@ __global__ void atomic_read_conditional(Node *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -221,7 +221,7 @@ __global__ void atomic_read_conditional(Node *nodes,
     return;
 }
 
-__global__ void asm_read(Node *nodes,
+__global__ void asm_read(Node* nodes,
                          const unsigned int n_nodes,
                          const unsigned int start,
                          unsigned int* flags)
@@ -236,7 +236,7 @@ __global__ void asm_read(Node *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -272,7 +272,7 @@ __global__ void asm_read(Node *nodes,
     return;
 }
 
-__global__ void asm_read_conditional(Node *nodes,
+__global__ void asm_read_conditional(Node* nodes,
                                      const unsigned int n_nodes,
                                      const unsigned int start,
                                      unsigned int* flags)
@@ -287,7 +287,7 @@ __global__ void asm_read_conditional(Node *nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -328,7 +328,7 @@ __global__ void asm_read_conditional(Node *nodes,
     return;
 }
 
-__global__ void separate_asm_read(NodeNoData* nodes,
+__global__ void separate_asm_read(const NodeNoData* nodes,
                                   float* node_data,
                                   const unsigned int n_nodes,
                                   const unsigned int start,
@@ -344,7 +344,7 @@ __global__ void separate_asm_read(NodeNoData* nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;
@@ -396,7 +396,7 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
     {
         // We start at a node with a full data section; modify its flag
         // accordingly.
-        //flags[tid] = 2;
+        flags[tid] = 2;
 
         // Immediately move up the tree.
         index = nodes[tid].parent;

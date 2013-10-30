@@ -152,10 +152,12 @@ int main(int argc, char* argv[]) {
 
 
         /* Test the kernels. */
+        int threads_per_block = 512;
+        int blocks = min(112, (N + threads_per_block-1)/threads_per_block);
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(start);
-            volatile_node<<<112,512>>>(
+            volatile_node<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -171,7 +173,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_volatile_data<<<112,512>>>(
+            separate_volatile_data<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
@@ -188,7 +190,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            atomic_read<<<112,512>>>(
+            atomic_read<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -204,7 +206,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            atomic_read_conditional<<<112,512>>>(
+            atomic_read_conditional<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -220,7 +222,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            asm_read<<<112,512>>>(
+            asm_read<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -236,7 +238,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            asm_read_conditional<<<112,512>>>(
+            asm_read_conditional<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -252,7 +254,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_asm_read<<<112,512>>>(
+            separate_asm_read<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
@@ -269,7 +271,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_asm_read_conditional<<<112,512>>>(
+            separate_asm_read_conditional<<<blocks,threads_per_block>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
