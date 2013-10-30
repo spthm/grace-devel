@@ -9,6 +9,15 @@ struct Node
     float data;
 };
 
+struct NodeNoData
+{
+    int left;
+    int right;
+    int parent;
+
+    unsigned int level;
+};
+
 __global__ void volatile_node(volatile Node *nodes,
                               const unsigned int n_nodes,
                               const unsigned int start,
@@ -57,7 +66,7 @@ __global__ void volatile_node(volatile Node *nodes,
     return;
 }
 
-__global__ void separate_volatile_data(const Node *nodes,
+__global__ void separate_volatile_data(const NodeNoData *nodes,
                                        volatile float* node_data,
                                        const unsigned int n_nodes,
                                        const unsigned int start,
@@ -301,6 +310,115 @@ __global__ void asm_read_conditional(Node *nodes,
             data = min(data_left, data_right);
 
             nodes[index].data = data;
+
+            if (index == 0) {
+                // Root node processed, so all nodes processed.
+                return;
+            }
+
+            // Ensure above global write is visible to all device threads
+            // before setting flag for the parent.
+            __threadfence();
+
+            index = nodes[index].parent;
+            first_arrival = (atomicAdd(&flags[index], 1) == 0);
+        }
+        tid += blockDim.x*gridDim.x;
+    }
+    return;
+}
+
+__global__ void separate_asm_read(NodeNoData* nodes,
+                                  float* node_data,
+                                  const unsigned int n_nodes,
+                                  const unsigned int start,
+                                  unsigned int* flags)
+{
+    int tid, index, left, right;
+    float data, data_left, data_right;
+    bool first_arrival;
+
+    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+
+    while (tid < n_nodes)
+    {
+        // We start at a node with a full data section; modify its flag
+        // accordingly.
+        //flags[tid] = 2;
+
+        // Immediately move up the tree.
+        index = nodes[tid].parent;
+        first_arrival = (atomicAdd(&flags[index], 1) == 0);
+
+        // If we are the second thread to reach this node then process it.
+        while (!first_arrival)
+        {
+            left = nodes[index].left;
+            right = nodes[index].right;
+
+            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
+            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+
+            data = min(data_left, data_right);
+
+            node_data[index] = data;
+
+            if (index == 0) {
+                // Root node processed, so all nodes processed.
+                return;
+            }
+
+            // Ensure above global write is visible to all device threads
+            // before setting flag for the parent.
+            __threadfence();
+
+            index = nodes[index].parent;
+            first_arrival = (atomicAdd(&flags[index], 1) == 0);
+        }
+        tid += blockDim.x*gridDim.x;
+    }
+    return;
+}
+
+__global__ void separate_asm_read_conditional(const NodeNoData* nodes,
+                                              float* node_data,
+                                              const unsigned int n_nodes,
+                                              const unsigned int start,
+                                              unsigned int* flags)
+{
+    int tid, index, left, right;
+    float data, data_left, data_right;
+    bool first_arrival;
+
+    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+
+    while (tid < n_nodes)
+    {
+        // We start at a node with a full data section; modify its flag
+        // accordingly.
+        //flags[tid] = 2;
+
+        // Immediately move up the tree.
+        index = nodes[tid].parent;
+        first_arrival = (atomicAdd(&flags[index], 1) == 0);
+
+        // If we are the second thread to reach this node then process it.
+        while (!first_arrival)
+        {
+            left = nodes[index].left;
+            right = nodes[index].right;
+
+            data_left = node_data[left];
+            data_right = node_data[right];
+
+            if (data_left == 0.0f)
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
+            if (data_right == 0.0f)
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+
+            data = min(data_left, data_right);
+
+            node_data[index] = data;
 
             if (index == 0) {
                 // Root node processed, so all nodes processed.

@@ -42,9 +42,12 @@ int main(int argc, char* argv[]) {
     float volatile_node_t, separate_volatile_data_t;
     float atomic_read_t, atomic_read_conditional_t;
     float asm_read_t, asm_read_conditional_t;
+    float separate_asm_read_t, separate_asm_read_conditional_t;
     float elapsed_time;
 
     std::setprecision(5);
+    std::setw(5);
+    std::setfill('0');
 
     /* Initialize run parameters. */
 
@@ -76,6 +79,7 @@ int main(int argc, char* argv[]) {
     /* Build tree on host. */
 
     thrust::host_vector<Node> h_nodes(N);
+    thrust::host_vector<NodeNoData> h_nodes_nodata(N);
     thrust::host_vector<float> h_node_data(N);
     thrust::host_vector<float> h_data(1u << (levels-1));
 
@@ -91,10 +95,12 @@ int main(int argc, char* argv[]) {
 
         for (int i=level_start; i<level_end; i++) {
             int child_index = level_end + 2 * (i - level_start);
-            h_nodes[i].left = child_index;
-            h_nodes[i].right = child_index + 1;
+            h_nodes[i].left = h_nodes_nodata[i].left = child_index;
+            h_nodes[i].right = h_nodes_nodata[i].right = child_index + 1;
             h_nodes[child_index].parent = h_nodes[child_index+1].parent = i;
-            h_nodes[i].level = level;
+            h_nodes_nodata[child_index].parent = i;
+            h_nodes_nodata[child_index+1].parent = i;
+            h_nodes[i].level = h_nodes_nodata[i].level = level;
         }
     }
 
@@ -102,11 +108,13 @@ int main(int argc, char* argv[]) {
     int final_start = (1u << (levels-1)) - 1;
     for (int i=final_start; i<N; i++) {
         h_nodes[i].left = h_nodes[i].right = -1;
+        h_nodes_nodata[i].left = h_nodes_nodata[i].right = -1;
         h_nodes[i].data = h_node_data[i] = h_data[i-final_start];
-        h_nodes[i].level = levels - 1;
+        h_nodes[i].level = h_nodes_nodata[i].level = levels - 1;
     }
 
     thrust::device_vector<Node> d_nodes = h_nodes;
+    thrust::device_vector<NodeNoData> d_nodes_nodata = h_nodes_nodata;
     thrust::device_vector<float> d_node_data = h_node_data;
     thrust::device_vector<unsigned int> d_flags(N);
 
@@ -123,6 +131,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(stop);
 
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
 
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -131,7 +140,7 @@ int main(int argc, char* argv[]) {
 
         cudaEventRecord(start);
         separate_volatile_data<<<112,512>>>(
-            thrust::raw_pointer_cast(d_nodes.data()),
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
             thrust::raw_pointer_cast(d_node_data.data()),
             N,
             final_start,
@@ -155,6 +164,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(stop);
 
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
 
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -170,6 +180,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(stop);
 
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
 
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -185,6 +196,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(stop);
 
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
 
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -200,10 +212,45 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(stop);
 
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
 
         cudaEventSynchronize(stop);
         cudaEventElapsedTime(&elapsed_time, start, stop);
         asm_read_conditional_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        separate_asm_read<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_node_data = h_node_data;
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        separate_asm_read_t += elapsed_time;
+
+
+        cudaEventRecord(start);
+        separate_asm_read_conditional<<<112,512>>>(
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            N,
+            final_start,
+            thrust::raw_pointer_cast(d_flags.data()));
+        cudaEventRecord(stop);
+
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_node_data = h_node_data;
+
+        cudaEventSynchronize(stop);
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        separate_asm_read_conditional_t += elapsed_time;
     }
 
 
@@ -213,19 +260,25 @@ int main(int argc, char* argv[]) {
     atomic_read_conditional_t /= N_iter;
     asm_read_t /= N_iter;
     asm_read_conditional_t /= N_iter;
+    separate_asm_read_t /= N_iter;
+    separate_asm_read_conditional_t /= N_iter;
 
-    std::cout << "Time for volatile Node* nodes:      "
+    std::cout << "Time for volatile Node:                        "
         << volatile_node_t << "ms." << std::endl;
-    std::cout << "Time for volatile float* node_data: "
+    std::cout << "Time for separate volatile data:               "
         << separate_volatile_data_t << "ms." << std::endl;
-    std::cout << "Time for atomicAdd():               "
+    std::cout << "Time for atomicAdd():                          "
         << atomic_read_t << "ms." << std::endl;
-    std::cout << "Time for conditional atomicAdd():   "
+    std::cout << "Time for conditional atomicAdd():              "
         << atomic_read_conditional_t << "ms." << std::endl;
-    std::cout << "Time for inline PTX:                "
+    std::cout << "Time for inline PTX:                           "
         << asm_read_t << "ms." << std::endl;
-    std::cout << "Time for conditional inline PTX:    "
+    std::cout << "Time for conditional inline PTX:               "
         << asm_read_conditional_t << "ms." << std::endl;
+    std::cout << "Time for separate data inline PTX:             "
+        << separate_asm_read_t << "ms." << std::endl;
+    std::cout << "Time for separate data conditional inline PTX: "
+        << separate_asm_read_conditional_t << "ms." << std::endl;
 
     // // Starting at final-level-but-one, add data to all nodes.  Ensure no 0s.
     // for (int level=levels-2; level>=0; level--) {
