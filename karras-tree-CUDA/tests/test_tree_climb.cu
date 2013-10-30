@@ -52,26 +52,20 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int levels = 17;
-    unsigned int N = (1u << levels) - 1; // 2^17 - 1 = 131071.
     unsigned int N_iter = 100;
     if (argc > 1) {
         // N needs to be expressable as SUM_{i=0}^{n}(2^i) for our tree
         // generating step, i.e. all bits up to some n set, all others unset.
-        N = (unsigned int) std::strtol(argv[1], NULL, 10);
-        if (__builtin_clz(N) == 0) {
+        levels = (unsigned int) std::strtol(argv[1], NULL, 10);
+        if (levels > 32) {
             levels = 32;
-            N = ~0u;
-        }
-        else {
-            // Round up.
-            levels = sizeof(N) * CHAR_BIT - __builtin_clz(N);
-            N = (1u << levels) - 1;
         }
     }
     if (argc > 2) {
         N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
-    std::cout << "Will generate " << N << " nodes, " << levels << " levels."
+    unsigned int N = (1u << levels) - 1; // 2^17 - 1 = 131071.
+    std::cout << "Will generate " << N << " nodes in " << levels << " levels."
               << std::endl;
     std::cout << "Will complete " << N_iter << " iterations." << std::endl;
 

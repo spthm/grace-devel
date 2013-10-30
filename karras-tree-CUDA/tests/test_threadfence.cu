@@ -14,7 +14,7 @@ struct Node
     int parent;
     int level;
 
-    volatile float data;
+    float data;
 };
 
 // Need Node(.data) to be marked as volatile for this to work correctly.
@@ -53,7 +53,7 @@ struct Node
 // https://devtalk.nvidia.com/default/topic/489987/
 // http://stackoverflow.com/questions/11275744
 
-__global__ void propagate_data(Node *nodes,
+__global__ void propagate_data(volatile Node *nodes,
                                const unsigned int n_nodes,
                                const unsigned int start,
                                unsigned int* flags)
