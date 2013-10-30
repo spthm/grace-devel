@@ -7,7 +7,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "test_tree_climb_kernels.cuh"
+#include "tree_climb_kernels.cuh"
 
 // Thomas Wang hash.
 __host__ __device__ unsigned int hash(unsigned int a)
