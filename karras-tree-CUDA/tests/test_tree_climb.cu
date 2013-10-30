@@ -45,8 +45,8 @@ int main(int argc, char* argv[]) {
     float separate_asm_read_t, separate_asm_read_conditional_t;
     float elapsed_time;
 
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::setprecision(5);
-    std::setw(5);
     std::setfill('0');
 
     /* Initialize run parameters. */
