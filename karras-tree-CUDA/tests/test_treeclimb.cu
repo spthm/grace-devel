@@ -57,34 +57,32 @@ void check_flags(const thrust::device_vector<unsigned int>& d_flags,
 }
 
 void check_nodes(const thrust::device_vector<Node>& d_nodes,
-                 const thrust::host_vector<Node>& h_reference,
-                 const thrust::device_vector<unsigned int>& d_flags,
+                 const thrust::host_vector<Node>& h_nodes_ref,
                  const char kernel_type[])
 {
     thrust::host_vector<Node> h_nodes = d_nodes;
-    for (int i=0; i<h_reference.size(); i++) {
-        if (h_nodes[i].data != h_reference[i].data) {
+    for (unsigned int i=0; i<h_nodes_ref.size(); i++) {
+        if (h_nodes[i].data != h_nodes_ref[i].data) {
             std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
             std::cout << "Device node[" << i << "].data != reference."
                       << std::endl;
-            std::cout << h_nodes[i].data << " != " << h_reference[i].data
+            std::cout << h_nodes[i].data << " != " << h_nodes_ref[i].data
                       << std::endl;
         }
     }
 }
 
 void check_data(const thrust::device_vector<float>& d_node_data,
-                const thrust::host_vector<Node>& h_reference,
-                const thrust::device_vector<unsigned int>& d_flags,
+                const thrust::host_vector<Node>& h_nodes_ref,
                 const char kernel_type[])
 {
     thrust::host_vector<float> h_node_data = d_node_data;
-    for (int i=0; i<h_reference.size(); i++) {
-        if (h_node_data[i] != h_reference[i].data) {
+    for (unsigned int i=0; i<h_nodes_ref.size(); i++) {
+        if (h_node_data[i] != h_nodes_ref[i].data) {
             std::cout << "Error in " << kernel_type << " kernel:" << std::endl;
             std::cout << "Device node[" << i << "].data != reference."
                       << std::endl;
-            std::cout << h_node_data[i] << " != " << h_reference[i].data
+            std::cout << h_node_data[i] << " != " << h_nodes_ref[i].data
                       << std::endl;
         }
     }
@@ -97,200 +95,268 @@ int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
-    unsigned int levels = 17;
+    unsigned int depth = 16;
     unsigned int N_iter = 50;
     if (argc > 2) {
-        levels = (unsigned int) std::strtol(argv[1], NULL, 10);
+        depth = (unsigned int) std::strtol(argv[1], NULL, 10);
         N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     else if (argc > 1) {
         // N needs to be expressable as SUM_{i=0}^{n}(2^i) for our tree
         // generating step, i.e. all bits up to some n set, all others unset.
-        levels = (unsigned int) std::strtol(argv[1], NULL, 10);
-        if (levels > 32) {
-            levels = 32;
+        depth = (unsigned int) std::strtol(argv[1], NULL, 10);
+        if (depth > 31) {
+            depth = 31;
         }
     }
-    unsigned int N = (1u << levels) - 1; // 2^17 - 1 = 131071.
-    std::cout << "Will generate " << N << " nodes in " << levels << " levels."
+    unsigned int N_leaves = (1u << depth);
+    std::cout << "Will generate a tree with 2^" << depth << " = " << N_leaves
+              << " leaves and 2^" << depth << " -1 nodes." << std::endl;
+    std::cout << "Total number of nodes + leaves = " << 2*N_leaves - 1
               << std::endl;
     std::cout << "Will complete " << N_iter << " iterations." << std::endl;
 
 
     /* Build tree on host. */
 
-    thrust::host_vector<Node> h_nodes(N);
-    thrust::host_vector<NodeNoData> h_nodes_nodata(N);
-    thrust::host_vector<float> h_node_data(N);
-    thrust::host_vector<float> h_data(1u << (levels-1));
+    thrust::host_vector<Node> h_nodes(N_leaves-1);
+    thrust::host_vector<Leaf> h_leaves(N_leaves);
 
+    thrust::host_vector<NodeNoData> h_nodes_nodata(N_leaves-1);
+    thrust::host_vector<LeafNoData> h_leaves_nodata(N_leaves);
+
+    // Fill data vector with random floats in [0,1).
+    thrust::host_vector<float> h_data(N_leaves);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(h_data.size()),
                       h_data.begin(),
                       random_float_functor());
 
-    // Set up all except final level.
-    for (int level=0; level<levels-1; level++) {
-        int level_start = (1u << level) - 1;
-        int level_end = (1u << (level+1)) - 1;
+    // Assign data to the leaves.
+    for (unsigned int i=0; i<N_leaves; i++) {
+        h_leaves[i].data = h_data[i];
+    }
 
-        for (int i=level_start; i<level_end; i++) {
-            int child_index = level_end + 2 * (i - level_start);
-            h_nodes[i].left = child_index;
-            h_nodes[i].right = child_index + 1;
-            h_nodes[child_index].parent = i;
-            h_nodes[child_index+1].parent = i;
-            h_nodes[i].level = level;
+    // Set up bottom level (where all nodes connect to leaves).
+    for (unsigned int left=1; left<N_leaves-1; left+=4) {
+        unsigned int right = left + 1;
 
-            h_nodes_nodata[i].left = child_index;
-            h_nodes_nodata[i].right = child_index + 1;
-            h_nodes_nodata[child_index].parent = i;
-            h_nodes_nodata[child_index+1].parent = i;
-            h_nodes_nodata[i].level = level;
+        h_nodes[left].left = left - 1;
+        h_nodes[left].right = left;
+        h_nodes[left].left_is_leaf = true;
+        h_nodes[left].right_is_leaf = true;
+
+        h_nodes[right].left = right;
+        h_nodes[right].right = right + 1;
+        h_nodes[right].left_is_leaf = true;
+        h_nodes[right].right_is_leaf = true;
+
+        h_leaves[left-1].parent = h_leaves[left].parent = left;
+        h_leaves[right].parent = h_leaves[right+1].parent = right;
+
+
+        h_nodes_nodata[left].left = left - 1;
+        h_nodes_nodata[left].right = left;
+        h_nodes_nodata[left].left_is_leaf = true;
+        h_nodes_nodata[left].right_is_leaf = true;
+
+        h_nodes_nodata[right].left = right;
+        h_nodes_nodata[right].right = right + 1;
+        h_nodes_nodata[right].left_is_leaf = true;
+        h_nodes_nodata[right].right_is_leaf = true;
+
+        h_leaves_nodata[left-1].parent = h_leaves[left].parent = left;
+        h_leaves_nodata[right].parent = h_leaves[right+1].parent = right;
+    }
+
+    // Set up all except bottom and top levels.
+    for (unsigned int height=2; height<depth; height++) {
+        for (unsigned int left=(1u<<height)-1;
+                          left<N_leaves-1;
+                          left+=1u<<(height+1)) {
+            unsigned int right = left + 1;
+            unsigned int left_split = (2*left - (1u<<height)) / 2;
+            unsigned int right_split = left_split + (1u<<height);
+
+            h_nodes[left].left = left_split;
+            h_nodes[left].right = left_split + 1;
+            h_nodes[left].left_is_leaf = false;
+            h_nodes[left].right_is_leaf = false;
+
+            h_nodes[right].left = right_split;
+            h_nodes[right].right = right_split + 1;
+            h_nodes[right].left_is_leaf = false;
+            h_nodes[right].right_is_leaf = false;
+
+            h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
+            h_nodes[right_split].parent = h_nodes[right_split+1].parent = right;
+
+
+            h_nodes_nodata[left].left = left_split;
+            h_nodes_nodata[left].right = left_split + 1;
+            h_nodes_nodata[left].left_is_leaf = false;
+            h_nodes_nodata[left].right_is_leaf = false;
+
+            h_nodes_nodata[right].left = right_split;
+            h_nodes_nodata[right].right = right_split + 1;
+            h_nodes_nodata[right].left_is_leaf = false;
+            h_nodes_nodata[right].right_is_leaf = false;
+
+            h_nodes_nodata[left_split].parent =
+                h_nodes_nodata[left_split+1].parent = left;
+            h_nodes_nodata[right_split].parent =
+                h_nodes_nodata[right_split+1].parent = right;
         }
     }
 
-    // Set up final level, including assigning data.
-    int final_start = (1u << (levels-1)) - 1;
-    for (int i=final_start; i<N; i++) {
-        h_nodes[i].left = -1;
-        h_nodes[i].right = -1;
-        h_nodes[i].data = h_data[i-final_start];
-        h_nodes[i].level = levels - 1;
+    // Set up root node and link children to it.
+    h_nodes[0].left = N_leaves/2 - 1;
+    h_nodes[0].right = N_leaves/2;
+    h_nodes[0].left_is_leaf = false;
+    h_nodes[0].right_is_leaf = false;
 
-        h_nodes_nodata[i].left = -1;
-        h_nodes_nodata[i].right = -1;
-        h_node_data[i] = h_data[i-final_start];
-        h_nodes_nodata[i].level = levels - 1;
-    }
+    h_nodes[N_leaves/2 - 1].parent = h_nodes[N_leaves/2].parent = 0;
 
-    // Build a reference tree, with correct data, on the CPU.
-    // Start at final-but-one level.
+    // Build a reference tree with correct data.
+    // Start with bottom level, which connect directly to leaves.
     thrust::host_vector<Node> h_nodes_ref = h_nodes;
-    for (int level=levels-2; level>=0; level--) {
-        int level_start = (1u << level) - 1;
-        int level_end = (1u << (level+1)) - 1;
-
-        for (int i=level_start; i<level_end; i++) {
-            h_nodes_ref[i].data = min(h_nodes_ref[h_nodes_ref[i].left].data,
-                                      h_nodes_ref[h_nodes_ref[i].right].data);
-            if (h_nodes_ref[i].data == 0.0f) {
-                std::cout << "data at [" << i << "] = " << h_nodes[i].data
-                          << ".  Tree construction bug!" << std::endl;
-            }
+    for (unsigned int left=1; left<N_leaves-1; left+=4) {
+        unsigned int right = left + 1;
+        h_nodes_ref[left].data = min(h_leaves[left-1].data,
+                                     h_leaves[left].data);
+        h_nodes_ref[right].data = min(h_leaves[right].data,
+                                      h_leaves[right+1].data);
+    }
+    // Assign data to all other levels except the root.
+    for (unsigned int height=2; height<depth; height++) {
+        for (unsigned int left=(1u<<height)-1;
+                          left<N_leaves-1;
+                          left+=1u<<(height+1)) {
+            unsigned int right = left + 1;
+            h_nodes_ref[left].data =
+                min(h_nodes_ref[h_nodes_ref[left].left].data,
+                    h_nodes_ref[h_nodes_ref[left].right].data);
+            h_nodes_ref[right].data =
+                min(h_nodes_ref[h_nodes_ref[right].left].data,
+                    h_nodes_ref[h_nodes_ref[right].right].data);
         }
     }
+    // Assign data to the root node.
+    h_nodes_ref[0].data = min(h_nodes_ref[h_nodes_ref[0].left].data,
+                              h_nodes_ref[h_nodes_ref[0].right].data);
+
 
     thrust::device_vector<Node> d_nodes = h_nodes;
+    thrust::device_vector<Leaf> d_leaves = h_leaves;
     thrust::device_vector<NodeNoData> d_nodes_nodata = h_nodes_nodata;
-    thrust::device_vector<float> d_node_data = h_node_data;
-    thrust::device_vector<unsigned int> d_flags(N);
-    // Set the flags of the leaves to 2 so later checks do not report
-    // errors in this range.
-    thrust::fill(d_flags.begin()+final_start, d_flags.end(), 2u);
+    thrust::device_vector<LeafNoData> d_leaves_nodata = h_leaves_nodata;
+    thrust::device_vector<float> d_data = h_data;
+    thrust::device_vector<float> d_node_data(N_leaves-1);
+    thrust::device_vector<float> d_leaf_data(N_leaves);
+    thrust::device_vector<unsigned int> d_flags(N_leaves-1);
 
 
     /* Test the kernels.
      * THREADS_PER_BLOCK and NUM_BLOCKS are defined in tree_climb_kernels.cuh
      */
-    int blocks = min(NUM_BLOCKS, (N + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
+    int blocks = min(NUM_BLOCKS,
+                     (N_leaves + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
 
     for (int i=0; i<N_iter; i++) {
         volatile_node<<<blocks,THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
-            N,
-            final_start,
+            thrust::raw_pointer_cast(d_leaves.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
             thrust::raw_pointer_cast(d_flags.data()));
-        check_nodes(d_nodes, h_nodes_ref, d_flags,
-                    "volatile node");
-        check_flags(d_flags, "volatile node");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
+        check_nodes(d_nodes, h_nodes_ref, "volatile");
+        check_flags(d_flags, "volatile");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
+        d_leaves = h_leaves;
 
 
-        separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes_nodata.data()),
-            thrust::raw_pointer_cast(d_node_data.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_data(d_node_data, h_nodes_ref, d_flags,
-                   "separate volatile data");
-        check_flags(d_flags, "separate volatile node");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_node_data = h_node_data;
+        // separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
+        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
+        //     thrust::raw_pointer_cast(d_node_data.data()),
+        //     thrust::raw_pointer_cast(d_leaf_data.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_data(d_node_data, h_nodes_ref, "separate volatile");
+        // check_flags(d_flags, "separate volatile");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
 
-        atomic_read<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_nodes(d_nodes, h_nodes_ref, d_flags,
-                    "atomicAdd()");
-        check_flags(d_flags, "atomicAdd()");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_nodes = h_nodes;
+        // atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes.data()),
+        //     thrust::raw_pointer_cast(d_leaves.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_nodes(d_nodes, h_nodes_ref, "conditional atomicAdd()");
+        // check_flags(d_flags, "conditional atomicAdd()");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // d_nodes = h_nodes;
+        // d_leaves = h_leaves;
 
 
-        atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_nodes(d_nodes, h_nodes_ref, d_flags,
-                    "conditional atomicAdd()");
-        check_flags(d_flags, "conditional atomicAdd()");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_nodes = h_nodes;
+        // asm_read<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes.data()),
+        //     thrust::raw_pointer_cast(d_leaves.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_nodes(d_nodes, h_nodes_ref, "PTX load");
+        // check_flags(d_flags, "PTX load");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // d_nodes = h_nodes;
+        // d_leaves = h_leaves;
 
 
-        asm_read<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_nodes(d_nodes, h_nodes_ref, d_flags,
-                    "PTX load");
-        tcheck_flags(d_flags, "PTX load");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_nodes = h_nodes;
+        // asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes.data()),
+        //     thrust::raw_pointer_cast(d_leaves.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_nodes(d_nodes, h_nodes_ref, "conditional PTX load");
+        // check_flags(d_flags, "conditional PTX load");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // d_nodes = h_nodes;
+        // d_leaves = h_leaves;
 
 
-        asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_nodes(d_nodes, h_nodes_ref, d_flags,
-                    "conditional PTX load");
-        check_flags(d_flags, "conditional PTX load");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_nodes = h_nodes;
+        // separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
+        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
+        //     thrust::raw_pointer_cast(d_node_data.data()),
+        //     thrust::raw_pointer_cast(d_leaf_data.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_data(d_node_data, h_nodes_ref, "separate PTX load");
+        // check_flags(d_flags, "separate PTX load");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
 
-        separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes_nodata.data()),
-            thrust::raw_pointer_cast(d_node_data.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_data(d_node_data, h_nodes_ref, d_flags,
-                   "separate PTX load");
-        check_flags(d_flags, "separate PTX load");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_node_data = h_node_data;
-
-
-        separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_nodes_nodata.data()),
-            thrust::raw_pointer_cast(d_node_data.data()),
-            N,
-            final_start,
-            thrust::raw_pointer_cast(d_flags.data()));
-        check_data(d_node_data, h_nodes_ref, d_flags,
-                   "conditional separate PTX load");
-        check_flags(d_flags, "vconditional separate PTX load");
-        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
-        d_node_data = h_node_data;    }
+        // separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
+        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
+        //     thrust::raw_pointer_cast(d_node_data.data()),
+        //     thrust::raw_pointer_cast(d_leaf_data.data()),
+        //     N_leaves,
+        //     thrust::raw_pointer_cast(d_data.data()),
+        //     thrust::raw_pointer_cast(d_flags.data()));
+        // check_data(d_node_data, h_nodes_ref, "conditional separate PTX load");
+        // check_flags(d_flags, "vconditional separate PTX load");
+        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
+    }
 }

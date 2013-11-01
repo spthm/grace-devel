@@ -17,7 +17,17 @@ struct Node
     int right;
     int parent;
 
+    bool left_is_leaf;
+    bool right_is_leaf;
+
     unsigned int level;
+
+    float data;
+};
+
+struct Leaf
+{
+    int parent;
 
     float data;
 };
@@ -28,28 +38,38 @@ struct NodeNoData
     int right;
     int parent;
 
+    bool left_is_leaf;
+    bool right_is_leaf;
+
     unsigned int level;
 };
 
-__global__ void volatile_node(volatile Node *nodes,
-                              const unsigned int n_nodes,
-                              const unsigned int start,
+struct LeafNoData
+{
+    int parent;
+};
+
+
+__global__ void volatile_node(volatile Node* nodes,
+                              volatile Leaf* leaves,
+                              const unsigned int n_leaves,
+                              const float* raw_data,
                               unsigned int* flags)
 {
     int tid, index, left, right;
     float data;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaves[tid].data = raw_data[tid];
 
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
+        __threadfence();
+
+        // Move up the tree.
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -58,7 +78,12 @@ __global__ void volatile_node(volatile Node *nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            data = min(nodes[left].data, nodes[right].data);
+            if (nodes[index].left_is_leaf) {
+                data = min(leaves[left].data, leaves[right].data);
+            }
+            else {
+                data = min(nodes[left].data, nodes[right].data);
+            }
 
             nodes[index].data = data;
 
@@ -80,25 +105,27 @@ __global__ void volatile_node(volatile Node *nodes,
 }
 
 __global__ void separate_volatile_data(const NodeNoData* nodes,
+                                       const LeafNoData* leaves,
                                        volatile float* node_data,
-                                       const unsigned int n_nodes,
-                                       const unsigned int start,
+                                       volatile float* leaf_data,
+                                       const unsigned int n_leaves,
+                                       const float* raw_data,
                                        unsigned int* flags)
 {
     int tid, index, left, right;
     float data;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaf_data[tid] = raw_data[tid];
 
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
+        __threadfence();
+
+        // Move up the tree.
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -107,7 +134,12 @@ __global__ void separate_volatile_data(const NodeNoData* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            data = min(node_data[left], node_data[right]);
+            if (nodes[index].left_is_leaf) {
+                data = min(leaf_data[left], leaf_data[right]);
+            }
+            else {
+                data = min(node_data[left], node_data[right]);
+            }
 
             node_data[index] = data;
 
@@ -128,73 +160,25 @@ __global__ void separate_volatile_data(const NodeNoData* nodes,
     return;
 }
 
-__global__ void atomic_read(Node* nodes,
-                            const unsigned int n_nodes,
-                            const unsigned int start,
-                            unsigned int* flags)
-{
-    int tid, index, left, right;
-    float data;
-    bool first_arrival;
-
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
-
-    while (tid < n_nodes)
-    {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
-
-        // Immediately move up the tree.
-        index = nodes[tid].parent;
-        first_arrival = (atomicAdd(&flags[index], 1) == 0);
-
-        // If we are the second thread to reach this node then process it.
-        while (!first_arrival)
-        {
-            left = nodes[index].left;
-            right = nodes[index].right;
-
-            data = min(atomicAdd(&nodes[left].data, 0.0f),
-                       atomicAdd(&nodes[right].data, 0.0f));
-
-            nodes[index].data = data;
-
-            if (index == 0) {
-                // Root node processed, so all nodes processed.
-                return;
-            }
-
-            // Ensure above global write is visible to all device threads
-            // before setting flag for the parent.
-            __threadfence();
-
-            index = nodes[index].parent;
-            first_arrival = (atomicAdd(&flags[index], 1) == 0);
-        }
-        tid += blockDim.x*gridDim.x;
-    }
-    return;
-}
-
 __global__ void atomic_read_conditional(Node* nodes,
-                                        const unsigned int n_nodes,
-                                        const unsigned int start,
+                                        Leaf* leaves,
+                                        const unsigned int n_leaves,
+                                        const float* raw_data,
                                         unsigned int* flags)
 {
     int tid, index, left, right;
     float data, data_left, data_right;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaves[tid].data = raw_data[tid];
 
-        // Immediately move up the tree.
+        __threadfence();
+
+        // Move up the tree.
         index = nodes[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
@@ -204,14 +188,24 @@ __global__ void atomic_read_conditional(Node* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            data_left = nodes[left].data;
-            data_right = nodes[right].data;
-            // Check if the data is exactly 0.  Re-read from global/L2 if so.
-            // If it is still zero, then the actual data must be exactly 0.
-            if (data_left == 0.0f)
-                data_left = atomicAdd(&nodes[left].data, 0.0f);
-            if (data_right == 0.0f)
-                data_right = atomicAdd(&nodes[right].data, 0.0f);
+            if (nodes[index].left_is_leaf) {
+                data_left = leaves[left].data;
+                data_right = leaves[right].data;
+                // Check if the data is exactly 0.  Re-read from global/L2 if so.
+                // If it is still zero, then the actual data must be exactly 0.
+                if (data_left == 0.0f)
+                    data_left = atomicAdd(&leaves[left].data, 0.0f);
+                if (data_right == 0.0f)
+                    data_right = atomicAdd(&leaves[right].data, 0.0f);
+            }
+            else {
+                data_left = nodes[left].data;
+                data_right = nodes[right].data;
+                if (data_left == 0.0f)
+                    data_left = atomicAdd(&nodes[left].data, 0.0f);
+                if (data_right == 0.0f)
+                    data_right = atomicAdd(&nodes[right].data, 0.0f);
+            }
 
             data = min(data_left, data_right);
 
@@ -235,23 +229,24 @@ __global__ void atomic_read_conditional(Node* nodes,
 }
 
 __global__ void asm_read(Node* nodes,
-                         const unsigned int n_nodes,
-                         const unsigned int start,
+                         Leaf* leaves,
+                         const unsigned int n_leaves,
+                         const float* raw_data,
                          unsigned int* flags)
 {
     int tid, index, left, right;
     float data, data_left, data_right;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaves[tid].data = raw_data[tid];
 
-        // Immediately move up the tree.
+        __threadfence();
+
+        // Move up the tree.
         index = nodes[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
@@ -261,8 +256,14 @@ __global__ void asm_read(Node* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&nodes[left].data));
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&nodes[right].data));
+            if (nodes[index].left_is_leaf) {
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&leaves[left].data));
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&leaves[right].data));
+            }
+            else {
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&nodes[left].data));
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&nodes[right].data));
+            }
 
             data = min(data_left, data_right);
 
@@ -286,23 +287,24 @@ __global__ void asm_read(Node* nodes,
 }
 
 __global__ void asm_read_conditional(Node* nodes,
-                                     const unsigned int n_nodes,
-                                     const unsigned int start,
+                                     Leaf* leaves,
+                                     const unsigned int n_leaves,
+                                     const float* raw_data,
                                      unsigned int* flags)
 {
     int tid, index, left, right;
     float data, data_left, data_right;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaves[tid].data = raw_data[tid];
 
-        // Immediately move up the tree.
+        __threadfence();
+
+        // Move up the tree.
         index = nodes[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
@@ -312,13 +314,24 @@ __global__ void asm_read_conditional(Node* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            data_left = nodes[left].data;
-            data_right = nodes[right].data;
+            if (nodes[index].left_is_leaf) {
+                data_left = leaves[left].data;
+                data_right = leaves[right].data;
 
-            if (data_left == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&nodes[left].data));
-            if (data_right == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&nodes[right].data));
+                if (data_left == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&leaves[left].data));
+                if (data_right == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&leaves[right].data));
+            }
+            else {
+                data_left = nodes[left].data;
+                data_right = nodes[right].data;
+
+                if (data_left == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&nodes[left].data));
+                if (data_right == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&nodes[right].data));
+            }
 
             data = min(data_left, data_right);
 
@@ -342,24 +355,26 @@ __global__ void asm_read_conditional(Node* nodes,
 }
 
 __global__ void separate_asm_read(const NodeNoData* nodes,
+                                  const LeafNoData* leaves,
                                   float* node_data,
-                                  const unsigned int n_nodes,
-                                  const unsigned int start,
+                                  float* leaf_data,
+                                  const unsigned int n_leaves,
+                                  const float* raw_data,
                                   unsigned int* flags)
 {
     int tid, index, left, right;
     float data, data_left, data_right;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaf_data[tid] = raw_data[tid];
 
-        // Immediately move up the tree.
+        __threadfence();
+
+        // Move up the tree.
         index = nodes[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
@@ -369,8 +384,14 @@ __global__ void separate_asm_read(const NodeNoData* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
-            asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+            if (nodes[index].left_is_leaf) {
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&leaf_data[left]));
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&leaf_data[right]));
+            }
+            else {
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
+                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+            }
 
             data = min(data_left, data_right);
 
@@ -394,24 +415,26 @@ __global__ void separate_asm_read(const NodeNoData* nodes,
 }
 
 __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
+                                              const LeafNoData* leaves,
                                               float* node_data,
-                                              const unsigned int n_nodes,
-                                              const unsigned int start,
+                                              float* leaf_data,
+                                              const unsigned int n_leaves,
+                                              const float* raw_data,
                                               unsigned int* flags)
 {
     int tid, index, left, right;
     float data, data_left, data_right;
     bool first_arrival;
 
-    tid = start + threadIdx.x + blockIdx.x*blockDim.x;
+    tid = threadIdx.x + blockIdx.x*blockDim.x;
 
-    while (tid < n_nodes)
+    while (tid < n_leaves)
     {
-        // We start at a node with a full data section; modify its flag
-        // accordingly.
-        flags[tid] = 2;
+        leaf_data[tid] = raw_data[tid];
 
-        // Immediately move up the tree.
+        __threadfence();
+
+        // Move up the tree.
         index = nodes[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
@@ -421,13 +444,24 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
             left = nodes[index].left;
             right = nodes[index].right;
 
-            data_left = node_data[left];
-            data_right = node_data[right];
+            if (nodes[index].left_is_leaf) {
+                data_left = leaf_data[left];
+                data_right = leaf_data[right];
 
-            if (data_left == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
-            if (data_right == 0.0f)
-                asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+                if (data_left == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&leaf_data[left]));
+                if (data_right == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&leaf_data[right]));
+            }
+            else {
+                data_left = node_data[left];
+                data_right = node_data[right];
+
+                if (data_left == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_left) : "l"(&node_data[left]));
+                if (data_right == 0.0f)
+                    asm("ld.global.cg.f32 %0, [%1];" : "=f"(data_right) : "l"(&node_data[right]));
+            }
 
             data = min(data_left, data_right);
 
@@ -450,14 +484,17 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
     return;
 }
 
-__global__ void sm_atomics(volatile Node *nodes,
-                           const unsigned int n_nodes,
-                           const unsigned int start,
-                           unsigned int *g_flags)
-{
-    int tid, index, left, right;
-    float data;
-    bool first_arrival;
+// __global__ void sm_flags_volatile_node(volatile Node* nodes,
+//                                        volatile Leaf* leaves,
+//                                        const unsigned int n_leaves,
+//                                        const float* raw_data,
+//                                        unsigned int *g_flags)
+// {
+//     int tid, index, left, right;
+//     float data;
+//     bool first_arrival;
 
-    __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
-}
+//     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
+
+//     tid = threadIdx.x + blockIdx.x * blockDim.x;
+// }
