@@ -71,7 +71,6 @@ void check_nodes(const thrust::device_vector<Node>& d_nodes,
                       << std::endl;
         }
     }
-    check_flags(d_flags, kernel_type);
 }
 
 void check_data(const thrust::device_vector<float>& d_node_data,
@@ -89,7 +88,6 @@ void check_data(const thrust::device_vector<float>& d_node_data,
                       << std::endl;
         }
     }
-    check_flags(d_flags, kernel_type);
 }
 
 int main(int argc, char* argv[]) {
@@ -187,6 +185,9 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<NodeNoData> d_nodes_nodata = h_nodes_nodata;
     thrust::device_vector<float> d_node_data = h_node_data;
     thrust::device_vector<unsigned int> d_flags(N);
+    // Set the flags of the leaves to 2 so later checks do not report
+    // errors in this range.
+    thrust::fill(d_flags.begin()+final_start, d_flags.end(), 2u);
 
 
     /* Test the kernels.
@@ -202,7 +203,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_nodes(d_nodes, h_nodes_ref, d_flags,
                     "volatile node");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "volatile node");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_nodes = h_nodes;
 
 
@@ -214,7 +216,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_data(d_node_data, h_nodes_ref, d_flags,
                    "separate volatile data");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "separate volatile node");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_node_data = h_node_data;
 
 
@@ -225,7 +228,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_nodes(d_nodes, h_nodes_ref, d_flags,
                     "atomicAdd()");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "atomicAdd()");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_nodes = h_nodes;
 
 
@@ -236,7 +240,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_nodes(d_nodes, h_nodes_ref, d_flags,
                     "conditional atomicAdd()");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "conditional atomicAdd()");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_nodes = h_nodes;
 
 
@@ -247,7 +252,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_nodes(d_nodes, h_nodes_ref, d_flags,
                     "PTX load");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        tcheck_flags(d_flags, "PTX load");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_nodes = h_nodes;
 
 
@@ -258,7 +264,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_nodes(d_nodes, h_nodes_ref, d_flags,
                     "conditional PTX load");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "conditional PTX load");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_nodes = h_nodes;
 
 
@@ -270,7 +277,8 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_data(d_node_data, h_nodes_ref, d_flags,
                    "separate PTX load");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "separate PTX load");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_node_data = h_node_data;
 
 
@@ -282,6 +290,7 @@ int main(int argc, char* argv[]) {
             thrust::raw_pointer_cast(d_flags.data()));
         check_data(d_node_data, h_nodes_ref, d_flags,
                    "conditional separate PTX load");
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        check_flags(d_flags, "vconditional separate PTX load");
+        thrust::fill(d_flags.begin(), d_flags.begin()+final_start-1, 0);
         d_node_data = h_node_data;    }
 }
