@@ -1,0 +1,258 @@
+Device 0:             GeForce GTX 670
+Starting tree depth:  5
+Finishing tree depth: 25
+Iterations per tree:  1000
+
+
+Will generate 31 nodes in 5 levels.
+
+Time for volatile Node:                        0.02604 ms.
+Time for separate volatile data:               0.02514 ms.
+Time for atomicAdd():                          0.02671 ms.
+Time for conditional atomicAdd():              0.02804 ms.
+Time for inline PTX:                           0.02647 ms.
+Time for conditional inline PTX:               0.02634 ms.
+Time for separate data inline PTX:             0.02560 ms.
+Time for separate data conditional inline PTX: 0.02637 ms.
+
+
+Will generate 63 nodes in 6 levels.
+
+Time for volatile Node:                        0.02920 ms.
+Time for separate volatile data:               0.02785 ms.
+Time for atomicAdd():                          0.02962 ms.
+Time for conditional atomicAdd():              0.03083 ms.
+Time for inline PTX:                           0.02901 ms.
+Time for conditional inline PTX:               0.02915 ms.
+Time for separate data inline PTX:             0.02828 ms.
+Time for separate data conditional inline PTX: 0.02862 ms.
+
+
+Will generate 127 nodes in 7 levels.
+
+Time for volatile Node:                        0.03597 ms.
+Time for separate volatile data:               0.03289 ms.
+Time for atomicAdd():                          0.04364 ms.
+Time for conditional atomicAdd():              0.04266 ms.
+Time for inline PTX:                           0.03425 ms.
+Time for conditional inline PTX:               0.03467 ms.
+Time for separate data inline PTX:             0.03294 ms.
+Time for separate data conditional inline PTX: 0.03376 ms.
+
+
+Will generate 255 nodes in 8 levels.
+
+Time for volatile Node:                        0.05749 ms.
+Time for separate volatile data:               0.04335 ms.
+Time for atomicAdd():                          0.06003 ms.
+Time for conditional atomicAdd():              0.05619 ms.
+Time for inline PTX:                           0.05291 ms.
+Time for conditional inline PTX:               0.05867 ms.
+Time for separate data inline PTX:             0.03938 ms.
+Time for separate data conditional inline PTX: 0.05200 ms.
+
+
+Will generate 511 nodes in 9 levels.
+
+Time for volatile Node:                        0.06176 ms.
+Time for separate volatile data:               0.04906 ms.
+Time for atomicAdd():                          0.07333 ms.
+Time for conditional atomicAdd():              0.06831 ms.
+Time for inline PTX:                           0.05949 ms.
+Time for conditional inline PTX:               0.05720 ms.
+Time for separate data inline PTX:             0.04714 ms.
+Time for separate data conditional inline PTX: 0.05628 ms.
+
+
+Will generate 1023 nodes in 10 levels.
+
+Time for volatile Node:                        0.13122 ms.
+Time for separate volatile data:               0.06984 ms.
+Time for atomicAdd():                          0.12179 ms.
+Time for conditional atomicAdd():              0.08861 ms.
+Time for inline PTX:                           0.13175 ms.
+Time for conditional inline PTX:               0.10022 ms.
+Time for separate data inline PTX:             0.06838 ms.
+Time for separate data conditional inline PTX: 0.07622 ms.
+
+
+Will generate 2047 nodes in 11 levels.
+
+Time for volatile Node:                        0.14252 ms.
+Time for separate volatile data:               0.07767 ms.
+Time for atomicAdd():                          0.13619 ms.
+Time for conditional atomicAdd():              0.09861 ms.
+Time for inline PTX:                           0.13991 ms.
+Time for conditional inline PTX:               0.11007 ms.
+Time for separate data inline PTX:             0.07421 ms.
+Time for separate data conditional inline PTX: 0.09177 ms.
+
+
+Will generate 4095 nodes in 12 levels.
+
+Time for volatile Node:                        0.15259 ms.
+Time for separate volatile data:               0.09413 ms.
+Time for atomicAdd():                          0.15092 ms.
+Time for conditional atomicAdd():              0.11412 ms.
+Time for inline PTX:                           0.12054 ms.
+Time for conditional inline PTX:               0.10062 ms.
+Time for separate data inline PTX:             0.08940 ms.
+Time for separate data conditional inline PTX: 0.10164 ms.
+
+
+Will generate 8191 nodes in 13 levels.
+
+Time for volatile Node:                        0.28739 ms.
+Time for separate volatile data:               0.19339 ms.
+Time for atomicAdd():                          0.28317 ms.
+Time for conditional atomicAdd():              0.20251 ms.
+Time for inline PTX:                           0.27172 ms.
+Time for conditional inline PTX:               0.24776 ms.
+Time for separate data inline PTX:             0.17380 ms.
+Time for separate data conditional inline PTX: 0.14260 ms.
+
+
+Will generate 16383 nodes in 14 levels.
+
+Time for volatile Node:                        0.50350 ms.
+Time for separate volatile data:               0.40787 ms.
+Time for atomicAdd():                          0.54206 ms.
+Time for conditional atomicAdd():              0.51894 ms.
+Time for inline PTX:                           0.48651 ms.
+Time for conditional inline PTX:               0.52793 ms.
+Time for separate data inline PTX:             0.41026 ms.
+Time for separate data conditional inline PTX: 0.47335 ms.
+
+
+Will generate 32767 nodes in 15 levels.
+
+Time for volatile Node:                        1.34246 ms.
+Time for separate volatile data:               1.16245 ms.
+Time for atomicAdd():                          1.39723 ms.
+Time for conditional atomicAdd():              1.42115 ms.
+Time for inline PTX:                           1.32865 ms.
+Time for conditional inline PTX:               1.36905 ms.
+Time for separate data inline PTX:             1.12705 ms.
+Time for separate data conditional inline PTX: 1.22532 ms.
+
+
+Will generate 65535 nodes in 16 levels.
+
+Time for volatile Node:                        1.92087 ms.
+Time for separate volatile data:               1.68562 ms.
+Time for atomicAdd():                          2.01665 ms.
+Time for conditional atomicAdd():              2.07063 ms.
+Time for inline PTX:                           1.89567 ms.
+Time for conditional inline PTX:               1.97441 ms.
+Time for separate data inline PTX:             1.67329 ms.
+Time for separate data conditional inline PTX: 1.74737 ms.
+
+
+Will generate 131071 nodes in 17 levels.
+
+Time for volatile Node:                        3.39328 ms.
+Time for separate volatile data:               3.05767 ms.
+Time for atomicAdd():                          3.55677 ms.
+Time for conditional atomicAdd():              3.68074 ms.
+Time for inline PTX:                           3.39118 ms.
+Time for conditional inline PTX:               3.51724 ms.
+Time for separate data inline PTX:             3.08144 ms.
+Time for separate data conditional inline PTX: 3.22552 ms.
+
+
+Will generate 262143 nodes in 18 levels.
+
+Time for volatile Node:                        7.45923 ms.
+Time for separate volatile data:               6.91531 ms.
+Time for atomicAdd():                          7.88956 ms.
+Time for conditional atomicAdd():              8.28238 ms.
+Time for inline PTX:                           7.49658 ms.
+Time for conditional inline PTX:               7.80510 ms.
+Time for separate data inline PTX:             6.99572 ms.
+Time for separate data conditional inline PTX: 7.50274 ms.
+
+
+Will generate 524287 nodes in 19 levels.
+
+Time for volatile Node:                        15.58893 ms.
+Time for separate volatile data:               14.67736 ms.
+Time for atomicAdd():                          16.57679 ms.
+Time for conditional atomicAdd():              17.60728 ms.
+Time for inline PTX:                           15.75152 ms.
+Time for conditional inline PTX:               16.45821 ms.
+Time for separate data inline PTX:             14.88760 ms.
+Time for separate data conditional inline PTX: 16.21204 ms.
+
+
+Will generate 1048575 nodes in 20 levels.
+
+Time for volatile Node:                        31.61580 ms.
+Time for separate volatile data:               30.04554 ms.
+Time for atomicAdd():                          33.74071 ms.
+Time for conditional atomicAdd():              36.00988 ms.
+Time for inline PTX:                           32.02055 ms.
+Time for conditional inline PTX:               33.56632 ms.
+Time for separate data inline PTX:             30.41725 ms.
+Time for separate data conditional inline PTX: 33.34045 ms.
+
+
+Will generate 2097151 nodes in 21 levels.
+
+Time for volatile Node:                        64.14497 ms.
+Time for separate volatile data:               61.07636 ms.
+Time for atomicAdd():                          68.55282 ms.
+Time for conditional atomicAdd():              73.36497 ms.
+Time for inline PTX:                           64.96393 ms.
+Time for conditional inline PTX:               68.12364 ms.
+Time for separate data inline PTX:             61.77680 ms.
+Time for separate data conditional inline PTX: 67.93414 ms.
+
+
+Will generate 4194303 nodes in 22 levels.
+
+Time for volatile Node:                        129.08760 ms.
+Time for separate volatile data:               123.19650 ms.
+Time for atomicAdd():                          138.20448 ms.
+Time for conditional atomicAdd():              148.24434 ms.
+Time for inline PTX:                           130.81056 ms.
+Time for conditional inline PTX:               137.34198 ms.
+Time for separate data inline PTX:             124.57555 ms.
+Time for separate data conditional inline PTX: 137.07974 ms.
+
+
+Will generate 8388607 nodes in 23 levels.
+
+Time for volatile Node:                        258.74625 ms.
+Time for separate volatile data:               247.41313 ms.
+Time for atomicAdd():                          277.65036 ms.
+Time for conditional atomicAdd():              298.25394 ms.
+Time for inline PTX:                           262.39636 ms.
+Time for conditional inline PTX:               275.80417 ms.
+Time for separate data inline PTX:             249.80493 ms.
+Time for separate data conditional inline PTX: 275.41614 ms.
+
+
+Will generate 16777215 nodes in 24 levels.
+
+Time for volatile Node:                        518.05048 ms.
+Time for separate volatile data:               495.02649 ms.
+Time for atomicAdd():                          556.24792 ms.
+Time for conditional atomicAdd():              597.49561 ms.
+Time for inline PTX:                           525.34363 ms.
+Time for conditional inline PTX:               552.45325 ms.
+Time for separate data inline PTX:             500.29349 ms.
+Time for separate data conditional inline PTX: 551.35919 ms.
+
+
+Will generate 33554431 nodes in 25 levels.
+
+Time for volatile Node:                        1036.95581 ms.
+Time for separate volatile data:               991.25421 ms.
+Time for atomicAdd():                          1113.72583 ms.
+Time for conditional atomicAdd():              1197.15088 ms.
+Time for inline PTX:                           1051.50293 ms.
+Time for conditional inline PTX:               1106.67407 ms.
+Time for separate data inline PTX:             1000.93634 ms.
+Time for separate data conditional inline PTX: 1103.70093 ms.
+
+

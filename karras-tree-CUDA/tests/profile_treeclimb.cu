@@ -7,7 +7,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "tree_climb_kernels.cuh"
+#include "treeclimb_kernels.cuh"
 
 // Thomas Wang hash.
 __host__ __device__ unsigned int hash(unsigned int a)
@@ -151,13 +151,15 @@ int main(int argc, char* argv[]) {
         thrust::device_vector<unsigned int> d_flags(N);
 
 
-        /* Test the kernels. */
-        int threads_per_block = 512;
-        int blocks = min(112, (N + threads_per_block-1)/threads_per_block);
+        /* Test the kernels.
+         * NUM_BLOCKS and THREADS_PER_BLOCK are defined in tree_climb_kernels.cuh
+         */
+        int blocks = min(NUM_BLOCKS,
+                         (N + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(start);
-            volatile_node<<<blocks,threads_per_block>>>(
+            volatile_node<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -173,7 +175,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_volatile_data<<<blocks,threads_per_block>>>(
+            separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
@@ -190,7 +192,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            atomic_read<<<blocks,threads_per_block>>>(
+            atomic_read<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -206,7 +208,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            atomic_read_conditional<<<blocks,threads_per_block>>>(
+            atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -222,7 +224,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            asm_read<<<blocks,threads_per_block>>>(
+            asm_read<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -238,7 +240,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            asm_read_conditional<<<blocks,threads_per_block>>>(
+            asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
                 N,
                 final_start,
@@ -254,7 +256,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_asm_read<<<blocks,threads_per_block>>>(
+            separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
@@ -271,7 +273,7 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            separate_asm_read_conditional<<<blocks,threads_per_block>>>(
+            separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
                 N,
