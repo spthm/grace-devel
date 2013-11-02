@@ -117,13 +117,10 @@ int main(int argc, char* argv[]) {
     std::cout << "Will complete " << N_iter << " iterations." << std::endl;
 
 
-    /* Build tree on host. */
+    /* Build trees on host. */
 
     thrust::host_vector<Node> h_nodes(N_leaves-1);
     thrust::host_vector<Leaf> h_leaves(N_leaves);
-
-    thrust::host_vector<NodeNoData> h_nodes_nodata(N_leaves-1);
-    thrust::host_vector<LeafNoData> h_leaves_nodata(N_leaves);
 
     // Fill data vector with random floats in [0,1).
     thrust::host_vector<float> h_data(N_leaves);
@@ -131,11 +128,6 @@ int main(int argc, char* argv[]) {
                       thrust::counting_iterator<unsigned int>(h_data.size()),
                       h_data.begin(),
                       random_float_functor());
-
-    // Assign data to the leaves.
-    for (unsigned int i=0; i<N_leaves; i++) {
-        h_leaves[i].data = h_data[i];
-    }
 
     // Set up bottom level (where all nodes connect to leaves).
     for (unsigned int left=1; left<N_leaves-1; left+=4) {
@@ -153,22 +145,7 @@ int main(int argc, char* argv[]) {
 
         h_leaves[left-1].parent = h_leaves[left].parent = left;
         h_leaves[right].parent = h_leaves[right+1].parent = right;
-
-
-        h_nodes_nodata[left].left = left - 1;
-        h_nodes_nodata[left].right = left;
-        h_nodes_nodata[left].left_is_leaf = true;
-        h_nodes_nodata[left].right_is_leaf = true;
-
-        h_nodes_nodata[right].left = right;
-        h_nodes_nodata[right].right = right + 1;
-        h_nodes_nodata[right].left_is_leaf = true;
-        h_nodes_nodata[right].right_is_leaf = true;
-
-        h_leaves_nodata[left-1].parent = h_leaves[left].parent = left;
-        h_leaves_nodata[right].parent = h_leaves[right+1].parent = right;
     }
-
     // Set up all except bottom and top levels.
     for (unsigned int height=2; height<depth; height++) {
         for (unsigned int left=(1u<<height)-1;
@@ -190,42 +167,41 @@ int main(int argc, char* argv[]) {
 
             h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
             h_nodes[right_split].parent = h_nodes[right_split+1].parent = right;
-
-
-            h_nodes_nodata[left].left = left_split;
-            h_nodes_nodata[left].right = left_split + 1;
-            h_nodes_nodata[left].left_is_leaf = false;
-            h_nodes_nodata[left].right_is_leaf = false;
-
-            h_nodes_nodata[right].left = right_split;
-            h_nodes_nodata[right].right = right_split + 1;
-            h_nodes_nodata[right].left_is_leaf = false;
-            h_nodes_nodata[right].right_is_leaf = false;
-
-            h_nodes_nodata[left_split].parent =
-                h_nodes_nodata[left_split+1].parent = left;
-            h_nodes_nodata[right_split].parent =
-                h_nodes_nodata[right_split+1].parent = right;
         }
     }
-
     // Set up root node and link children to it.
     h_nodes[0].left = N_leaves/2 - 1;
     h_nodes[0].right = N_leaves/2;
     h_nodes[0].left_is_leaf = false;
     h_nodes[0].right_is_leaf = false;
-
     h_nodes[N_leaves/2 - 1].parent = h_nodes[N_leaves/2].parent = 0;
+
+
+    // Build the leaves and nodes which contain no data.
+    thrust::host_vector<NodeNoData> h_nodes_nodata(N_leaves-1);
+    thrust::host_vector<LeafNoData> h_leaves_nodata(N_leaves);
+    for (unsigned int i=0; i<N_leaves-1; i++) {
+        h_leaves_nodata[i].parent = h_leaves[i].parent;
+
+        h_nodes_nodata[i].left = h_nodes[i].left;
+        h_nodes_nodata[i].right = h_nodes[i].right;
+        h_nodes_nodata[i].parent = h_nodes[i].parent;
+        h_nodes_nodata[i].left_is_leaf = h_nodes[i].left_is_leaf;
+        h_nodes_nodata[i].right_is_leaf = h_nodes[i].right_is_leaf;
+        h_nodes_nodata[i].level = h_nodes[i].level;
+    }
+    h_leaves_nodata[N_leaves-1].parent = h_leaves[N_leaves-1].parent;
+
 
     // Build a reference tree with correct data.
     // Start with bottom level, which connect directly to leaves.
     thrust::host_vector<Node> h_nodes_ref = h_nodes;
     for (unsigned int left=1; left<N_leaves-1; left+=4) {
         unsigned int right = left + 1;
-        h_nodes_ref[left].data = min(h_leaves[left-1].data,
-                                     h_leaves[left].data);
-        h_nodes_ref[right].data = min(h_leaves[right].data,
-                                      h_leaves[right+1].data);
+        h_nodes_ref[left].data = min(h_data[left-1],
+                                     h_data[left]);
+        h_nodes_ref[right].data = min(h_data[right],
+                                      h_data[right+1]);
     }
     // Assign data to all other levels except the root.
     for (unsigned int height=2; height<depth; height++) {
@@ -276,87 +252,87 @@ int main(int argc, char* argv[]) {
         d_leaves = h_leaves;
 
 
-        // separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
-        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
-        //     thrust::raw_pointer_cast(d_node_data.data()),
-        //     thrust::raw_pointer_cast(d_leaf_data.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_data(d_node_data, h_nodes_ref, "separate volatile");
-        // check_flags(d_flags, "separate volatile");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
-        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
+        separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
+            thrust::raw_pointer_cast(d_leaves_nodata.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            thrust::raw_pointer_cast(d_leaf_data.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_data(d_node_data, h_nodes_ref, "separate volatile");
+        check_flags(d_flags, "separate volatile");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
 
-        // atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes.data()),
-        //     thrust::raw_pointer_cast(d_leaves.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_nodes(d_nodes, h_nodes_ref, "conditional atomicAdd()");
-        // check_flags(d_flags, "conditional atomicAdd()");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // d_nodes = h_nodes;
-        // d_leaves = h_leaves;
+        atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            thrust::raw_pointer_cast(d_leaves.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_nodes(d_nodes, h_nodes_ref, "conditional atomicAdd()");
+        check_flags(d_flags, "conditional atomicAdd()");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
+        d_leaves = h_leaves;
 
 
-        // asm_read<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes.data()),
-        //     thrust::raw_pointer_cast(d_leaves.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_nodes(d_nodes, h_nodes_ref, "PTX load");
-        // check_flags(d_flags, "PTX load");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // d_nodes = h_nodes;
-        // d_leaves = h_leaves;
+        asm_read<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            thrust::raw_pointer_cast(d_leaves.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_nodes(d_nodes, h_nodes_ref, "PTX load");
+        check_flags(d_flags, "PTX load");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
+        d_leaves = h_leaves;
 
 
-        // asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes.data()),
-        //     thrust::raw_pointer_cast(d_leaves.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_nodes(d_nodes, h_nodes_ref, "conditional PTX load");
-        // check_flags(d_flags, "conditional PTX load");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // d_nodes = h_nodes;
-        // d_leaves = h_leaves;
+        asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes.data()),
+            thrust::raw_pointer_cast(d_leaves.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_nodes(d_nodes, h_nodes_ref, "conditional PTX load");
+        check_flags(d_flags, "conditional PTX load");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        d_nodes = h_nodes;
+        d_leaves = h_leaves;
 
 
-        // separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
-        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
-        //     thrust::raw_pointer_cast(d_node_data.data()),
-        //     thrust::raw_pointer_cast(d_leaf_data.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_data(d_node_data, h_nodes_ref, "separate PTX load");
-        // check_flags(d_flags, "separate PTX load");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
-        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
+        separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
+            thrust::raw_pointer_cast(d_leaves_nodata.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            thrust::raw_pointer_cast(d_leaf_data.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_data(d_node_data, h_nodes_ref, "separate PTX load");
+        check_flags(d_flags, "separate PTX load");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
 
-        // separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
-        //     thrust::raw_pointer_cast(d_nodes_nodata.data()),
-        //     thrust::raw_pointer_cast(d_leaves_nodata.data()),
-        //     thrust::raw_pointer_cast(d_node_data.data()),
-        //     thrust::raw_pointer_cast(d_leaf_data.data()),
-        //     N_leaves,
-        //     thrust::raw_pointer_cast(d_data.data()),
-        //     thrust::raw_pointer_cast(d_flags.data()));
-        // check_data(d_node_data, h_nodes_ref, "conditional separate PTX load");
-        // check_flags(d_flags, "vconditional separate PTX load");
-        // thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        // thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
-        // thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
+        separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_nodes_nodata.data()),
+            thrust::raw_pointer_cast(d_leaves_nodata.data()),
+            thrust::raw_pointer_cast(d_node_data.data()),
+            thrust::raw_pointer_cast(d_leaf_data.data()),
+            N_leaves,
+            thrust::raw_pointer_cast(d_data.data()),
+            thrust::raw_pointer_cast(d_flags.data()));
+        check_data(d_node_data, h_nodes_ref, "conditional separate PTX load");
+        check_flags(d_flags, "vconditional separate PTX load");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
     }
 }

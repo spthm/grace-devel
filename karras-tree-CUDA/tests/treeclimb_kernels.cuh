@@ -9,7 +9,11 @@
 //          7 MPs
 //          512 threads/block -> maximum of 4 *resident* blocks/SM
 //                            -> 7 * 4 = 28 blocks
+#if __CUDA_ARCH__ >= 300
+#define NUM_BLOCKS 28
+#else
 #define NUM_BLOCKS 48
+#endif
 
 struct Node
 {
@@ -179,7 +183,7 @@ __global__ void atomic_read_conditional(Node* nodes,
         __threadfence();
 
         // Move up the tree.
-        index = nodes[tid].parent;
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -247,7 +251,7 @@ __global__ void asm_read(Node* nodes,
         __threadfence();
 
         // Move up the tree.
-        index = nodes[tid].parent;
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -305,7 +309,7 @@ __global__ void asm_read_conditional(Node* nodes,
         __threadfence();
 
         // Move up the tree.
-        index = nodes[tid].parent;
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -375,7 +379,7 @@ __global__ void separate_asm_read(const NodeNoData* nodes,
         __threadfence();
 
         // Move up the tree.
-        index = nodes[tid].parent;
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
@@ -435,7 +439,7 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
         __threadfence();
 
         // Move up the tree.
-        index = nodes[tid].parent;
+        index = leaves[tid].parent;
         first_arrival = (atomicAdd(&flags[index], 1) == 0);
 
         // If we are the second thread to reach this node then process it.
