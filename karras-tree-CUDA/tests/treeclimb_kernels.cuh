@@ -488,17 +488,20 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
     return;
 }
 
-// __global__ void sm_flags_volatile_node(volatile Node* nodes,
-//                                        volatile Leaf* leaves,
-//                                        const unsigned int n_leaves,
-//                                        const float* raw_data,
-//                                        unsigned int *g_flags)
-// {
-//     int tid, index, left, right;
-//     float data;
-//     bool first_arrival;
+__global__ void sm_flags_volatile_node(volatile Node* nodes,
+                                       volatile Leaf* leaves,
+                                       const unsigned int n_leaves,
+                                       const float* raw_data,
+                                       unsigned int *g_flags)
+{
+    int tid, lower, upper, index, left, right;
+    unsigned int flags;
+    float data;
+    bool first_arrival;
 
-//     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
+    __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
+    lower = blockIdx.x * THREADS_PER_BLOCK;
+    upper = lower + THREADS_PER_BLOCK - 1;
 
-//     tid = threadIdx.x + blockIdx.x * blockDim.x;
-// }
+    tid = threadIdx.x + blockIdx.x * blockDim.x;
+}
