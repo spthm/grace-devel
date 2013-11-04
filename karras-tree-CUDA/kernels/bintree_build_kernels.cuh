@@ -36,7 +36,7 @@ __global__ void build_nodes_kernel(Node* nodes,
         // direction == -1 => index is the last key in the node.
         prefix_left = common_prefix(index, index-1, keys, n_keys);
         prefix_right = common_prefix(index, index+1, keys, n_keys);
-        direction = (prefix_right - prefix_left > 0) ? +1 : -1;
+        direction = sgn(prefix_right - prefix_left);
 
         /* Calculate the index of the other end of the node.
          * span_max is an upper limit to the distance between the two indices.

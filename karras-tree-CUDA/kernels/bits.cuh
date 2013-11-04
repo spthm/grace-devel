@@ -44,6 +44,11 @@ __host__ __device__ UInteger bit_prefix(const UInteger& a, const UInteger& b) {
         return n_bits;
 }
 
+template <typename T>
+__host__ __device__ int sgn(T val) {
+    return (T(0) < val) - (val < T(0));
+}
+
 namespace gpu {
 
 // TODO: Rename this to e.g. bit_prefix_length
