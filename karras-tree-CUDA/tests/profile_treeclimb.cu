@@ -91,7 +91,7 @@ int main(int argc, char* argv[]) {
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
         float volatile_node_t, separate_volatile_data_t;
-        float atomic_read_t, atomic_read_conditional_t;
+        float atomic_read_conditional_t;
         float asm_read_t, asm_read_conditional_t;
         float separate_asm_read_t, separate_asm_read_conditional_t;
         float elapsed_time;
@@ -101,73 +101,146 @@ int main(int argc, char* argv[]) {
 
         outfile.open("profile_treeclimb_results.log",
                      std::ofstream::out | std::ofstream::app);
-        unsigned int N = (1u << levels) - 1;
-        outfile << "Will generate " << N << " nodes in "
-                  << levels << " levels." << std::endl;
+        unsigned int N_leaves = 1u << (levels-1);
+        outfile << "Will generate " << levels << " levels, with "
+                << N_leaves << " leaves and " << N_leaves-1 << " nodes."
+                << std::endl;
         outfile << std::endl;
         outfile.close();
 
 
         /* Build tree on host. */
 
-        thrust::host_vector<Node> h_nodes(N);
-        thrust::host_vector<NodeNoData> h_nodes_nodata(N);
-        thrust::host_vector<float> h_node_data(N);
-        thrust::host_vector<float> h_data(1u << (levels-1));
+        thrust::host_vector<Node> h_nodes(N_leaves-1);
+        thrust::host_vector<Leaf> h_leaves(N_leaves);
 
+        thrust::host_vector<float> h_data(N_leaves);
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(h_data.size()),
                           h_data.begin(),
                           random_float_functor());
 
-        // Set up all except final level.
-        for (int level=0; level<levels-1; level++) {
-            int level_start = (1u << level) - 1;
-            int level_end = (1u << (level+1)) - 1;
+        // Set up bottom level (where all nodes connect to leaves).
+        for (unsigned int left=1; left<N_leaves-1; left+=4) {
+            unsigned int right = left + 1;
 
-            for (int i=level_start; i<level_end; i++) {
-                int child_index = level_end + 2 * (i - level_start);
-                h_nodes[i].left = h_nodes_nodata[i].left = child_index;
-                h_nodes[i].right = h_nodes_nodata[i].right = child_index + 1;
-                h_nodes[child_index].parent = h_nodes[child_index+1].parent = i;
-                h_nodes_nodata[child_index].parent = i;
-                h_nodes_nodata[child_index+1].parent = i;
-                h_nodes[i].level = h_nodes_nodata[i].level = level;
+            h_nodes[left].left = left - 1;
+            h_nodes[left].right = left;
+            h_nodes[left].left_is_leaf = true;
+            h_nodes[left].right_is_leaf = true;
+
+            h_nodes[right].left = right;
+            h_nodes[right].right = right + 1;
+            h_nodes[right].left_is_leaf = true;
+            h_nodes[right].right_is_leaf = true;
+
+            h_leaves[left-1].parent = h_leaves[left].parent = left;
+            h_leaves[right].parent = h_leaves[right+1].parent = right;
+        }
+        // Set up all except bottom and top levels.
+        for (unsigned int height=2; height<(levels-1); height++) {
+            for (unsigned int left=(1u<<height)-1;
+                              left<N_leaves-1;
+                              left+=1u<<(height+1)) {
+                unsigned int right = left + 1;
+                unsigned int left_split = (2*left - (1u<<height)) / 2;
+                unsigned int right_split = left_split + (1u<<height);
+
+                h_nodes[left].left = left_split;
+                h_nodes[left].right = left_split + 1;
+                h_nodes[left].left_is_leaf = false;
+                h_nodes[left].right_is_leaf = false;
+
+                h_nodes[right].left = right_split;
+                h_nodes[right].right = right_split + 1;
+                h_nodes[right].left_is_leaf = false;
+                h_nodes[right].right_is_leaf = false;
+
+                h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
+                h_nodes[right_split].parent = h_nodes[right_split+1].parent = right;
             }
         }
+        // Set up root node and link children to it.
+        h_nodes[0].left = N_leaves/2 - 1;
+        h_nodes[0].right = N_leaves/2;
+        h_nodes[0].left_is_leaf = false;
+        h_nodes[0].right_is_leaf = false;
+        h_nodes[N_leaves/2 - 1].parent = h_nodes[N_leaves/2].parent = 0;
 
-        // Set up final level, including assigning data.
-        int final_start = (1u << (levels-1)) - 1;
-        for (int i=final_start; i<N; i++) {
-            h_nodes[i].left = h_nodes[i].right = -1;
-            h_nodes_nodata[i].left = h_nodes_nodata[i].right = -1;
-            h_nodes[i].data = h_node_data[i] = h_data[i-final_start];
-            h_nodes[i].level = h_nodes_nodata[i].level = levels - 1;
+
+        // Build the leaves and nodes which contain no data.
+        thrust::host_vector<NodeNoData> h_nodes_nodata(N_leaves-1);
+        thrust::host_vector<LeafNoData> h_leaves_nodata(N_leaves);
+        for (unsigned int i=0; i<N_leaves-1; i++) {
+            h_leaves_nodata[i].parent = h_leaves[i].parent;
+
+            h_nodes_nodata[i].left = h_nodes[i].left;
+            h_nodes_nodata[i].right = h_nodes[i].right;
+            h_nodes_nodata[i].parent = h_nodes[i].parent;
+            h_nodes_nodata[i].left_is_leaf = h_nodes[i].left_is_leaf;
+            h_nodes_nodata[i].right_is_leaf = h_nodes[i].right_is_leaf;
+            h_nodes_nodata[i].level = h_nodes[i].level;
         }
+        h_leaves_nodata[N_leaves-1].parent = h_leaves[N_leaves-1].parent;
+
+
+        // Build a reference tree with correct data.
+        // Start with bottom level, which connect directly to leaves.
+        thrust::host_vector<Node> h_nodes_ref = h_nodes;
+        for (unsigned int left=1; left<N_leaves-1; left+=4) {
+            unsigned int right = left + 1;
+            h_nodes_ref[left].data = min(h_data[left-1],
+                                         h_data[left]);
+            h_nodes_ref[right].data = min(h_data[right],
+                                          h_data[right+1]);
+        }
+        // Assign data to all other levels except the root.
+        for (unsigned int height=2; height<(levels-1); height++) {
+            for (unsigned int left=(1u<<height)-1;
+                              left<N_leaves-1;
+                              left+=1u<<(height+1)) {
+                unsigned int right = left + 1;
+                h_nodes_ref[left].data =
+                    min(h_nodes_ref[h_nodes_ref[left].left].data,
+                        h_nodes_ref[h_nodes_ref[left].right].data);
+                h_nodes_ref[right].data =
+                    min(h_nodes_ref[h_nodes_ref[right].left].data,
+                        h_nodes_ref[h_nodes_ref[right].right].data);
+            }
+        }
+        // Assign data to the root node.
+        h_nodes_ref[0].data = min(h_nodes_ref[h_nodes_ref[0].left].data,
+                                  h_nodes_ref[h_nodes_ref[0].right].data);
 
         thrust::device_vector<Node> d_nodes = h_nodes;
+        thrust::device_vector<Leaf> d_leaves = h_leaves;
         thrust::device_vector<NodeNoData> d_nodes_nodata = h_nodes_nodata;
-        thrust::device_vector<float> d_node_data = h_node_data;
-        thrust::device_vector<unsigned int> d_flags(N);
+        thrust::device_vector<LeafNoData> d_leaves_nodata = h_leaves_nodata;
+        thrust::device_vector<float> d_data = h_data;
+        thrust::device_vector<float> d_node_data(N_leaves-1);
+        thrust::device_vector<float> d_leaf_data(N_leaves);
+        thrust::device_vector<unsigned int> d_flags(N_leaves-1);
 
 
-        /* Test the kernels.
+        /* Profile the kernels.
          * NUM_BLOCKS and THREADS_PER_BLOCK are defined in tree_climb_kernels.cuh
          */
         int blocks = min(NUM_BLOCKS,
-                         (N + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
+                         (N_leaves + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(start);
             volatile_node<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaves.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
             d_nodes = h_nodes;
+            d_leaves = h_leaves;
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -177,14 +250,17 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(start);
             separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
+                thrust::raw_pointer_cast(d_leaves_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaf_data.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
-            d_node_data = h_node_data;
+            thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+            thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -192,31 +268,17 @@ int main(int argc, char* argv[]) {
 
 
             cudaEventRecord(start);
-            atomic_read<<<blocks,THREADS_PER_BLOCK>>>(
-                thrust::raw_pointer_cast(d_nodes.data()),
-                N,
-                final_start,
-                thrust::raw_pointer_cast(d_flags.data()));
-            cudaEventRecord(stop);
-
-            thrust::fill(d_flags.begin(), d_flags.end(), 0);
-            d_nodes = h_nodes;
-
-            cudaEventSynchronize(stop);
-            cudaEventElapsedTime(&elapsed_time, start, stop);
-            atomic_read_t += elapsed_time;
-
-
-            cudaEventRecord(start);
             atomic_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaves.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
             d_nodes = h_nodes;
+            d_leaves = h_leaves;
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -226,13 +288,15 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(start);
             asm_read<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaves.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
             d_nodes = h_nodes;
+            d_leaves = h_leaves;
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -242,13 +306,15 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(start);
             asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaves.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
             d_nodes = h_nodes;
+            d_leaves = h_leaves;
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -258,14 +324,17 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(start);
             separate_asm_read<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
+                thrust::raw_pointer_cast(d_leaves_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaf_data.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
-            d_node_data = h_node_data;
+            thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+            thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -275,14 +344,17 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(start);
             separate_asm_read_conditional<<<blocks,THREADS_PER_BLOCK>>>(
                 thrust::raw_pointer_cast(d_nodes_nodata.data()),
+                thrust::raw_pointer_cast(d_leaves_nodata.data()),
                 thrust::raw_pointer_cast(d_node_data.data()),
-                N,
-                final_start,
+                thrust::raw_pointer_cast(d_leaf_data.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
                 thrust::raw_pointer_cast(d_flags.data()));
             cudaEventRecord(stop);
 
             thrust::fill(d_flags.begin(), d_flags.end(), 0);
-            d_node_data = h_node_data;
+            thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+            thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
@@ -292,7 +364,6 @@ int main(int argc, char* argv[]) {
 
         volatile_node_t /= N_iter;
         separate_volatile_data_t /= N_iter;
-        atomic_read_t /= N_iter;
         atomic_read_conditional_t /= N_iter;
         asm_read_t /= N_iter;
         asm_read_conditional_t /= N_iter;
@@ -308,8 +379,6 @@ int main(int argc, char* argv[]) {
             << volatile_node_t << " ms." << std::endl;
         outfile << "Time for separate volatile data:               "
             << separate_volatile_data_t << " ms." << std::endl;
-        outfile << "Time for atomicAdd():                          "
-            << atomic_read_t << " ms." << std::endl;
         outfile << "Time for conditional atomicAdd():              "
             << atomic_read_conditional_t << " ms." << std::endl;
         outfile << "Time for inline PTX:                           "
