@@ -1,3 +1,5 @@
+#pragma once
+
 #define THREADS_PER_BLOCK 512
 // M2090: 1536 threads/MP
 //        8 blocks/MP
@@ -14,6 +16,8 @@
 #else
 #define NUM_BLOCKS 48
 #endif
+
+#include "../kernels/bintree_build_kernel.cuh"
 
 struct Node
 {
@@ -488,20 +492,49 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
     return;
 }
 
+template <typename UInteger>
 __global__ void sm_flags_volatile_node(volatile Node* nodes,
                                        volatile Leaf* leaves,
                                        const unsigned int n_leaves,
                                        const float* raw_data,
+                                       const UInteger keys,
                                        unsigned int *g_flags)
 {
-    int tid, lower, upper, index, left, right;
+    int tid, lower, upper, index, left, right, direction;
     unsigned int flags;
     float data;
-    bool first_arrival;
+    bool first_arrival, in_block;
 
     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
     lower = blockIdx.x * THREADS_PER_BLOCK;
     upper = lower + THREADS_PER_BLOCK - 1;
 
     tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < n_leaves)
+    {
+        leaves[tid].data = raw_data[tid];
+
+        __threadfence();
+
+        index = leaves[tid].parent;
+        if (nodes[nodes[index].parent].left == index) {
+            // We are at a left node.
+            // Root node is a right node, so this still works for index = 0;
+            in_block = (index <= upper);
+        }
+        else {
+            in_block = (index >= lower);
+        }
+
+        if (in_block) {
+            flags = sm_flags;
+            flag_index =
+        }
+        else {
+            flags = g_flags;
+            flag_index =
+        }
+
+    }
 }
