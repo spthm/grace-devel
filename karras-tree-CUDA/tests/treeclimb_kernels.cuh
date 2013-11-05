@@ -17,7 +17,7 @@
 #define NUM_BLOCKS 48
 #endif
 
-#include "../kernels/bintree_build_kernel.cuh"
+#include "../kernels/bintree_build_kernels.cuh"
 
 struct Node
 {
@@ -492,49 +492,87 @@ __global__ void separate_asm_read_conditional(const NodeNoData* nodes,
     return;
 }
 
-template <typename UInteger>
 __global__ void sm_flags_volatile_node(volatile Node* nodes,
                                        volatile Leaf* leaves,
                                        const unsigned int n_leaves,
                                        const float* raw_data,
-                                       const UInteger keys,
                                        unsigned int *g_flags)
 {
-    int tid, lower, upper, index, left, right, direction;
-    unsigned int flags;
+    int tid, lower, upper, index, flag_index, left, right;
+    unsigned int *flags;
     float data;
     bool first_arrival, in_block;
 
     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
-    lower = blockIdx.x * THREADS_PER_BLOCK;
-    upper = lower + THREADS_PER_BLOCK - 1;
+    lower = blockIdx.x * blockDim.x;
+    upper = lower + blockDim.x - 1;
 
     tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (tid < n_leaves)
+    // Loop as long as there are > 0 threads in this block with tid < n_leaves,
+    // so all threads hit the __syncthreads().
+    while (tid - threadIdx.x < n_leaves)
     {
-        leaves[tid].data = raw_data[tid];
+        if (tid < n_leaves)
+        {
+            leaves[tid].data = raw_data[tid];
 
-        __threadfence();
 
-        index = leaves[tid].parent;
-        if (nodes[nodes[index].parent].left == index) {
-            // We are at a left node.
-            // Root node is a right node, so this still works for index = 0;
-            in_block = (index <= upper);
-        }
-        else {
-            in_block = (index >= lower);
-        }
+            index = leaves[tid].parent;
+            in_block = (index >= lower && upper >= index);
 
-        if (in_block) {
             flags = sm_flags;
-            flag_index =
-        }
-        else {
-            flags = g_flags;
-            flag_index =
-        }
+            flag_index = index % THREADS_PER_BLOCK;
+            __threadfence_block();
 
+            if (!in_block) {
+                flags = g_flags;
+                flag_index = index;
+                __threadfence();
+            }
+
+            first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            while (!first_arrival)
+            {
+                left = nodes[index].left;
+                right = nodes[index].right;
+
+                if (nodes[index].left_is_leaf) {
+                    data = min(leaves[left].data, leaves[right].data);
+                }
+                else {
+                    data = min(nodes[left].data, nodes[right].data);
+                }
+
+                nodes[index].data = data;
+
+                if (index == 0) {
+                    // Root node processed, so all nodes processed.
+                    return;
+                }
+
+                index = nodes[index].parent;
+                in_block = (index >= lower && upper >= index);
+
+                flags = sm_flags;
+                flag_index = index % THREADS_PER_BLOCK;
+                __threadfence_block();
+
+                if (!in_block) {
+                    flags = g_flags;
+                    flag_index = index;
+                    __threadfence();
+                }
+                first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            }
+        }
+        // All threads need to regard the shared flags as representing the same
+        // indices.
+        __syncthreads();
+
+        tid += blockDim.x*gridDim.x;
+        lower += blockDim.x*gridDim.x;
+        upper += blockDim.x*gridDim.x;
     }
+    return;
 }
