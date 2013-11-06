@@ -504,10 +504,10 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
     bool first_arrival, in_block;
 
     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
-    lower = blockIdx.x * blockDim.x;
-    upper = lower + blockDim.x - 1;
+    lower = blockIdx.x * THREADS_PER_BLOCK;
+    upper = lower + THREADS_PER_BLOCK - 1;
 
-    tid = threadIdx.x + blockIdx.x * blockDim.x;
+    tid = threadIdx.x + blockIdx.x * THREADS_PER_BLOCK;
 
     // Loop as long as there are > 0 threads in this block with tid < n_leaves,
     // so all threads hit the __syncthreads().
@@ -566,13 +566,15 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                 first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             }
         }
-        // All threads need to regard the shared flags as representing the same
-        // indices.
+        // Before we move on to a new block of leaves to process, wipe shared
+        // memory flags.
+        __syncthreads();
+        sm_flags[threadIdx.x] = 0;
         __syncthreads();
 
-        tid += blockDim.x*gridDim.x;
-        lower += blockDim.x*gridDim.x;
-        upper += blockDim.x*gridDim.x;
+        tid += THREADS_PER_BLOCK*gridDim.x;
+        lower += THREADS_PER_BLOCK*gridDim.x;
+        upper += THREADS_PER_BLOCK*gridDim.x;
     }
     return;
 }
