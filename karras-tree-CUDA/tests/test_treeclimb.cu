@@ -135,18 +135,20 @@ int main(int argc, char* argv[]) {
 
         h_nodes[left].left = left - 1;
         h_nodes[left].right = left;
+        h_nodes[left].far_end = left - 1;
         h_nodes[left].left_is_leaf = true;
         h_nodes[left].right_is_leaf = true;
 
         h_nodes[right].left = right;
         h_nodes[right].right = right + 1;
+        h_nodes[right].far_end = right + 1;
         h_nodes[right].left_is_leaf = true;
         h_nodes[right].right_is_leaf = true;
 
         h_leaves[left-1].parent = h_leaves[left].parent = left;
         h_leaves[right].parent = h_leaves[right+1].parent = right;
     }
-    // Set up all except bottom and top levels.
+    // Set up all except bottom and top levels, starting at bottom-but-one.
     for (unsigned int height=2; height<depth; height++) {
         for (unsigned int left=(1u<<height)-1;
                           left<N_leaves-1;
@@ -157,11 +159,13 @@ int main(int argc, char* argv[]) {
 
             h_nodes[left].left = left_split;
             h_nodes[left].right = left_split + 1;
+            h_nodes[left].far_end = left - (1u<<height) + 1;
             h_nodes[left].left_is_leaf = false;
             h_nodes[left].right_is_leaf = false;
 
             h_nodes[right].left = right_split;
             h_nodes[right].right = right_split + 1;
+            h_nodes[right].far_end = right + (1u<<height) - 1;
             h_nodes[right].left_is_leaf = false;
             h_nodes[right].right_is_leaf = false;
 
@@ -172,6 +176,7 @@ int main(int argc, char* argv[]) {
     // Set up root node and link children to it.
     h_nodes[0].left = N_leaves/2 - 1;
     h_nodes[0].right = N_leaves/2;
+    h_nodes[0].far_end = N_leaves - 1;
     h_nodes[0].left_is_leaf = false;
     h_nodes[0].right_is_leaf = false;
     h_nodes[N_leaves/2 - 1].parent = h_nodes[N_leaves/2].parent = 0;
@@ -186,9 +191,9 @@ int main(int argc, char* argv[]) {
         h_nodes_nodata[i].left = h_nodes[i].left;
         h_nodes_nodata[i].right = h_nodes[i].right;
         h_nodes_nodata[i].parent = h_nodes[i].parent;
+        h_nodes_nodata[i].far_end = h_nodes[i].far_end;
         h_nodes_nodata[i].left_is_leaf = h_nodes[i].left_is_leaf;
         h_nodes_nodata[i].right_is_leaf = h_nodes[i].right_is_leaf;
-        h_nodes_nodata[i].level = h_nodes[i].level;
     }
     h_leaves_nodata[N_leaves-1].parent = h_leaves[N_leaves-1].parent;
 
@@ -335,13 +340,20 @@ int main(int argc, char* argv[]) {
         thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
         thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
 
-
+        thrust::device_vector<int> d_debug(2);
         sm_flags_volatile_node<<<blocks,THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_nodes.data()),
             thrust::raw_pointer_cast(d_leaves.data()),
             N_leaves,
             thrust::raw_pointer_cast(d_data.data()),
-            thrust::raw_pointer_cast(d_flags.data()));
+            thrust::raw_pointer_cast(d_flags.data()),
+            thrust::raw_pointer_cast(d_debug.data()));
+        std::cout << "flags[0]:      " << d_flags[0] << std::endl;
+        std::cout << "far_end[0]:    " << h_nodes[0].far_end << std::endl;
+        std::cout << "flags[1024]:   " << d_flags[1024] << std::endl;
+        std::cout << "far_end[1024]: " << h_nodes[1024].far_end << std::endl;
+        std::cout << "debug[0]:      " << d_debug[0] << std::endl;
+        std::cout << "debug[1]:      " << d_debug[1] << std::endl;
         check_nodes(d_nodes, h_nodes_ref, "sm volatile");
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;

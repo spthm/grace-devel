@@ -24,11 +24,12 @@ struct Node
     int left;
     int right;
     int parent;
+    // Index of the leaf within this node such that |(index - far_end)| is
+    // maximized.
+    int far_end;
 
     bool left_is_leaf;
     bool right_is_leaf;
-
-    unsigned int level;
 
     float data;
 };
@@ -45,11 +46,10 @@ struct NodeNoData
     int left;
     int right;
     int parent;
+    int far_end;
 
     bool left_is_leaf;
     bool right_is_leaf;
-
-    unsigned int level;
 };
 
 struct LeafNoData
@@ -496,16 +496,18 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                                        volatile Leaf* leaves,
                                        const unsigned int n_leaves,
                                        const float* raw_data,
-                                       unsigned int *g_flags)
+                                       unsigned int* g_flags,
+                                       int* debug)
 {
-    int tid, lower, upper, index, flag_index, left, right;
+    int tid, index, flag_index, left, right;
+    int block_lower, block_upper;
     unsigned int *flags;
     float data;
     bool first_arrival, in_block;
 
     __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
-    lower = blockIdx.x * THREADS_PER_BLOCK;
-    upper = lower + THREADS_PER_BLOCK - 1;
+    block_lower = blockIdx.x * THREADS_PER_BLOCK;
+    block_upper = block_lower + THREADS_PER_BLOCK - 1;
 
     tid = threadIdx.x + blockIdx.x * THREADS_PER_BLOCK;
 
@@ -519,7 +521,8 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
 
 
             index = leaves[tid].parent;
-            in_block = (index >= lower && upper >= index);
+            in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                        max(nodes[index].far_end, index) <= block_upper);
 
             flags = sm_flags;
             flag_index = index % THREADS_PER_BLOCK;
@@ -552,7 +555,14 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                 }
 
                 index = nodes[index].parent;
-                in_block = (index >= lower && upper >= index);
+                in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                            max(nodes[index].far_end, index) <= block_upper);
+                if (index == 0) {
+                atomicAdd(debug, (int)in_block);
+                }
+                else if (index == 1024) {
+                    atomicAdd(debug+1, (int)in_block);
+                }
 
                 flags = sm_flags;
                 flag_index = index % THREADS_PER_BLOCK;
@@ -573,8 +583,8 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
         __syncthreads();
 
         tid += THREADS_PER_BLOCK*gridDim.x;
-        lower += THREADS_PER_BLOCK*gridDim.x;
-        upper += THREADS_PER_BLOCK*gridDim.x;
+        block_lower += THREADS_PER_BLOCK*gridDim.x;
+        block_upper += THREADS_PER_BLOCK*gridDim.x;
     }
     return;
 }
