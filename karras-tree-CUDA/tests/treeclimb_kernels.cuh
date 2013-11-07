@@ -595,11 +595,11 @@ __global__ void sm_flags_volatile_node_noloop(volatile Node* nodes,
     float data;
     bool first_arrival, in_block;
 
-    __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
-    block_lower = blockIdx.x * THREADS_PER_BLOCK;
-    block_upper = block_lower + THREADS_PER_BLOCK - 1;
+    __shared__ unsigned int sm_flags[1024];
+    block_lower = blockIdx.x * 1024;
+    block_upper = block_lower + 1024 - 1;
 
-    tid = threadIdx.x + blockIdx.x * THREADS_PER_BLOCK;
+    tid = threadIdx.x + blockIdx.x * 1024;
 
     if (tid < n_leaves)
     {
@@ -611,7 +611,7 @@ __global__ void sm_flags_volatile_node_noloop(volatile Node* nodes,
                     max(nodes[index].far_end, index) <= block_upper);
 
         flags = sm_flags;
-        flag_index = index % THREADS_PER_BLOCK;
+        flag_index = index % 1024;
         __threadfence_block();
 
         if (!in_block) {
@@ -645,7 +645,7 @@ __global__ void sm_flags_volatile_node_noloop(volatile Node* nodes,
                         max(nodes[index].far_end, index) <= block_upper);
 
             flags = sm_flags;
-            flag_index = index % THREADS_PER_BLOCK;
+            flag_index = index % 1024;
             __threadfence_block();
 
             if (!in_block) {
