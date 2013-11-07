@@ -65,11 +65,11 @@ void morton_keys(const thrust::device_vector<Float>& d_xs,
     scale.y = span / (AABB_top.y - AABB_bottom.y);
     scale.z = span / (AABB_top.z - AABB_bottom.z);
 
-    int blocks = min(MAX_BLOCKS, (n_keys + THREADS_PER_BLOCK-1)
-                                  / THREADS_PER_BLOCK);
+    int blocks = min(MAX_BLOCKS, (n_keys + MORTON_THREADS_PER_BLOCK-1)
+                                  / MORTON_THREADS_PER_BLOCK);
 
     d_keys.resize(n_keys);
-    gpu::morton_keys_kernel<<<blocks, THREADS_PER_BLOCK>>>(
+    gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_xs.data()),
         thrust::raw_pointer_cast(d_ys.data()),
         thrust::raw_pointer_cast(d_zs.data()),

@@ -254,10 +254,10 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
 {
     UInteger32 n_keys = d_keys.size();
 
-    int blocks = min(MAX_BLOCKS, (n_keys + THREADS_PER_BLOCK-1)
-                                  / THREADS_PER_BLOCK);
+    int blocks = min(MAX_BLOCKS, (n_keys + BUILD_THREADS_PER_BLOCK-1)
+                                  / BUILD_THREADS_PER_BLOCK);
 
-    gpu::build_nodes_kernel<<<blocks,THREADS_PER_BLOCK>>>(
+    gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         (Node*)thrust::raw_pointer_cast(d_nodes.data()),
         (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
         (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
@@ -279,10 +279,10 @@ void find_AABBs(thrust::device_vector<Node>& d_nodes,
     UInteger32 n_leaves = d_leaves.size();
     d_AABB_flags.resize(n_leaves-1);
 
-    int blocks = min(MAX_BLOCKS, (n_leaves + THREADS_PER_BLOCK-1)
-                                  / THREADS_PER_BLOCK);
+    int blocks = min(MAX_BLOCKS, (n_leaves + AABB_THREADS_PER_BLOCK-1)
+                                  / AABB_THREADS_PER_BLOCK);
 
-    gpu::find_AABBs_kernel<<<blocks,THREADS_PER_BLOCK>>>(
+    gpu::find_AABBs_kernel<<<blocks,AABB_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.data()),
         thrust::raw_pointer_cast(d_leaves.data()),
         n_leaves,
