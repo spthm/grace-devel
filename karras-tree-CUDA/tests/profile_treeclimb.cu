@@ -88,13 +88,13 @@ int main(int argc, char* argv[]) {
     std::string file_num_str;
     convert << file_num;
     file_num_str = convert.str();
-    const char *file_name = ("profile_tree_climb_" + file_num_str + ".log").c_str();
+    const char *file_name = ("profile_treeclimb_" + file_num_str + ".log").c_str();
 
     std::cout << "Will profile with trees of depth " << min_level
               << " to " << max_level << ", making " << N_iter
               << " iterations per tree." << std::endl;
     std::cout << "Running on device " << device_id << std::endl;
-    std::cout << "Saving results to " << file_name << std::endl;
+    std::cout << "Will save results to " << file_name << std::endl;
 
     cudaGetDeviceProperties(&deviceProp, device_id);
     cudaSetDevice(device_id);
