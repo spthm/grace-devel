@@ -123,7 +123,7 @@ int main(int argc, char* argv[]) {
         float atomic_read_conditional_t;
         float asm_read_t, asm_read_conditional_t;
         float separate_asm_read_t, separate_asm_read_conditional_t;
-        float sm_flags_volatile_node_t;
+        float sm_flags_volatile_node_t, sm_flags_volatile_node_noloop_t;
         float elapsed_time;
 
         std::cout << "Calculating for tree of depth " << levels << "..."
@@ -262,6 +262,8 @@ int main(int argc, char* argv[]) {
          */
         int blocks = min(NUM_BLOCKS,
                          (N_leaves + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
+        int noloop_blocks = (N_leaves + 1023)
+                             / 1024;
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(start);
@@ -412,6 +414,24 @@ int main(int argc, char* argv[]) {
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
             sm_flags_volatile_node_t += elapsed_time;
+
+
+            cudaEventRecord(start);
+            sm_flags_volatile_node<<<noloop_blocks,1024>>>(
+                thrust::raw_pointer_cast(d_nodes.data()),
+                thrust::raw_pointer_cast(d_leaves.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
+                thrust::raw_pointer_cast(d_flags.data()));
+            cudaEventRecord(stop);
+
+            thrust::fill(d_flags.begin(), d_flags.end(), 0);
+            d_nodes = h_nodes;
+            d_leaves = h_leaves;
+
+            cudaEventSynchronize(stop);
+            cudaEventElapsedTime(&elapsed_time, start, stop);
+            sm_flags_volatile_node_noloop_t += elapsed_time;
         }
 
 
