@@ -465,7 +465,7 @@ int main(int argc, char* argv[]) {
         outfile << "Time for shared memory flags volatile node:          "
                 << sm_flags_volatile_node_t << " ms." << std::endl;
         outfile << "Time for shared memory flags separate volatile data: "
-                << sm_flags_separate_volatile_data_t " ms". << std::endl;
+                << sm_flags_separate_volatile_data_t " ms." << std::endl;
         outfile << std::endl;
         outfile << std::endl;
         outfile.close();
