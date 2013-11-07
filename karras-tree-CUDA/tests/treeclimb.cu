@@ -351,5 +351,18 @@ int main(int argc, char* argv[]) {
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
         d_nodes = h_nodes;
         d_leaves = h_leaves;
+
+        sm_flags_separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
+                thrust::raw_pointer_cast(d_nodes_nodata.data()),
+                thrust::raw_pointer_cast(d_leaves_nodata.data()),
+                thrust::raw_pointer_cast(d_node_data.data()),
+                thrust::raw_pointer_cast(d_leaf_data.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
+                thrust::raw_pointer_cast(d_flags.data()));
+        check_data(d_node_data, h_nodes_ref, "sm volatile separate data");
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+        thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
     }
 }

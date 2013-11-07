@@ -510,7 +510,7 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
 
     tid = threadIdx.x + blockIdx.x * THREADS_PER_BLOCK;
 
-    // Loop as long as there are > 0 threads in this block with tid < n_leaves,
+    // Loop provided there are > 0 threads in this block with tid < n_leaves,
     // so all threads hit the __syncthreads().
     while (tid - threadIdx.x < n_leaves)
     {
@@ -547,6 +547,96 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                 }
 
                 nodes[index].data = data;
+
+                if (index == 0) {
+                    // Root node processed, so all nodes processed.
+                    break;
+                }
+
+                index = nodes[index].parent;
+                in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                            max(nodes[index].far_end, index) <= block_upper);
+
+                flags = sm_flags;
+                flag_index = index % THREADS_PER_BLOCK;
+                __threadfence_block();
+
+                if (!in_block) {
+                    flags = g_flags;
+                    flag_index = index;
+                    __threadfence();
+                }
+
+                first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            }
+        }
+        // Before we move on to a new block of leaves to process, wipe shared
+        // memory flags.
+        __syncthreads();
+        sm_flags[threadIdx.x] = 0;
+        __syncthreads();
+
+        tid += THREADS_PER_BLOCK*gridDim.x;
+        block_lower += THREADS_PER_BLOCK*gridDim.x;
+        block_upper += THREADS_PER_BLOCK*gridDim.x;
+    }
+    return;
+}
+
+__global__ void sm_flags_separate_volatile_data(const NodeNoData* nodes,
+                                                const LeafNoData* leaves,
+                                                volatile float* node_data,
+                                                volatile float* leaf_data,
+                                                const unsigned int n_leaves,
+                                                const float* raw_data,
+                                                unsigned int* g_flags)
+{
+    int tid, index, flag_index, left, right;
+    int block_lower, block_upper;
+    unsigned int *flags;
+    float data;
+    bool first_arrival, in_block;
+
+    __shared__ unsigned int sm_flags[THREADS_PER_BLOCK];
+    block_lower = blockIdx.x * THREADS_PER_BLOCK;
+    block_upper = block_lower + THREADS_PER_BLOCK - 1;
+
+    tid = threadIdx.x + blockIdx.x * THREADS_PER_BLOCK;
+
+    while (tid - threadIdx.x < n_leaves)
+    {
+        if (tid < n_leaves)
+        {
+            leaf_data[tid] = raw_data[tid];
+
+            index = leaves[tid].parent;
+            in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                        max(nodes[index].far_end, index) <= block_upper);
+
+            flags = sm_flags;
+            flag_index = index % THREADS_PER_BLOCK;
+            __threadfence_block();
+
+            if (!in_block) {
+                flags = g_flags;
+                flag_index = index;
+                __threadfence();
+            }
+
+            first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            while (!first_arrival)
+            {
+                left = nodes[index].left;
+                right = nodes[index].right;
+
+                if (nodes[index].left_is_leaf) {
+                    data = min(leaf_data[left], leaf_data[right]);
+                }
+                else {
+                    data = min(node_data[left], node_data[right]);
+                }
+
+                node_data[index] = data;
 
                 if (index == 0) {
                     // Root node processed, so all nodes processed.

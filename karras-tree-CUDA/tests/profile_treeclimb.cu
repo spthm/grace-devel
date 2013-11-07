@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
         float atomic_read_conditional_t;
         float asm_read_t, asm_read_conditional_t;
         float separate_asm_read_t, separate_asm_read_conditional_t;
-        float sm_flags_volatile_node_t;
+        float sm_flags_volatile_node_t, sm_flags_separate_volatile_data_t;
         float elapsed_time;
 
         std::cout << "Calculating for tree of depth " << levels << "..."
@@ -411,6 +411,25 @@ int main(int argc, char* argv[]) {
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
             sm_flags_volatile_node_t += elapsed_time;
+
+            cudaEventRecord(start);
+            sm_flags_separate_volatile_data<<<blocks,THREADS_PER_BLOCK>>>(
+                thrust::raw_pointer_cast(d_nodes_nodata.data()),
+                thrust::raw_pointer_cast(d_leaves_nodata.data()),
+                thrust::raw_pointer_cast(d_node_data.data()),
+                thrust::raw_pointer_cast(d_leaf_data.data()),
+                N_leaves,
+                thrust::raw_pointer_cast(d_data.data()),
+                thrust::raw_pointer_cast(d_flags.data()));
+            cudaEventRecord(stop);
+
+            thrust::fill(d_flags.begin(), d_flags.end(), 0);
+            thrust::fill(d_node_data.begin(), d_node_data.end(), 0);
+            thrust::fill(d_leaf_data.begin(), d_leaf_data.end(), 0);
+
+            cudaEventSynchronize(stop);
+            cudaEventElapsedTime(&elapsed_time, start, stop);
+            sm_flags_separate_volatile_data_t += elapsed_time;
         }
 
 
@@ -422,28 +441,31 @@ int main(int argc, char* argv[]) {
         separate_asm_read_t /= N_iter;
         separate_asm_read_conditional_t /= N_iter;
         sm_flags_volatile_node_t /= N_iter;
+        sm_flags_separate_volatile_data_t /= N_iter;
 
 
         /* Write results of this iteration level to file. */
 
         outfile.open(file_name.c_str(),
                      std::ofstream::out | std::ofstream::app);
-        outfile << "Time for volatile node:                        "
-            << volatile_node_t << " ms." << std::endl;
-        outfile << "Time for separate volatile data:               "
-            << separate_volatile_data_t << " ms." << std::endl;
-        outfile << "Time for conditional atomicAdd():              "
-            << atomic_read_conditional_t << " ms." << std::endl;
-        outfile << "Time for inline PTX:                           "
-            << asm_read_t << " ms." << std::endl;
-        outfile << "Time for conditional inline PTX:               "
-            << asm_read_conditional_t << " ms." << std::endl;
-        outfile << "Time for separate data inline PTX:             "
-            << separate_asm_read_t << " ms." << std::endl;
-        outfile << "Time for separate data conditional inline PTX: "
-            << separate_asm_read_conditional_t << " ms." << std::endl;
-        outfile << "Time for shared memory flags volatile node:    "
-            << sm_flags_volatile_node_t << " ms." << std::endl;
+        outfile << "Time for volatile node:                              "
+                << volatile_node_t << " ms." << std::endl;
+        outfile << "Time for separate volatile data:                     "
+                << separate_volatile_data_t << " ms." << std::endl;
+        outfile << "Time for conditional atomicAdd():                    "
+                << atomic_read_conditional_t << " ms." << std::endl;
+        outfile << "Time for inline PTX:                                 "
+                << asm_read_t << " ms." << std::endl;
+        outfile << "Time for conditional inline PTX:                     "
+                << asm_read_conditional_t << " ms." << std::endl;
+        outfile << "Time for separate data inline PTX:                   "
+                << separate_asm_read_t << " ms." << std::endl;
+        outfile << "Time for separate data conditional inline PTX:       "
+                << separate_asm_read_conditional_t << " ms." << std::endl;
+        outfile << "Time for shared memory flags volatile node:          "
+                << sm_flags_volatile_node_t << " ms." << std::endl;
+        outfile << "Time for shared memory flags separate volatile data: "
+                << sm_flags_separate_volatile_data_t << std::endl;
         outfile << std::endl;
         outfile << std::endl;
         outfile.close();
