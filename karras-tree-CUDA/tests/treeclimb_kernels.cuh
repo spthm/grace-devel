@@ -496,8 +496,7 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                                        volatile Leaf* leaves,
                                        const unsigned int n_leaves,
                                        const float* raw_data,
-                                       unsigned int* g_flags,
-                                       int* debug)
+                                       unsigned int* g_flags)
 {
     int tid, index, flag_index, left, right;
     int block_lower, block_upper;
@@ -551,18 +550,12 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
 
                 if (index == 0) {
                     // Root node processed, so all nodes processed.
-                    return;
+                    break;
                 }
 
                 index = nodes[index].parent;
                 in_block = (min(nodes[index].far_end, index) >= block_lower &&
                             max(nodes[index].far_end, index) <= block_upper);
-                if (index == 0) {
-                atomicAdd(debug, (int)in_block);
-                }
-                else if (index == 1024) {
-                    atomicAdd(debug+1, (int)in_block);
-                }
 
                 flags = sm_flags;
                 flag_index = index % THREADS_PER_BLOCK;
@@ -573,6 +566,7 @@ __global__ void sm_flags_volatile_node(volatile Node* nodes,
                     flag_index = index;
                     __threadfence();
                 }
+
                 first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             }
         }
