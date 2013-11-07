@@ -72,6 +72,7 @@ int main(int argc, char* argv[]) {
               << " iterations per tree." << std::endl;
 
     cudaGetDeviceProperties(&deviceProp, 0);
+    cudaSetDevice(0);
     // Wipe the file, if it exists.
     outfile.open("profile_treeclimb_results.log",
                  std::ofstream::out | std::ofstream::trunc);
