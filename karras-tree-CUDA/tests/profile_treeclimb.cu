@@ -75,10 +75,12 @@ int main(int argc, char* argv[]) {
     // Wipe the file, if it exists.
     outfile.open("profile_treeclimb_results.log",
                  std::ofstream::out | std::ofstream::trunc);
-    outfile << "Device 0:             " << deviceProp.name << std::endl;
-    outfile << "Starting tree depth:  " << min_level << std::endl;
-    outfile << "Finishing tree depth: " << max_level << std::endl;
-    outfile << "Iterations per tree:  " << N_iter << std::endl;
+    outfile << "Device 0:                 " << deviceProp.name << std::endl;
+    outfile << "Starting tree depth:      " << min_level << std::endl;
+    outfile << "Finishing tree depth:     " << max_level << std::endl;
+    outfile << "Iterations per tree:      " << N_iter << std::endl;
+    outfile << "Threads per block:        " << THREADS_PER_BLOCK << std::endl;
+    outfile << "Maximum number of blocks: " << NUM_BLOCKS << std::endl;
     outfile << std::endl;
     outfile << std::endl;
     outfile.close();
