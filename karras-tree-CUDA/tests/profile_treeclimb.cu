@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
     std::string file_num_str;
     convert << file_num;
     file_num_str = convert.str();
-    const char *file_name = ("profile_treeclimb_" + file_num_str + ".log").c_str();
+    std::string file_name = ("profile_treeclimb_" + file_num_str + ".log");
 
     std::cout << "Will profile with trees of depth " << min_level
               << " to " << max_level << ", making " << N_iter
@@ -99,8 +99,7 @@ int main(int argc, char* argv[]) {
     cudaGetDeviceProperties(&deviceProp, device_id);
     cudaSetDevice(device_id);
     // Wipe the file, if it exists.
-    outfile.open(file_name,
-                 std::ofstream::out | std::ofstream::trunc);
+    outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::trunc);
     outfile << "Device " << device_id
                     << ":                 " << deviceProp.name << std::endl;
     outfile << "Starting tree depth:      " << min_level << std::endl;
@@ -123,13 +122,13 @@ int main(int argc, char* argv[]) {
         float atomic_read_conditional_t;
         float asm_read_t, asm_read_conditional_t;
         float separate_asm_read_t, separate_asm_read_conditional_t;
-        float sm_flags_volatile_node_t, sm_flags_volatile_node_noloop_t;
+        float sm_flags_volatile_node_t;
         float elapsed_time;
 
         std::cout << "Calculating for tree of depth " << levels << "..."
                   << std::endl;
 
-        outfile.open(file_name,
+        outfile.open(file_name.c_str(),
                      std::ofstream::out | std::ofstream::app);
         unsigned int N_leaves = 1u << (levels-1);
         outfile << "Will generate " << levels << " levels, with "
@@ -262,8 +261,6 @@ int main(int argc, char* argv[]) {
          */
         int blocks = min(NUM_BLOCKS,
                          (N_leaves + THREADS_PER_BLOCK-1)/THREADS_PER_BLOCK);
-        int noloop_blocks = (N_leaves + 1023)
-                             / 1024;
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(start);
@@ -414,24 +411,6 @@ int main(int argc, char* argv[]) {
             cudaEventSynchronize(stop);
             cudaEventElapsedTime(&elapsed_time, start, stop);
             sm_flags_volatile_node_t += elapsed_time;
-
-
-            cudaEventRecord(start);
-            sm_flags_volatile_node<<<noloop_blocks,1024>>>(
-                thrust::raw_pointer_cast(d_nodes.data()),
-                thrust::raw_pointer_cast(d_leaves.data()),
-                N_leaves,
-                thrust::raw_pointer_cast(d_data.data()),
-                thrust::raw_pointer_cast(d_flags.data()));
-            cudaEventRecord(stop);
-
-            thrust::fill(d_flags.begin(), d_flags.end(), 0);
-            d_nodes = h_nodes;
-            d_leaves = h_leaves;
-
-            cudaEventSynchronize(stop);
-            cudaEventElapsedTime(&elapsed_time, start, stop);
-            sm_flags_volatile_node_noloop_t += elapsed_time;
         }
 
 
@@ -447,7 +426,7 @@ int main(int argc, char* argv[]) {
 
         /* Write results of this iteration level to file. */
 
-        outfile.open(file_name,
+        outfile.open(file_name.c_str(),
                      std::ofstream::out | std::ofstream::app);
         outfile << "Time for volatile node:                        "
             << volatile_node_t << " ms." << std::endl;
