@@ -2,6 +2,8 @@
 #include <iomanip>
 #include <cstdlib>
 #include <fstream>
+#include <string>
+#include <sstream>
 
 #include <thrust/random.h>
 #include <thrust/device_vector.h>
@@ -47,7 +49,22 @@ int main(int argc, char* argv[]) {
     unsigned int max_level = 25;
     unsigned int min_level = 5;
     unsigned int N_iter = 1000;
-    if (argc > 3) {
+    unsigned int file_num = 1;
+    unsigned int device_id = 0;
+    if (argc > 5) {
+        min_level = (unsigned int) std::strtol(argv[1], NULL, 10);
+        max_level = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+        file_num = (unsigned int) std::strtol(argv[4], NULL, 10);
+        device_id = (unsigned int) std::strtol(argv[5], NULL, 10);
+    }
+    else if (argc > 4) {
+        min_level = (unsigned int) std::strtol(argv[1], NULL, 10);
+        max_level = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+        file_num = (unsigned int) std::strtol(argv[4], NULL, 10);
+    }
+    else if (argc > 3) {
         min_level = (unsigned int) std::strtol(argv[1], NULL, 10);
         max_level = (unsigned int) std::strtol(argv[2], NULL, 10);
         N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
@@ -67,16 +84,25 @@ int main(int argc, char* argv[]) {
     if (min_level < 2)
         min_level = 2;
 
+    std::ostringstream convert;
+    std::string file_num_str;
+    convert << file_num;
+    file_num_str = convert.str();
+    const char *file_name = ("profile_tree_climb_" + file_num_str + ".log").c_str();
+
     std::cout << "Will profile with trees of depth " << min_level
               << " to " << max_level << ", making " << N_iter
               << " iterations per tree." << std::endl;
+    std::cout << "Running on device " << device_id << std::endl;
+    std::cout << "Saving results to " << file_name << std::endl;
 
-    cudaGetDeviceProperties(&deviceProp, 0);
-    cudaSetDevice(0);
+    cudaGetDeviceProperties(&deviceProp, device_id);
+    cudaSetDevice(device_id);
     // Wipe the file, if it exists.
-    outfile.open("profile_treeclimb_results.log",
+    outfile.open(file_name,
                  std::ofstream::out | std::ofstream::trunc);
-    outfile << "Device 0:                 " << deviceProp.name << std::endl;
+    outfile << "Device " << device_id
+                    << ":                 " << deviceProp.name << std::endl;
     outfile << "Starting tree depth:      " << min_level << std::endl;
     outfile << "Finishing tree depth:     " << max_level << std::endl;
     outfile << "Iterations per tree:      " << N_iter << std::endl;
@@ -103,7 +129,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Calculating for tree of depth " << levels << "..."
                   << std::endl;
 
-        outfile.open("profile_treeclimb_results.log",
+        outfile.open(file_name,
                      std::ofstream::out | std::ofstream::app);
         unsigned int N_leaves = 1u << (levels-1);
         outfile << "Will generate " << levels << " levels, with "
@@ -401,7 +427,7 @@ int main(int argc, char* argv[]) {
 
         /* Write results of this iteration level to file. */
 
-        outfile.open("profile_treeclimb_results.log",
+        outfile.open(file_name,
                      std::ofstream::out | std::ofstream::app);
         outfile << "Time for volatile node:                        "
             << volatile_node_t << " ms." << std::endl;
