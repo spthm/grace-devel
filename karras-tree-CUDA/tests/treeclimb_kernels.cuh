@@ -1,6 +1,6 @@
 #pragma once
 
-#define THREADS_PER_BLOCK 512
+#define THREADS_PER_BLOCK 786
 // M2090: 1536 threads/MP
 //        8 blocks/MP
 //        16 MPs
@@ -11,11 +11,7 @@
 //          7 MPs
 //          512 threads/block -> maximum of 4 *resident* blocks/SM
 //                            -> 7 * 4 = 28 blocks
-#if __CUDA_ARCH__ >= 300
 #define NUM_BLOCKS 28
-#else
-#define NUM_BLOCKS 48
-#endif
 
 #include "../kernels/bintree_build_kernels.cuh"
 
