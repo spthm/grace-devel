@@ -1,6 +1,6 @@
 #pragma once
 
-#define THREADS_PER_BLOCK 786
+#define THREADS_PER_BLOCK 512
 // M2090: 1536 threads/MP
 //        8 blocks/MP
 //        16 MPs

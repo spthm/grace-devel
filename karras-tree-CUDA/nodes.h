@@ -14,6 +14,7 @@ struct Node
     Integer32 left;
     Integer32 right;
     Integer32 parent;
+    Integer32 far_end;
 
     // Equal to the common prefix of the keys which this node spans.
     unsigned int level;

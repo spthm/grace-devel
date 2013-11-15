@@ -49,8 +49,8 @@ __global__ void build_nodes_kernel(Node* nodes,
             span_max = span_max * 2;
         }
         /* Find the distance between the indices, l, using a binary search.
-         * (We find each bit t sequantially, starting with the most significant,
-         * span_max/2.)
+         * (We find each bit t sequantially, starting with the most
+         * significant, span_max/2.)
          */
         // TODO: Remove l, use end_index only if possible.
         l = 0;
@@ -87,6 +87,7 @@ __global__ void build_nodes_kernel(Node* nodes,
         nodes[index].level = node_prefix;
         nodes[index].left = split_index;
         nodes[index].right = split_index+1;
+        nodes[index].far_end = end_index;
         if (split_index == min(index, end_index)) {
             // Left child is a leaf.
             nodes[index].left_leaf_flag = true;
@@ -113,58 +114,74 @@ __global__ void build_nodes_kernel(Node* nodes,
 }
 
 template <typename Float>
-__global__ void find_AABBs_kernel(Node* nodes,
-                                  Leaf* leaves,
+__global__ void find_AABBs_kernel(volatile Node* nodes,
+                                  volatile Leaf* leaves,
                                   const UInteger32 n_leaves,
                                   const Float* xs,
                                   const Float* ys,
                                   const Float* zs,
                                   const Float* radii,
-                                  unsigned int* AABB_flags)
+                                  unsigned int* g_flags)
 {
     Integer32 tid, index, left_index, right_index;
+    Integer32 flag_index, block_lower, block_upper;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
-    Float *left_bottom, *right_bottom, *left_top, *right_top;
-    bool first_arrival;
+    volatile Float *left_bottom, *right_bottom, *left_top, *right_top;
+    unsigned int* flags;
+    bool first_arrival, in_block;
 
-    tid = threadIdx.x + blockIdx.x * blockDim.x;
+    __shared__ unsigned int sm_flags[AABB_THREADS_PER_BLOCK];
+    block_lower = blockIdx.x * AABB_THREADS_PER_BLOCK;
+    block_upper = block_lower + AABB_THREADS_PER_BLOCK - 1;
 
-    // Leaf index.
-    index = tid;
-    while (index < n_leaves)
+    tid = threadIdx.x + blockIdx.x * AABB_THREADS_PER_BLOCK;
+
+    // Loop provided there are > 0 threads in this block with tid < n_leaves,
+    // so all threads hit the __syncthreads().
+    while (tid - threadIdx.x < n_leaves)
     {
-        // Find the AABB of each leaf (i.e. each primitive) and write it.
-        r = radii[index];
-        x_min = xs[index] - r;
-        y_min = ys[index] - r;
-        z_min = zs[index] - r;
-
-        x_max = x_min + 2*r;
-        y_max = y_min + 2*r;
-        z_max = z_min + 2*r;
-
-        leaves[index].bottom[0] = x_min;
-        leaves[index].bottom[1] = y_min;
-        leaves[index].bottom[2] = z_min;
-
-        leaves[index].top[0] = x_max;
-        leaves[index].top[1] = y_max;
-        leaves[index].top[2] = z_max;
-
-        __threadfence();
-
-        // Travel up the tree.  The second thread to reach a node writes
-        // its AABB based on those of its children.  The first exits the loop.
-        index = leaves[index].parent;
-        first_arrival = (atomicAdd(&AABB_flags[index], 1) == 0);
-        while (true)
+        if (tid < n_leaves)
         {
-            if (first_arrival) {
-                break;
+            // Find the AABB of each leaf (i.e. each primitive) and write it.
+            r = radii[tid];
+            x_min = xs[tid] - r;
+            y_min = ys[tid] - r;
+            z_min = zs[tid] - r;
+
+            x_max = x_min + 2*r;
+            y_max = y_min + 2*r;
+            z_max = z_min + 2*r;
+
+            leaves[tid].bottom[0] = x_min;
+            leaves[tid].bottom[1] = y_min;
+            leaves[tid].bottom[2] = z_min;
+
+            leaves[tid].top[0] = x_max;
+            leaves[tid].top[1] = y_max;
+            leaves[tid].top[2] = z_max;
+
+            // Travel up the tree.  The second thread to reach a node writes
+            // its AABB based on those of its children.
+            // The first exits the loop.
+            index = leaves[tid].parent;
+            in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                        max(nodes[index].far_end, index) <= block_upper);
+
+            flags = sm_flags;
+            flag_index = index % AABB_THREADS_PER_BLOCK;
+            __threadfence_block();
+
+            if (!in_block) {
+                flags = g_flags;
+                flag_index = index;
+                __threadfence();
             }
-            else {
+
+            first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            while (!first_arrival)
+            {
                 left_index = nodes[index].left;
                 right_index = nodes[index].right;
                 if (nodes[index].left_leaf_flag) {
@@ -200,20 +217,38 @@ __global__ void find_AABBs_kernel(Node* nodes,
                 nodes[index].top[1] = y_max;
                 nodes[index].top[2] = z_max;
 
-                __threadfence();
+                if (index == 0) {
+                    // Root node processed, so all nodes processed.
+                    // Break rather than return because of the __syncthreads();
+                    break;
+                }
 
-                // If index == 0 then nodes[index].parent == 0.
                 index = nodes[index].parent;
-                first_arrival = (atomicAdd(&AABB_flags[index], 1) == 0);
-            }
-            if (index == 0 && AABB_flags[index] > 2) {
-                // If we get to here then the root node has just been processed,
-                // which means ALL other nodes have also been processed.
-                return;
+                in_block = (min(nodes[index].far_end, index) >= block_lower &&
+                            max(nodes[index].far_end, index) <= block_upper);
+
+                flags = sm_flags;
+                flag_index = index % AABB_THREADS_PER_BLOCK;
+                __threadfence_block();
+
+                if (!in_block) {
+                    flags = g_flags;
+                    flag_index = index;
+                    __threadfence();
+                }
+
+                first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             }
         }
-        tid = tid + blockDim.x * gridDim.x;
-        index = tid;
+        // Before we move on to a new block of leaves to process, wipe shared
+        // memory flags so all threads agree what sm_flags[i] corresponds to.
+        __syncthreads();
+        sm_flags[threadIdx.x] = 0;
+        __syncthreads();
+
+        tid += AABB_THREADS_PER_BLOCK * gridDim.x;
+        block_lower += AABB_THREADS_PER_BLOCK * gridDim.x;
+        block_upper += AABB_THREADS_PER_BLOCK * gridDim.x;
     }
     return;
 }
