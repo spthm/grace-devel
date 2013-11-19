@@ -1,6 +1,5 @@
 #include <iostream>
 #include <iomanip>
-#include <bitset>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
@@ -18,44 +17,31 @@
 int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
+    cudaDeviceProp deviceProp;
     std::ofstream outfile;
-    thrust::host_vector<float> h_write_f;
-    thrust::host_vector<UInteger32> h_write_uint;
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(9);
-    outfile.width(11);
+    outfile.precision(5);
     outfile.fill('0');
 
 
     /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
-    unsigned int N = 100000;
-    bool save_in = false;
-    bool save_out = false;
+    unsigned int levels = 20;
     unsigned int seed_factor = 1u;
-    if (argc > 3) {
+    if (argc > 2) {
         seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
-    else if (argc > 2) {
-        if (strcmp("in", argv[2]) == 0) {
-            save_in = true;
-            std::cout << "Will save random floating point data." << std::endl;
-        }
-        else if (strcmp("out", argv[2]) == 0) {
-            save_out = true;
-            std::cout << "Will save key, node and leaf data." << std::endl;
-        }
-        else if (strcmp("inout", argv[2]) == 0) {
-            save_in = true;
-            save_out = true;
-            std::cout << "Will save all data." << std::endl;
-        }
-    }
     else if (argc > 1) {
-        N = (unsigned int) std::strtol(argv[1], NULL, 10);
+        levels = (unsigned int) std::strtol(argv[1], NULL, 10);
+        // Keep levels in [5, 25].
+        levels = min(25, max(5, levels));
     }
-    std::cout << "Will generate " << N << " random points." << std::endl;
+    unsigned int N = 1u << (levels - 1);
+    std::cout << "Will profile a tree with " << N << " uniform random points."
+              << std::endl;
+    std::cout << "Will profile a fully balanced tree with " << N << " leaves."
+              << std::endl;
 
     thrust::device_vector<float> d_x_centres(N);
     thrust::device_vector<float> d_y_centres(N);
