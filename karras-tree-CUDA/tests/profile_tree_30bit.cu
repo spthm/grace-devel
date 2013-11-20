@@ -57,7 +57,7 @@ int main(int argc, char* argv[]) {
     unsigned int N = 1u << (levels - 1);
     std::cout << "Will profile (on device " << device_ID << " with " << N_iter
               << " iterations):" << std::endl;
-    std::cout << "    i) A tree constructed from " << N
+    std::cout << "    i)  A tree constructed from " << N
               << " uniform random positions." << std::endl;
     std::cout << "    ii) AABB finding (only) of a fully balanced tree with "
               << N << " leaves." << std::endl;
