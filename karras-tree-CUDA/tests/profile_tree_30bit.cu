@@ -12,6 +12,8 @@
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build_kernels.cuh"
 
+#define N_TIMES 5
+
 int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
@@ -28,7 +30,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int levels = 20;
-    unsigned int N_iter = 1000;
+    unsigned int N_iter = 100;
     unsigned int file_num = 1;
     unsigned int device_ID = 0;
     unsigned int seed_factor = 1u;
@@ -59,8 +61,8 @@ int main(int argc, char* argv[]) {
               << " iterations):" << std::endl;
     std::cout << "    i)  A tree constructed from " << N
               << " uniform random positions." << std::endl;
-    std::cout << "    ii) AABB finding (only) of a fully balanced tree with "
-              << N << " leaves." << std::endl;
+    // std::cout << "    ii) AABB finding (only) of a fully balanced tree with "
+    //          << N << " leaves." << std::endl;
     std::cout << std::endl;
     std::cout << "Saving results to " << file_name << std::endl;
 
@@ -72,19 +74,19 @@ int main(int argc, char* argv[]) {
     // Wipe the file, if it exists.
     outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::trunc);
     outfile << "Device " << device_ID
-                    << ":                 " << deviceProp.name << std::endl;
-    outfile << "Tree depth:               " << levels << std::endl;
-    outfile << "Number of leaves:         " << N << std::endl;
-    outfile << "Number of nodes + leaves: " << 2*N - 1 << std::endl;
-    outfile << "Iterations per tree:      " << N_iter << std::endl;
+                    << ":                   " << deviceProp.name << std::endl;
+    outfile << "Tree depth:                 " << levels << std::endl;
+    outfile << "Number of leaves:           " << N << std::endl;
+    outfile << "Number of nodes + leaves:   " << 2*N - 1 << std::endl;
+    outfile << "Iterations per tree:        " << N_iter << std::endl;
     outfile << "Random points' seed factor: " << seed_factor << std::endl;
-    outfile << "MORTON_THREADS_PER_BLOCK: " << MORTON_THREADS_PER_BLOCK
+    outfile << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
             << std::endl;
-    outfile << "BUILD_THREADS_PER_BLOCK:  " << BUILD_THREADS_PER_BLOCK
+    outfile << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
             << std::endl;
-    outfile << "AABB_THREADS_PER_BLOCK:   " << AABB_THREADS_PER_BLOCK
+    outfile << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
             << std::endl;
-    outfile << "MAX_BLOCKS:               " << MAX_BLOCKS << std::endl;
+    outfile << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
     outfile << std::endl << std::endl;
     outfile.close();
 
@@ -123,7 +125,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed, tot_elapsed;
-    float times[5];
+    float times[N_TIMES];
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -210,14 +212,14 @@ int main(int argc, char* argv[]) {
     }
 
 
-    /* Calculate mean times and write results to file. */
+    /* Calculate mean timings and write results to file. */
 
-    for (int i=0; i<5; i++) {
+    for (int i=0; i<N_TIMES; i++) {
         times[i] /= N_iter;
     }
 
     outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
-    outfile << "Time for morton key generation: " << times[1] << " ms."
+    outfile << "Time for Morton key generation: " << times[1] << " ms."
             << std::endl;
     outfile << "Time for sort-by-key:           " << times[2] << " ms."
             << std::endl;
