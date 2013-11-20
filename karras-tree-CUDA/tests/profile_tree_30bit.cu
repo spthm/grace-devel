@@ -1,6 +1,3 @@
-#include <iostream>
-#include <iomanip>
-#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <sstream>
@@ -28,7 +25,7 @@ int main(int argc, char* argv[]) {
     outfile.fill('0');
 
 
-    /* Initialize global parameters. */
+    /* Initialize run parameters. */
 
     unsigned int levels = 20;
     unsigned int N_iter = 1000;
