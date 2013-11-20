@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int levels = 20;
-    unsigned int N_iter = 100;
+    unsigned int N_iter = 50;
     unsigned int file_num = 1;
     unsigned int device_ID = 0;
     unsigned int seed_factor = 1u;
