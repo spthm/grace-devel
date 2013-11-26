@@ -12,7 +12,7 @@
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build_kernels.cuh"
 
-#define N_TIMES 5
+#define N_TIMES 6
 
 int main(int argc, char* argv[]) {
 
@@ -24,13 +24,12 @@ int main(int argc, char* argv[]) {
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
     outfile.precision(5);
-    outfile.fill('0');
 
 
     /* Initialize run parameters. */
 
     unsigned int levels = 20;
-    unsigned int N_iter = 50;
+    unsigned int N_iter = 100;
     unsigned int file_num = 1;
     unsigned int device_ID = 0;
     unsigned int seed_factor = 1u;
@@ -61,8 +60,8 @@ int main(int argc, char* argv[]) {
               << " iterations):" << std::endl;
     std::cout << "    i)  A tree constructed from " << N
               << " uniform random positions." << std::endl;
-    // std::cout << "    ii) AABB finding (only) of a fully balanced tree with "
-    //          << N << " leaves." << std::endl;
+    std::cout << "    ii) AABB finding (only) of a fully balanced tree with "
+             << N << " leaves." << std::endl;
     std::cout << std::endl;
     std::cout << "Saving results to " << file_name << std::endl;
 
@@ -91,7 +90,10 @@ int main(int argc, char* argv[]) {
     outfile.close();
 
 
-    /* Allocate arrays and generate input data. */
+
+    /*******************************************************************/
+    /* Allocate vectors and generate input data for random-point tree. */
+    /*******************************************************************/
 
     // Generate N random positions and radii, i.e. 4N random floats in [0,1).
     thrust::host_vector<float> h_x_centres(N);
@@ -125,7 +127,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed, tot_elapsed;
-    float times[N_TIMES];
+    double times[N_TIMES];
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -211,24 +213,122 @@ int main(int argc, char* argv[]) {
         times[0] += tot_elapsed;
     }
 
-
-    /* Calculate mean timings and write results to file. */
-
+    // Calculate mean timings and write results to file.
     for (int i=0; i<N_TIMES; i++) {
         times[i] /= N_iter;
     }
-
     outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
-    outfile << "Time for Morton key generation: " << times[1] << " ms."
-            << std::endl;
-    outfile << "Time for sort-by-key:           " << times[2] << " ms."
-            << std::endl;
-    outfile << "Time for hierarchy generation:  " << times[3] << " ms."
-            << std::endl;
-    outfile << "Time for calculating AABBs:     " << times[4] << " ms."
-            << std::endl;
-    outfile << "Total time for loop:            " << times[0] << " ms."
-            << std::endl;
+    outfile << "Time for Morton key generation: ";
+    outfile.width(8);
+    outfile << times[1] << " ms." << std::endl;
+    outfile << "Time for sort-by-key:           ";
+    outfile.width(8);
+    outfile << times[2] << " ms." << std::endl;
+    outfile << "Time for hierarchy generation:  ";
+    outfile.width(8);
+    outfile << times[3] << " ms." << std::endl;
+    outfile << "Time for calculating AABBs:     ";
+    outfile.width(8);
+    outfile << times[4] << " ms." << std::endl;
+    outfile << "Total time for loop:            ";
+    outfile.width(8);
+    outfile << times[0] << " ms." << std::endl;
+    outfile.close();
+
+
+
+    /**************************************/
+    /* Build fully-balanced tree on host. */
+    /**************************************/
+
+    // Alloctate host-side vectors.
+    thrust::host_vector<grace::Node> h_nodes(N-1);
+    thrust::host_vector<grace::Leaf> h_leaves(N);
+
+    // Set up bottom level (where all nodes connect to leaves).
+    for (unsigned int left=1; left<N-1; left+=4)
+    {
+        unsigned int right = left + 1;
+
+        h_nodes[left].left = left - 1;
+        h_nodes[left].right = left;
+        h_nodes[left].far_end = left - 1;
+        h_nodes[left].left_leaf_flag = true;
+        h_nodes[left].right_leaf_flag = true;
+
+        h_nodes[right].left = right;
+        h_nodes[right].right = right + 1;
+        h_nodes[right].far_end = right + 1;
+        h_nodes[right].left_leaf_flag = true;
+        h_nodes[right].right_leaf_flag = true;
+
+        h_leaves[left-1].parent = h_leaves[left].parent = left;
+        h_leaves[right].parent = h_leaves[right+1].parent = right;
+    }
+    // Set up all except bottom and top levels, starting at bottom-but-one.
+    for (unsigned int height=2; height<(levels-1); height++)
+    {
+        for (unsigned int left=(1u<<height)-1;
+                          left<N-1;
+                          left+=1u<<(height+1))
+        {
+            unsigned int right = left + 1;
+            unsigned int left_split = (2*left - (1u<<height)) / 2;
+            unsigned int right_split = left_split + (1u<<height);
+
+            h_nodes[left].left = left_split;
+            h_nodes[left].right = left_split + 1;
+            h_nodes[left].far_end = left - (1u<<height) + 1;
+            h_nodes[left].left_leaf_flag = false;
+            h_nodes[left].right_leaf_flag = false;
+
+            h_nodes[right].left = right_split;
+            h_nodes[right].right = right_split + 1;
+            h_nodes[right].far_end = right + (1u<<height) - 1;
+            h_nodes[right].left_leaf_flag = false;
+            h_nodes[right].right_leaf_flag = false;
+
+            h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
+            h_nodes[right_split].parent = h_nodes[right_split+1].parent= right;
+        }
+    }
+    // Set up root node and link children to it.
+    h_nodes[0].left = N/2 - 1;
+    h_nodes[0].right = N/2;
+    h_nodes[0].far_end = N - 1;
+    h_nodes[0].left_leaf_flag = false;
+    h_nodes[0].right_leaf_flag = false;
+    h_nodes[N/2 - 1].parent = h_nodes[N/2].parent = 0;
+
+
+    /* Profile the fully-balanced tree. */
+
+    part_elapsed = 0;
+    for (int i=0; i<N_iter; i++)
+    {
+        thrust::device_vector<grace::Node> d_nodes = h_nodes;
+        thrust::device_vector<grace::Leaf> d_leaves = h_leaves;
+        thrust::device_vector<float> d_x_centres = h_x_centres;
+        thrust::device_vector<float> d_y_centres = h_y_centres;
+        thrust::device_vector<float> d_z_centres = h_z_centres;
+        thrust::device_vector<float> d_radii = h_radii;
+
+        // Find the AABBs.
+        cudaEventRecord(part_start);
+        grace::find_AABBs(d_nodes, d_leaves,
+                          d_x_centres, d_y_centres, d_z_centres, d_radii);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+        times[N_TIMES-1] += part_elapsed;
+    }
+
+    // Calculate mean timings and write results to file.
+    times[N_TIMES-1] /= N_iter;
+    outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
+    outfile << "Time for balanced tree AABBS:   ";
+    outfile.width(8);
+    outfile << times[N_TIMES-1] << " ms." << std::endl;
     outfile << std::endl << std::endl;
     outfile.close();
 }
