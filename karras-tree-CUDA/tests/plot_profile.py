@@ -6,16 +6,17 @@ import matplotlib as mpl
 mpl.rcParams['text.usetex'] = True
 import matplotlib.pyplot as plt
 
-from profileparser import ProfileResults
+from profileparser import ProfileResult
 
-base_string = "profile_treeclimb_{0}.log"
+#base_string = "profile_treeclimb_{0}.log"
+base_string = "profile_tree_{0}.log"
 profile_results = []
 for i in count(1):
     fname = base_string.format(str(i))
     try:
         with open(fname) as f:
             print "Reading in data for " + fname
-            result = ProfileResults(f)
+            result = ProfileResult(f)
             result.generate_stats()
             profile_results.append(result)
     except IOError:

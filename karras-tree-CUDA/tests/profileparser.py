@@ -1,9 +1,9 @@
 import numpy as np
 
-class ProfileResults(object):
+class ProfileResult(object):
     """Reads in and saves data for kernel profile results."""
     def __init__(self, open_file):
-        super(ProfileResults, self).__init__()
+        super(ProfileResult, self).__init__()
 
         self.params = {}
         self._read_params(open_file)
@@ -24,6 +24,11 @@ class ProfileResults(object):
         for i in range(len(self.levels)):
             self._read_level_results(open_file, i)
             self._move_to_next_data(open_file)
+
+    @classmethod
+    def from_filename(cls, filename):
+        with open(filename, "r") as f:
+            return cls(f)
 
     def generate_stats(self):
         old = max(self.timings[0])
