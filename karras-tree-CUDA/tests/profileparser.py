@@ -8,15 +8,15 @@ class ProfileResult(object):
         self.params = {}
         self._read_params(open_file)
         self.levels = range(self.params['start'], self.params['end']+1)
-        self._results_start_string = "Will generate "
+        self._results_start_string = "Will generate"
         self._timing_start_string = "Time for "
         self._timing_end_string = " ms."
 
         self._move_to_next_data(open_file)
         kernel_names = self._read_kernel_names(open_file)
-        self.kernel_name_map = {}
+        self._kernel_names_map = {}
         for (i,s) in enumerate(kernel_names):
-            self.kernel_name_map[i] = s
+            self._kernel_names_map[i] = s
         self.kernel_IDs = range(len(kernel_names))
 
         self.timings = np.zeros((len(kernel_names),len(self.levels)))
@@ -39,6 +39,18 @@ class ProfileResult(object):
                 kernel_ID = i
         self.lowest_mean_time = old
         self.fastest_kernel_ID = kernel_ID
+
+        self.kernel_speed_order = range(len(self.timings))
+        self.kernel_speed_order.sort(key=lambda i: self.timings[i][0])
+
+    def kernel_name(self, ID):
+        return self._kernel_names_map[ID]
+
+    def kernel_ID(self, name):
+        for key in self._kernel_names_map:
+            if name == self._kernel_names_map[key]:
+                return key
+        return None
 
     def _move_to_next_data(self, f):
         pos = f.tell()
@@ -86,6 +98,22 @@ class ProfileResult(object):
 
         line = f.readline()
         tmp = line.split(":")[1].strip()
+        self.params["morton block size"] = int(tmp)
+
+        line = f.readline()
+        tmp = line.split(":")[1].strip()
+        self.params["build block size"] = int(tmp)
+
+        line = f.readline()
+        tmp = line.split(":")[1].strip()
+        self.params["AABB block size"] = int(tmp)
+
+        line = f.readline()
+        tmp = line.split(":")[1].strip()
+        self.params["grid size"] = int(tmp)
+
+        line = f.readline()
+        tmp = line.split(":")[1].strip()
         self.params["start"] = int(tmp)
 
         line = f.readline()
@@ -98,8 +126,6 @@ class ProfileResult(object):
 
         line = f.readline()
         tmp = line.split(":")[1].strip()
-        self.params["block size"] = int(tmp)
+        self.params["seed factor"] = int(tmp)
 
-        line = f.readline()
-        tmp = line.split(":")[1].strip()
-        self.params["grid size"] = int(tmp)
+

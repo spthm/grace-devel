@@ -100,6 +100,8 @@ int main(int argc, char* argv[]) {
     outfile << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
             << std::endl;
     outfile << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    outfile << "Starting tree depth:        " << start << std::endl;
+    outfile << "Finishing tree depth:       " << end << std::endl;
     outfile << "Iterations per tree:        " << N_iter << std::endl;
     outfile << "Random points' seed factor: " << seed_factor << std::endl;
     outfile << std::endl << std::endl;
@@ -242,19 +244,19 @@ int main(int argc, char* argv[]) {
         outfile << "    ii) A fully-balanced tree with " << levels
                 << " levels and " << N << " leaves." << std::endl;
         outfile << std::endl;
-        outfile << "Time for Morton key generation: ";
+        outfile << "Time for Morton key generation:    ";
         outfile.width(8);
         outfile << times[1] << " ms." << std::endl;
-        outfile << "Time for sort-by-key:           ";
+        outfile << "Time for sort-by-key:              ";
         outfile.width(8);
         outfile << times[2] << " ms." << std::endl;
-        outfile << "Time for hierarchy generation:  ";
+        outfile << "Time for hierarchy generation:     ";
         outfile.width(8);
         outfile << times[3] << " ms." << std::endl;
-        outfile << "Time for calculating AABBs:     ";
+        outfile << "Time for calculating AABBs:        ";
         outfile.width(8);
         outfile << times[4] << " ms." << std::endl;
-        outfile << "Total time for loop:            ";
+        outfile << " Time for total (inc. memory ops): ";
         outfile.width(8);
         outfile << times[0] << " ms." << std::endl;
         outfile.close();
@@ -350,7 +352,7 @@ int main(int argc, char* argv[]) {
         // Calculate mean timings and write results to file.
         times[N_TIMES-1] /= N_iter;
         outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
-        outfile << "Time for balanced tree AABBS:   ";
+        outfile << "Time for balanced tree AABBs:      ";
         outfile.width(8);
         outfile << times[N_TIMES-1] << " ms." << std::endl;
         outfile << std::endl << std::endl;

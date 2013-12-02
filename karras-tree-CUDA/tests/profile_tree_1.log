@@ -1,0 +1,107 @@
+Device 0:                    Tesla M2090
+MORTON_THREADS_PER_BLOCK:    512
+BUILD_THREADS_PER_BLOCK:     512
+AABB_THREADS_PER_BLOCK:      512
+MAX_BLOCKS:                  112
+Starting tree depth:         15
+Finishing tree depth:        22
+Iterations per tree:         100
+Random points' seed factor:  22
+
+
+Will generate:
+    i)  A tree from 16384 random points.
+    ii) A fully-balanced tree with 15 levels and 16384 leaves.
+
+Time for Morton key generation:   0.01403 ms.
+Time for sort-by-key:             0.79118 ms.
+Time for hierarchy generation:    0.09088 ms.
+Time for calculating AABBs:       1.18935 ms.
+Time for loop (inc. memory ops):  2.81282 ms.
+Time for balanced tree AABBs:     0.27870 ms.
+
+
+Will generate:
+    i)  A tree from 32768 random points.
+    ii) A fully-balanced tree with 16 levels and 32768 leaves.
+
+Time for Morton key generation:   0.01737 ms.
+Time for sort-by-key:             1.07781 ms.
+Time for hierarchy generation:    0.21261 ms.
+Time for calculating AABBs:       1.85326 ms.
+Time for loop (inc. memory ops):  4.15496 ms.
+Time for balanced tree AABBs:     0.41194 ms.
+
+
+Will generate:
+    i)  A tree from 65536 random points.
+    ii) A fully-balanced tree with 17 levels and 65536 leaves.
+
+Time for Morton key generation:   0.02329 ms.
+Time for sort-by-key:             1.31011 ms.
+Time for hierarchy generation:    0.38671 ms.
+Time for calculating AABBs:       3.18119 ms.
+Time for loop (inc. memory ops):  6.65562 ms.
+Time for balanced tree AABBs:     0.91139 ms.
+
+
+Will generate:
+    i)  A tree from 131072 random points.
+    ii) A fully-balanced tree with 18 levels and 131072 leaves.
+
+Time for Morton key generation:   0.02969 ms.
+Time for sort-by-key:             1.70439 ms.
+Time for hierarchy generation:    0.82005 ms.
+Time for calculating AABBs:       3.57858 ms.
+Time for loop (inc. memory ops):  9.23984 ms.
+Time for balanced tree AABBs:     1.48228 ms.
+
+
+Will generate:
+    i)  A tree from 262144 random points.
+    ii) A fully-balanced tree with 19 levels and 262144 leaves.
+
+Time for Morton key generation:   0.04812 ms.
+Time for sort-by-key:             2.68931 ms.
+Time for hierarchy generation:    1.66630 ms.
+Time for calculating AABBs:       5.51617 ms.
+Time for loop (inc. memory ops):  15.50174 ms.
+Time for balanced tree AABBs:     2.54463 ms.
+
+
+Will generate:
+    i)  A tree from 524288 random points.
+    ii) A fully-balanced tree with 20 levels and 524288 leaves.
+
+Time for Morton key generation:   0.08628 ms.
+Time for sort-by-key:             4.82379 ms.
+Time for hierarchy generation:    3.41920 ms.
+Time for calculating AABBs:       8.30458 ms.
+Time for loop (inc. memory ops):  26.84520 ms.
+Time for balanced tree AABBs:     4.93672 ms.
+
+
+Will generate:
+    i)  A tree from 1048576 random points.
+    ii) A fully-balanced tree with 21 levels and 1048576 leaves.
+
+Time for Morton key generation:   0.16761 ms.
+Time for sort-by-key:             9.15038 ms.
+Time for hierarchy generation:    6.93208 ms.
+Time for calculating AABBs:      13.73694 ms.
+Time for loop (inc. memory ops): 48.88522 ms.
+Time for balanced tree AABBs:     9.67160 ms.
+
+
+Will generate:
+    i)  A tree from 2097152 random points.
+    ii) A fully-balanced tree with 22 levels and 2097152 leaves.
+
+Time for Morton key generation:   0.33978 ms.
+Time for sort-by-key:            17.88988 ms.
+Time for hierarchy generation:   14.38312 ms.
+Time for calculating AABBs:      25.49989 ms.
+Time for loop (inc. memory ops): 94.69428 ms.
+Time for balanced tree AABBs:    19.20327 ms.
+
+
