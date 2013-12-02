@@ -7,7 +7,7 @@ class ProfileResult(object):
 
         self.params = {}
         self._read_params(open_file)
-        self.levels = range(self.params['start'], self.params['end']+1)
+        self.levels = np.arange(self.params['start'], self.params['end']+1)
         self._results_start_string = "Will generate"
         self._timing_start_string = "Time for "
         self._timing_end_string = " ms."
