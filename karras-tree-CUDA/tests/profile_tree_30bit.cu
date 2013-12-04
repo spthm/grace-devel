@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
         outfile << "Time for calculating AABBs:        ";
         outfile.width(8);
         outfile << times[4] << " ms." << std::endl;
-        outfile << " Time for total (inc. memory ops): ";
+        outfile << "Time for total (inc. memory ops): ";
         outfile.width(8);
         outfile << times[0] << " ms." << std::endl;
         outfile.close();
