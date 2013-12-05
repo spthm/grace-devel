@@ -56,60 +56,72 @@ for (i,result) in enumerate(profile_results):
         if ID != balanced_ID:
             # For non-total result we need to plot the cummulative result.
             if ID != total_ID:
+                this_frac = result.timings[ID] / result.timings[total_ID]
                 line, = ax1.plot(result.levels-1,
-                                 cummulative_frac +
-                                 result.timings[ID]/result.timings[total_ID],
+                                 cummulative_frac + this_frac,
                                  label=label,
                                  linewidth=0.5)
                 ax1.fill_between(result.levels-1,
                                  cummulative_frac,
-                                 cummulative_frac +
-                                 result.timings[ID]/result.timings[total_ID],
+                                 cummulative_frac + this_frac,
                                  facecolor=line.get_color(),
                                  alpha=0.5)
-                cummulative_frac += result.timings[ID]/result.timings[total_ID]
-                line, ax3.plot(result.levels-1,
-                         np.log10(result.timings[ID]+cummulative_time),
+                cummulative_frac += this_frac
+
+                ax3.plot(result.levels-1,
+                         np.log10(result.timings[ID] + cummulative_time),
                          label=label,
                          linewidth=0.5)
                 ax3.fill_between(result.levels-1,
                                  np.log10(cummulative_time),
-                                 np.log10(result.timings[ID]+cummulative_time),
+                                 np.log10(result.timings[ID] +
+                                          cummulative_time),
                                  facecolor=line.get_color(),
                                  alpha=0.5)
                 if ID == first_ID:
+                    # Fix the 0 ~= 10^-80 hack that allowed for
+                    # np.log10(cummulative_timings in the fastest kernel).
                     cummulative_time = np.zeros_like(result.timings[ID])
                 cummulative_time += result.timings[ID]
+
             # For the total, the result is implicitly cummulative.
             else:
+                # Plot fraction of total time due to memory operations - i.e.
+                # the total time, minus the time due to processing
+                memory_timings = (result.timings[total_ID] -
+                                     (result.timings.sum(axis=0) -
+                                      result.timings[balanced_ID] -
+                                      result.timings[total_ID])
+                                 )
+                memory_frac = memory_timings / result.timings[total_ID]
                 line, = ax1.plot(result.levels-1,
-                                 cummulative_frac +
-                                 (result.timings[total_ID] - result.timings.sum(axis=0) + result.timings[balanced_ID])/result.timings[total_ID],
+                                 cummulative_frac + memory_frac,
                                  label="Memory ops",
                                  linewidth=0.5)
                 ax1.fill_between(result.levels-1,
                                  cummulative_frac,
-                                 cummulative_frac +
-                                 (result.timings[total_ID] - cummulative_frac)/result.timings[total_ID],
+                                 cummulative_frac + memory_frac,
                                  facecolor=line.get_color(),
                                  alpha=0.5)
-                cummulative_frac += (result.timings[total_ID] - cummulative_frac) / result.timings[total_ID]
+                cummulative_frac += memory_frac
 
-                line, ax3.plot(result.levels-1,
-                               np.log10(result.timings[ID]),
-                               label=label,
-                               linewidth=0.5)
+                ax3.plot(result.levels-1,
+                         np.log10(result.timings[ID]),
+                         label=label,
+                         linewidth=0.5)
                 ax3.fill_between(result.levels-1,
                                  np.log10(cummulative_time),
                                  np.log10(result.timings[ID]),
                                  facecolor=line.get_color(),
                                  alpha=0.5)
+
             # All non-cummulative times plotted identically.
             ax4.plot(result.levels-1,
                      np.log10(result.timings[ID]),
                      label=label)
+
     # Add balanced-tree AABB times to non-cummulative plot.
-    # Happens last to maintain colours between plots.
+    # Happens last to maintain the same colours among the previous plots.
     label = (result.kernel_name(balanced_ID)[0].upper() +
              result.kernel_name(balanced_ID)[1:])
     ax4.plot(result.levels-1,
