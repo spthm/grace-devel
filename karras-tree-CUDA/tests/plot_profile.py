@@ -54,23 +54,20 @@ for (i,result) in enumerate(profile_results):
         label = result.kernel_name(ID)[0].upper() + result.kernel_name(ID)[1:]
         # Balanced run distinct from build time.
         if ID != balanced_ID:
-            line, = ax1.plot(result.levels-1,
-                             cummulative_frac +
-                             result.timings[ID]/(result.timings.sum(axis=0) -
-                                                result.timings[balanced_ID]),
-                             label=label,
-                             linewidth=0.5)
-            ax1.fill_between(result.levels-1,
-                             cummulative_frac,
-                             cummulative_frac +
-                             result.timings[ID]/(result.timings.sum(axis=0) -
-                                                result.timings[balanced_ID]),
-                             facecolor=line.get_color(),
-                             alpha=0.5)
-            cummulative_frac += result.timings[ID]/(result.timings.sum(axis=0) -
-                                                    result.timings[balanced_ID])
             # For non-total result we need to plot the cummulative result.
             if ID != total_ID:
+                line, = ax1.plot(result.levels-1,
+                                 cummulative_frac +
+                                 result.timings[ID]/result.timings[total_ID],
+                                 label=label,
+                                 linewidth=0.5)
+                ax1.fill_between(result.levels-1,
+                                 cummulative_frac,
+                                 cummulative_frac +
+                                 result.timings[ID]/result.timings[total_ID],
+                                 facecolor=line.get_color(),
+                                 alpha=0.5)
+                cummulative_frac += result.timings[ID]/result.timings[total_ID]
                 line, ax3.plot(result.levels-1,
                          np.log10(result.timings[ID]+cummulative_time),
                          label=label,
@@ -85,10 +82,23 @@ for (i,result) in enumerate(profile_results):
                 cummulative_time += result.timings[ID]
             # For the total, the result is implicitly cummulative.
             else:
+                line, = ax1.plot(result.levels-1,
+                                 cummulative_frac +
+                                 (result.timings[total_ID] - result.timings.sum(axis=0) + result.timings[balanced_ID])/result.timings[total_ID],
+                                 label="Memory ops",
+                                 linewidth=0.5)
+                ax1.fill_between(result.levels-1,
+                                 cummulative_frac,
+                                 cummulative_frac +
+                                 (result.timings[total_ID] - cummulative_frac)/result.timings[total_ID],
+                                 facecolor=line.get_color(),
+                                 alpha=0.5)
+                cummulative_frac += (result.timings[total_ID] - cummulative_frac) / result.timings[total_ID]
+
                 line, ax3.plot(result.levels-1,
-                         np.log10(result.timings[ID]),
-                         label=label,
-                         linewidth=0.5)
+                               np.log10(result.timings[ID]),
+                               label=label,
+                               linewidth=0.5)
                 ax3.fill_between(result.levels-1,
                                  np.log10(cummulative_time),
                                  np.log10(result.timings[ID]),
@@ -106,6 +116,12 @@ for (i,result) in enumerate(profile_results):
              np.log10(result.timings[balanced_ID]),
              label=label)
 
+    ax1.set_xlabel(r"$\log_{\,2} (N_{\mathrm{leaves}})$")
+    ax1.set_ylabel(r"$\bar{t}_\mathrm{kernel} \; / \; \Sigma_i \;  \bar{t}_i$")
+    ax1.set_xlim(min(result.levels-1), max(result.levels-1))
+    ax1.set_ylim(0, 1)
+    ax1.legend(loc="upper left", frameon=False)
+
     ax3.set_xlabel(r"$\log_{\,2} (N_{\mathrm{leaves}})$")
     ax3.set_ylabel(r"$\log_{\,10}" +
                    r"(\Sigma \;  \bar{t}_\mathrm{kernel} / 1 \mathrm{ms})$")
@@ -120,5 +136,9 @@ for (i,result) in enumerate(profile_results):
     ax4.set_ylim(np.log10(np.amin(result.timings)),
                  np.log10(np.amax(result.timings)))
     ax4.legend(loc="upper left", frameon=False)
+
+    fig1.savefig("fractional.pdf")
+    fig3.savefig("log-log cummulative.pdf")
+    fig4.savefig("log-log individual.pdf")
 
 plt.show()
