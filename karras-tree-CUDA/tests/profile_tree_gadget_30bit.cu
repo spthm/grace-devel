@@ -20,7 +20,6 @@ int main(int argc, char* argv[]) {
     cudaDeviceProp deviceProp;
     std::ofstream outfile;
     std::ifstream infile;
-    std:streampos fpos;
     std::string infile_name, outfile_name;
     std::ostringstream converter;
 
@@ -33,7 +32,7 @@ int main(int argc, char* argv[]) {
     unsigned int N_iter = 100;
     unsigned int file_num = 1;
     unsigned int device_ID = 0;
-    std::string infile_name = "Data_025";
+    infile_name = "Data_025";
     if (argc > 3) {
         N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
@@ -57,9 +56,8 @@ int main(int argc, char* argv[]) {
     std::cout << "Saving results to " << outfile_name << std::endl;
     std::cout << std::endl;
 
-    infile.open(infile_name.c_str(), std::ifsteam::binary);
+    infile.open(infile_name.c_str(), std::ios::binary);
     gadget_header header = read_gadget_header(infile);
-    fpos = infile.tellg();
     infile.close();
 
 
@@ -86,6 +84,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Profiling tree from Gadget data."<< std::endl;
     unsigned int N = header.npart[0];
+    std::cout << "Gadget files contains " << N << " gas particles and "
+              << header.npart[1] << " dark matter particles." << std::endl;
 
     // Generate N random positions and radii, i.e. 4N random floats in [0,1).
     thrust::host_vector<float> h_x_centres(N);
@@ -94,10 +94,8 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<float> h_radii(N);
 
     std::cout << "Reading in file..." << std::endl;
-    infile.open(infile_name.c_str(), std::ifsteam::binary);
-    infile.seekg(fpos);
-    read_gadget_gas(infile, header,
-                    h_x_centres, h_y_centres, h_z_centres, h_radii);
+    infile.open(infile_name.c_str(), std::ios::binary);
+    read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres, h_radii);
     infile.close();
 
 
@@ -225,7 +223,8 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_TIMES; i++) {
         times[i] /= N_iter;
     }
-    outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
+    outfile.open(outfile_name.c_str(),
+                 std::ofstream::out | std::ofstream::app);
     outfile << "Will generate:" << std::endl;
     outfile << "    i)  A tree from " << N << " SPH particles." << std::endl;
     outfile << std::endl;
