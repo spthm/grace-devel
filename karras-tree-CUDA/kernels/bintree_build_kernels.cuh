@@ -11,9 +11,9 @@ namespace grace {
 
 namespace gpu {
 
-/***********************************************/
-/**************** CUDA Kenerls. ****************/
-/***********************************************/
+//------------------------------------------------------------------------------
+// CUDA Kenerls
+//------------------------------------------------------------------------------
 
 template <typename UInteger>
 __global__ void build_nodes_kernel(Node* nodes,
@@ -33,7 +33,7 @@ __global__ void build_nodes_kernel(Node* nodes,
     while (index < (n_keys-1) && index >= 0)
     {
         // direction == +1 => index is the first key in the node.
-        // direction == -1 => index is the last key in the node.
+        //              -1 => index is the last key in the node.
         prefix_left = common_prefix(index, index-1, keys, n_keys);
         prefix_right = common_prefix(index, index+1, keys, n_keys);
         direction = sgn(prefix_right - prefix_left);
@@ -52,7 +52,6 @@ __global__ void build_nodes_kernel(Node* nodes,
          * (We find each bit t sequantially, starting with the most
          * significant, span_max/2.)
          */
-        // TODO: Remove l, use end_index only if possible.
         l = 0;
         bit = span_max / 2;
         while (bit >= 1) {
@@ -83,13 +82,12 @@ __global__ void build_nodes_kernel(Node* nodes,
         // If direction == -1 we actually found split_index + 1;
         split_index = index + l*direction + min(direction, 0);
 
-        /* Update this node with the locations of its children. */
         nodes[index].level = node_prefix;
         nodes[index].left = split_index;
         nodes[index].right = split_index+1;
         nodes[index].far_end = end_index;
+
         if (split_index == min(index, end_index)) {
-            // Left child is a leaf.
             nodes[index].left_leaf_flag = true;
             leaves[split_index].parent = index;
         }
@@ -99,7 +97,6 @@ __global__ void build_nodes_kernel(Node* nodes,
         }
 
         if (split_index+1 == max(index, end_index)) {
-            // Right child is a leaf.
             nodes[index].right_leaf_flag = true;
             leaves[split_index+1].parent = index;
         }
@@ -108,7 +105,7 @@ __global__ void build_nodes_kernel(Node* nodes,
             nodes[split_index+1].parent = index;
         }
 
-        index = index + blockDim.x * gridDim.x;
+        index += blockDim.x * gridDim.x;
     }
     return;
 }
@@ -278,9 +275,9 @@ __device__ int common_prefix(const Integer32 i,
 
 } // namespace gpu
 
-/**********************************************/
-/************** C-like wrappers. **************/
-/**********************************************/
+//------------------------------------------------------------------------------
+// C-like wrappers
+//------------------------------------------------------------------------------
 
 template <typename UInteger>
 void build_nodes(thrust::device_vector<Node>& d_nodes,
@@ -291,6 +288,8 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
 
     int blocks = min(MAX_BLOCKS, (n_keys + BUILD_THREADS_PER_BLOCK-1)
                                   / BUILD_THREADS_PER_BLOCK);
+
+    // TODO: Error if n_keys <= 1.
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         (Node*)thrust::raw_pointer_cast(d_nodes.data()),
