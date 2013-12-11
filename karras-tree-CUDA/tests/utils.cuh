@@ -26,34 +26,38 @@ __host__ __device__ unsigned int hash(unsigned int a)
 class random_float_functor
 {
     const unsigned int offset;
-    const float scale;
+    const float low, high;
     const unsigned int seed_factor;
 
 public:
     random_float_functor() : offset(0u), seed_factor(1u), scale(1.0) {}
 
     explicit random_float_functor(const unsigned int offset_) :
-        offset(offset_), scale(1.0), seed_factor(1u) {}
+        offset(offset_), low(0.0), high(1.0), seed_factor(1u) {}
 
-    explicit random_float_functor(const float scale_) :
-        offset(0u), scale(scale_), seed_factor(1u) {}
+    explicit random_float_functor(const float low_,
+                                  const float high_) :
+        offset(0u), low(scale_), high(high_), seed_factor(1u) {}
 
     explicit random_float_functor(const unsigned int offset_,
-                                  const float scale_) :
-        offset(offset_), scale(scale_), seed_factor(1u) {}
+                                  const float low_,
+                                  const float high_) :
+        offset(offset_), low(low_), high(high_), seed_factor(1u) {}
 
     explicit random_float_functor(const unsigned int offset_,
                                   const unsigned int seed_factor_) :
-        offset(offset_), scale(1.0), seed_factor(seed_factor_) {}
+        offset(offset_), low(0.0), high(1.0), seed_factor(seed_factor_) {}
 
-    explicit random_float_functor(const float scale_,
+    explicit random_float_functor(const float low_,
+                                  const float high_,
                                   const unsigned int seed_factor_) :
-        offset(0u), scale(scale_), seed_factor(seed_factor_) {}
+        offset(0u), low(low_), high(high_), seed_factor(seed_factor_) {}
 
     explicit random_float_functor(const unsigned int offset_,
-                                  const float scale_,
+                                  const float low_,
+                                  const float high_,
                                   const unsigned int seed_factor_) :
-        offset(offset_), scale(scale_), seed_factor(seed_factor_) {}
+        offset(offset_), low(low_), high(high_), seed_factor(seed_factor_) {}
 
     __host__ __device__ float operator() (unsigned int n)
     {
@@ -62,11 +66,11 @@ public:
             seed = hash(seed);
         }
         thrust::default_random_engine rng(seed);
-        thrust::uniform_real_distribution<float> u01(0,1);
+        thrust::uniform_real_distribution<float> uniform(low,high);
 
         rng.discard(offset);
 
-        return scale*u01(rng);
+        return uniform(rng);
     }
 };
 

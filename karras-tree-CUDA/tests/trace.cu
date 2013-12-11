@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_radii.begin(),
-                      random_float_functor(0.1f) );
+                      random_float_functor(0.0f, 0.1f) );
 
     // Set the AABBs.
     Vector3f bottom(0., 0., 0.);

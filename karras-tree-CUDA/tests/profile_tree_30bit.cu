@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(N),
                           h_radii.begin(),
-                          random_float_functor(0.1f, seed_factor) );
+                          random_float_functor(0.0f, 0.1f, seed_factor) );
 
         // Set the AABBs.
         Vector3f bottom(0., 0., 0.);
