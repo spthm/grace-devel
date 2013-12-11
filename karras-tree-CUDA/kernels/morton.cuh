@@ -10,14 +10,16 @@ namespace grace {
 // 30-bit keys.
 __host__ __device__ UInteger32 morton_key(const UInteger32& x,
                                           const UInteger32& y,
-                                          const UInteger32& z) {
+                                          const UInteger32& z)
+{
     return space_by_two_10bit(z) << 2 | space_by_two_10bit(y) << 1 | space_by_two_10bit(x);
 }
 
 // 63-bit keys.
 __host__ __device__ UInteger64 morton_key(const UInteger64& x,
                                           const UInteger64& y,
-                                          const UInteger64& z) {
+                                          const UInteger64& z)
+{
     return space_by_two_21bit(z) << 2 | space_by_two_21bit(y) << 1 | space_by_two_21bit(x);
 }
 

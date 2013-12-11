@@ -25,7 +25,7 @@ __global__ void trace_kernel(const Ray* rays,
     Integer32 node_index;
     bool is_leaf;
     Ray ray;
-    // N levels => N-1 split levels (i.e. N-1 key length).
+    // N levels => N-1 key length.
     // One extra so we can avoid stack_index = -1 before trace exit.
     int trace_stack[31];
 
