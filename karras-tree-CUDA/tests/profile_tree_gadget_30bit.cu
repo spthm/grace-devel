@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
 
     // Convert file number to a string.
     converter << file_num;
-    outfile_name = ("profile_tree_" + converter.str() + ".log");
+    outfile_name = ("profile_tree_gadget_" + converter.str() + ".log");
 
     std::cout << "Will profile (on device " << device_ID << " with " << N_iter
               << " iterations) a tree from Gadget file " << infile_name
@@ -97,6 +97,11 @@ int main(int argc, char* argv[]) {
     infile.open(infile_name.c_str(), std::ios::binary);
     read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres, h_radii);
     infile.close();
+
+    std::cout << h_x_centres[0] << ", " << h_x_centres[N-1] << std::endl;
+    std::cout << h_y_centres[0] << ", " << h_y_centres[N-1] << std::endl;
+    std::cout << h_z_centres[0] << ", " << h_z_centres[N-1] << std::endl;
+    std::cout << h_radii[0] << ", " << h_radii[N-1] << std::endl;
 
 
     // Set the AABBs.

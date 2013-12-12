@@ -30,14 +30,15 @@ class random_float_functor
     const unsigned int seed_factor;
 
 public:
-    random_float_functor() : offset(0u), seed_factor(1u), scale(1.0) {}
+    random_float_functor() : offset(0u), seed_factor(1u),
+                             low(0.0f), high(1.0f) {}
 
     explicit random_float_functor(const unsigned int offset_) :
         offset(offset_), low(0.0), high(1.0), seed_factor(1u) {}
 
     explicit random_float_functor(const float low_,
                                   const float high_) :
-        offset(0u), low(scale_), high(high_), seed_factor(1u) {}
+        offset(0u), low(low_), high(high_), seed_factor(1u) {}
 
     explicit random_float_functor(const unsigned int offset_,
                                   const float low_,
@@ -74,7 +75,10 @@ public:
     }
 };
 
-#define SKIP_SPACER(file) file.get();
+inline void skip_spacer(std::ifstream& file) {
+    int dummy;
+    file.read((char*)&dummy, sizeof(int));
+}
 
 struct gadget_header
 {
@@ -95,21 +99,21 @@ struct gadget_header
   // char fill[256 - 6 * 4 - 6 * 8 - 2 * 8 - 2 * 4 - 6 * 4 - 2 * 4 - 4 * 8];   /* fills to 256 Bytes */
 };
 
-gadget_header read_gadget_header(std::ifstream &file) {
+gadget_header read_gadget_header(std::ifstream& file) {
     gadget_header header;
-    SKIP_SPACER(file)
+    skip_spacer(file);
     file.read((char*)&header.npart, sizeof(int)*6);
     file.read((char*)&header.mass, sizeof(double)*6);
     file.read((char*)&header.fill, sizeof(header.fill));
-    SKIP_SPACER(file)
+    skip_spacer(file);
     return header;
 }
 
-void read_gadget_gas(std::ifstream &file,
-                     thrust::host_vector<float> x,
-                     thrust::host_vector<float> y,
-                     thrust::host_vector<float> z,
-                     thrust::host_vector<float> h)
+void read_gadget_gas(std::ifstream& file,
+                     thrust::host_vector<float>& x,
+                     thrust::host_vector<float>& y,
+                     thrust::host_vector<float>& z,
+                     thrust::host_vector<float>& h)
 {
     int i_dummy;
     float f_dummy;
@@ -122,21 +126,29 @@ void read_gadget_gas(std::ifstream &file,
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
     N_withmasses = 0;
-    SKIP_SPACER(file)
+    skip_spacer(file);
     for(int i=0; i<6; i++) {
         if (header.mass[i] == 0)
             N_withmasses += header.npart[i];
 
         for(int n=0; n<header.npart[i]; n++) {
-            file.read((char*)&x[n], sizeof(float));
-            file.read((char*)&y[n], sizeof(float));
-            file.read((char*)&z[n], sizeof(float));
+            // We only want to read in gas particles.
+            if (i == 0) {
+                file.read((char*)&x[n], sizeof(float));
+                file.read((char*)&y[n], sizeof(float));
+                file.read((char*)&z[n], sizeof(float));
+            }
+            else {
+                file.read((char*)&f_dummy, sizeof(float));
+                file.read((char*)&f_dummy, sizeof(float));
+                file.read((char*)&f_dummy, sizeof(float));
+            }
         }
     }
-    SKIP_SPACER(file)
+    skip_spacer(file);
 
     // Velocities.
-    SKIP_SPACER(file)
+    skip_spacer(file);
     for(int i=0; i<6; i++) {
         for(int n=0; n<header.npart[i]; n++) {
             file.read((char*)&f_dummy, sizeof(float));
@@ -144,20 +156,20 @@ void read_gadget_gas(std::ifstream &file,
             file.read((char*)&f_dummy, sizeof(float));
         }
     }
-    SKIP_SPACER(file)
+    skip_spacer(file);
 
     // IDs.
-    SKIP_SPACER(file) {
+    skip_spacer(file); {
     for(int i=0; i<6; i++)
         for(int n=0; n<header.npart[i]; n++) {
             file.read((char*)&i_dummy, sizeof(int));
         }
     }
-    SKIP_SPACER(file)
+    skip_spacer(file);
 
     // Masses (optional).
     if (N_withmasses > 0)
-        SKIP_SPACER(file)
+        skip_spacer(file);
     for(int i=0; i<6; i++) {
         if (header.mass[i] == 0) {
             for (int n=0; n<header.npart[i]; n++) {
@@ -166,31 +178,31 @@ void read_gadget_gas(std::ifstream &file,
         }
     }
     if (N_withmasses > 0)
-        SKIP_SPACER(file)
+        skip_spacer(file);
 
     // Gas properties (optional).
     if (N_gas > 0)
     {
         // Internal energies.
-        SKIP_SPACER(file)
+        skip_spacer(file);
         for(int n=0; n<N_gas; n++) {
             file.read((char*)&f_dummy, sizeof(float));
         }
-        SKIP_SPACER(file)
+        skip_spacer(file);
 
         // Densities.
-        SKIP_SPACER(file)
+        skip_spacer(file);
         for (int n=0; n<N_gas; n++) {
             file.read((char*)&f_dummy, sizeof(float));
         }
-        SKIP_SPACER(file)
+        skip_spacer(file);
 
         // Smoothing lengths.
-        SKIP_SPACER(file)
+        skip_spacer(file);
         for (int n=0; n<N_gas; n++) {
             file.read((char*)&h[n], sizeof(float));
         }
-        SKIP_SPACER(file)
+        skip_spacer(file);
     }
 
     return;
