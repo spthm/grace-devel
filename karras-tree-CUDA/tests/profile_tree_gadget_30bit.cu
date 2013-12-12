@@ -98,11 +98,6 @@ int main(int argc, char* argv[]) {
     read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres, h_radii);
     infile.close();
 
-    std::cout << h_x_centres[0] << ", " << h_x_centres[N-1] << std::endl;
-    std::cout << h_y_centres[0] << ", " << h_y_centres[N-1] << std::endl;
-    std::cout << h_z_centres[0] << ", " << h_z_centres[N-1] << std::endl;
-    std::cout << h_radii[0] << ", " << h_radii[N-1] << std::endl;
-
 
     // Set the AABBs.
     float max_x = thrust::reduce(h_x_centres.begin(),
