@@ -8,8 +8,6 @@
 
 namespace grace {
 
-namespace gpu{
-
 __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
     float dx = ray.dx;
     float dy = ray.dy;
@@ -36,136 +34,136 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
     e2ty = s2ty - dy*length;
     e2tz = s2tz - dz*length;
 
-    // switch(ray.dclass)
-    // {
-    //     // MMM
-    //     case 0:
-    //     if (s2bx > 0.0f || s2by > 0.0f || s2bz > 0.0f)
-    //         return false; // on negative part of ray
+    switch(ray.dclass)
+    {
+        // MMM
+        case 0:
+        if (s2bx > 0.0f || s2by > 0.0f || s2bz > 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2tx < 0.0f || e2ty < 0.0f || e2tz < 0.0f)
-    //         return false; // past length of ray
+        if (e2tx < 0.0f || e2ty < 0.0f || e2tz < 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2by - dy*s2tx < 0.0f ||
-    //         dx*s2ty - dy*s2bx > 0.0f ||
-    //         dx*s2tz - dz*s2bx > 0.0f ||
-    //         dx*s2bz - dz*s2tx < 0.0f ||
-    //         dy*s2bz - dz*s2ty < 0.0f ||
-    //         dy*s2tz - dz*s2by > 0.0f ) return false;
-    //     break;
+        if (dx*s2by - dy*s2tx < 0.0f ||
+            dx*s2ty - dy*s2bx > 0.0f ||
+            dx*s2tz - dz*s2bx > 0.0f ||
+            dx*s2bz - dz*s2tx < 0.0f ||
+            dy*s2bz - dz*s2ty < 0.0f ||
+            dy*s2tz - dz*s2by > 0.0f ) return false;
+        break;
 
-    //     // PMM
-    //     case 1:
-    //     if (s2tx < 0.0f || s2by > 0.0f || s2bz > 0.0f)
-    //         return false; // on negative part of ray
+        // PMM
+        case 1:
+        if (s2tx < 0.0f || s2by > 0.0f || s2bz > 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2bx > 0.0f || e2ty < 0.0f || e2tz < 0.0f)
-    //         return false; // past length of ray
+        if (e2bx > 0.0f || e2ty < 0.0f || e2tz < 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2ty - dy*s2tx < 0.0f ||
-    //         dx*s2by - dy*s2bx > 0.0f ||
-    //         dx*s2bz - dz*s2bx > 0.0f ||
-    //         dx*s2tz - dz*s2tx < 0.0f ||
-    //         dy*s2bz - dz*s2ty < 0.0f ||
-    //         dy*s2tz - dz*s2by > 0.0f) return false;
-    //     break;
+        if (dx*s2ty - dy*s2tx < 0.0f ||
+            dx*s2by - dy*s2bx > 0.0f ||
+            dx*s2bz - dz*s2bx > 0.0f ||
+            dx*s2tz - dz*s2tx < 0.0f ||
+            dy*s2bz - dz*s2ty < 0.0f ||
+            dy*s2tz - dz*s2by > 0.0f) return false;
+        break;
 
-    //     // MPM
-    //     case 2:
-    //     if (s2bx > 0.0f || s2ty < 0.0f || s2bz > 0.0f)
-    //         return false; // on negative part of ray
+        // MPM
+        case 2:
+        if (s2bx > 0.0f || s2ty < 0.0f || s2bz > 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2tx < 0.0f || e2by > 0.0f || e2tz < 0.0f)
-    //         return false; // past length of ray
+        if (e2tx < 0.0f || e2by > 0.0f || e2tz < 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2by - dy*s2bx < 0.0f ||
-    //         dx*s2ty - dy*s2tx > 0.0f ||
-    //         dx*s2tz - dz*s2bx > 0.0f ||
-    //         dx*s2bz - dz*s2tx < 0.0f ||
-    //         dy*s2tz - dz*s2ty < 0.0f ||
-    //         dy*s2bz - dz*s2by > 0.0f) return false;
-    //     break;
+        if (dx*s2by - dy*s2bx < 0.0f ||
+            dx*s2ty - dy*s2tx > 0.0f ||
+            dx*s2tz - dz*s2bx > 0.0f ||
+            dx*s2bz - dz*s2tx < 0.0f ||
+            dy*s2tz - dz*s2ty < 0.0f ||
+            dy*s2bz - dz*s2by > 0.0f) return false;
+        break;
 
-    //     // PPM
-    //     case 3:
-    //     if (s2tx < 0.0f || s2ty < 0.0f || s2bz > 0.0f)
-    //         return false; // on negative part of ray
+        // PPM
+        case 3:
+        if (s2tx < 0.0f || s2ty < 0.0f || s2bz > 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2bx > 0.0f || e2by > 0.0f || e2tz < 0.0f)
-    //         return false; // past length of ray
+        if (e2bx > 0.0f || e2by > 0.0f || e2tz < 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2ty - dy*s2bx < 0.0f ||
-    //         dx*s2by - dy*s2tx > 0.0f ||
-    //         dx*s2bz - dz*s2bx > 0.0f ||
-    //         dx*s2tz - dz*s2tx < 0.0f ||
-    //         dy*s2tz - dz*s2ty < 0.0f ||
-    //         dy*s2bz - dz*s2by > 0.0f) return false;
-    //     break;
+        if (dx*s2ty - dy*s2bx < 0.0f ||
+            dx*s2by - dy*s2tx > 0.0f ||
+            dx*s2bz - dz*s2bx > 0.0f ||
+            dx*s2tz - dz*s2tx < 0.0f ||
+            dy*s2tz - dz*s2ty < 0.0f ||
+            dy*s2bz - dz*s2by > 0.0f) return false;
+        break;
 
-    //     // MMP
-    //     case 4:
-    //     if (s2bx > 0.0f || s2by > 0.0f || s2tz < 0.0f)
-    //         return false; // on negative part of ray
+        // MMP
+        case 4:
+        if (s2bx > 0.0f || s2by > 0.0f || s2tz < 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2tx < 0.0f || e2ty < 0.0f || e2bz > 0.0f)
-    //         return false; // past length of ray
+        if (e2tx < 0.0f || e2ty < 0.0f || e2bz > 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2by - dy*s2tx < 0.0f ||
-    //         dx*s2ty - dy*s2bx > 0.0f ||
-    //         dx*s2tz - dz*s2tx > 0.0f ||
-    //         dx*s2bz - dz*s2bx < 0.0f ||
-    //         dy*s2bz - dz*s2by < 0.0f ||
-    //         dy*s2tz - dz*s2ty > 0.0f) return false;
-    //     break;
+        if (dx*s2by - dy*s2tx < 0.0f ||
+            dx*s2ty - dy*s2bx > 0.0f ||
+            dx*s2tz - dz*s2tx > 0.0f ||
+            dx*s2bz - dz*s2bx < 0.0f ||
+            dy*s2bz - dz*s2by < 0.0f ||
+            dy*s2tz - dz*s2ty > 0.0f) return false;
+        break;
 
-    //     // PMP
-    //     case 5:
-    //     if (s2tx < 0.0f || s2by > 0.0f || s2tz < 0.0f)
-    //         return false; // on negative part of ray
+        // PMP
+        case 5:
+        if (s2tx < 0.0f || s2by > 0.0f || s2tz < 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2bx > 0.0f || e2ty < 0.0f || e2bz > 0.0f)
-    //         return false; // past length of ray
+        if (e2bx > 0.0f || e2ty < 0.0f || e2bz > 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2ty - dy*s2tx < 0.0f ||
-    //         dx*s2by - dy*s2bx > 0.0f ||
-    //         dx*s2bz - dz*s2tx > 0.0f ||
-    //         dx*s2tz - dz*s2bx < 0.0f ||
-    //         dy*s2bz - dz*s2by < 0.0f ||
-    //         dy*s2tz - dz*s2ty > 0.0f) return false;
-    //     break;
+        if (dx*s2ty - dy*s2tx < 0.0f ||
+            dx*s2by - dy*s2bx > 0.0f ||
+            dx*s2bz - dz*s2tx > 0.0f ||
+            dx*s2tz - dz*s2bx < 0.0f ||
+            dy*s2bz - dz*s2by < 0.0f ||
+            dy*s2tz - dz*s2ty > 0.0f) return false;
+        break;
 
-    //     // MPP
-    //     case 6:
-    //     if (s2bx > 0.0f || s2ty < 0.0f || s2tz < 0.0f)
-    //         return false; // on negative part of ray
+        // MPP
+        case 6:
+        if (s2bx > 0.0f || s2ty < 0.0f || s2tz < 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2tx < 0.0f || e2by > 0.0f || e2bz > 0.0f)
-    //         return false; // past length of ray
+        if (e2tx < 0.0f || e2by > 0.0f || e2bz > 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2by - dy*s2bx < 0.0f ||
-    //         dx*s2ty - dy*s2tx > 0.0f ||
-    //         dx*s2tz - dz*s2tx > 0.0f ||
-    //         dx*s2bz - dz*s2bx < 0.0f ||
-    //         dy*s2tz - dz*s2by < 0.0f ||
-    //         dy*s2bz - dz*s2ty > 0.0f) return false;
-    //     break;
+        if (dx*s2by - dy*s2bx < 0.0f ||
+            dx*s2ty - dy*s2tx > 0.0f ||
+            dx*s2tz - dz*s2tx > 0.0f ||
+            dx*s2bz - dz*s2bx < 0.0f ||
+            dy*s2tz - dz*s2by < 0.0f ||
+            dy*s2bz - dz*s2ty > 0.0f) return false;
+        break;
 
-    //     // PPP
-    //     case 7:
-    //     if (s2tx < 0.0f || s2ty < 0.0f || s2tz < 0.0f)
-    //         return false; // on negative part of ray
+        // PPP
+        case 7:
+        if (s2tx < 0.0f || s2ty < 0.0f || s2tz < 0.0f)
+            return false; // on negative part of ray
 
-    //     if (e2bx > 0.0f || e2by > 0.0f || e2bz > 0.0f)
-    //         return false; // past length of ray
+        if (e2bx > 0.0f || e2by > 0.0f || e2bz > 0.0f)
+            return false; // past length of ray
 
-    //     if (dx*s2ty - dy*s2bx < 0.0f ||
-    //         dx*s2by - dy*s2tx > 0.0f ||
-    //         dx*s2bz - dz*s2tx > 0.0f ||
-    //         dx*s2tz - dz*s2bx < 0.0f ||
-    //         dy*s2tz - dz*s2by < 0.0f ||
-    //         dy*s2bz - dz*s2ty > 0.0f) return false;
-    //     break;
-    // }
+        if (dx*s2ty - dy*s2bx < 0.0f ||
+            dx*s2by - dy*s2tx > 0.0f ||
+            dx*s2bz - dz*s2tx > 0.0f ||
+            dx*s2tz - dz*s2bx < 0.0f ||
+            dy*s2tz - dz*s2by < 0.0f ||
+            dy*s2bz - dz*s2ty > 0.0f) return false;
+        break;
+    }
     // Didn't return false above, so we have a hit.
     return true;
 
@@ -174,6 +172,8 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
 __device__ bool sphere_hit(Ray ray, Leaf leaf) {
     return true;
 }
+
+namespace gpu {
 
 template <typename Float>
 __global__ void trace(const Ray* rays,

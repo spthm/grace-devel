@@ -1,6 +1,7 @@
 #include <cmath>
 #include <sstream>
 
+#include <cuda_profiler_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
@@ -15,10 +16,11 @@
 
 int main(int argc, char* argv[])
 {
+{
     typedef grace::Vector3<float> Vector3f;
 
-    int N = 1000000;
-    int N_rays_per_class = 10000;
+    int N = 100000;
+    int N_rays_per_class = 1000;
     int N_rays = 8*N_rays_per_class;
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
@@ -50,9 +52,13 @@ int main(int argc, char* argv[])
     Vector3f top(1., 1., 1.);
 
     // Sort the positions by their keys and save the sorted keys.
+    thrust::device_vector<UInteger32> d_keys(N);
+    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
+                       d_keys,
+                       bottom, top);
+
     thrust::device_vector<int> d_indices(N);
     thrust::device_vector<float> d_tmp(N);
-    thrust::device_vector<UInteger32> d_keys(N);
     thrust::sequence(d_indices.begin(), d_indices.end());
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
 
@@ -172,4 +178,8 @@ int main(int argc, char* argv[])
     std::cout << "Mean hits:           " << mean_hits << std::endl;
     std::cout << "Max hits:            " << max_hits << std::endl;
     std::cout << "Min hits:            " << min_hits << std::endl;
+}
+    // Exit cleanly to ensure full profiler trace.
+    cudaDeviceReset();
+    return 0;
 }
