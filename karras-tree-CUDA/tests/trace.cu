@@ -19,8 +19,8 @@ int main(int argc, char* argv[])
 {
     typedef grace::Vector3<float> Vector3f;
 
-    int N = 100000;
-    int N_rays_per_class = 1000;
+    int N = 1000000;
+    int N_rays_per_class = 10000;
     int N_rays = 8*N_rays_per_class;
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
@@ -173,11 +173,13 @@ int main(int argc, char* argv[])
                                      0, thrust::plus<int>()) / float(N_rays);
     std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
     std::cout << std::endl;
-    std::cout << "Number of particles: " << N << std::endl;
-    std::cout << "Expected hit count:  " << N_hits_per_ray / 2 << std::endl;
-    std::cout << "Mean hits:           " << mean_hits << std::endl;
-    std::cout << "Max hits:            " << max_hits << std::endl;
-    std::cout << "Min hits:            " << min_hits << std::endl;
+    std::cout << "Number of rays/class: " << N_rays_per_class << std::endl;
+    std::cout << "Number of rays:       " << N_rays << std::endl;
+    std::cout << "Number of particles:  " << N << std::endl;
+    std::cout << "Expected hit count:   " << N_hits_per_ray / 2 << std::endl;
+    std::cout << "Mean hits:            " << mean_hits << std::endl;
+    std::cout << "Max hits:             " << max_hits << std::endl;
+    std::cout << "Min hits:             " << min_hits << std::endl;
 }
     // Exit cleanly to ensure full profiler trace.
     cudaDeviceReset();
