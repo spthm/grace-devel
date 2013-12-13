@@ -28,10 +28,10 @@ __host__ __device__ UInteger32 morton_key(const float& x,
                                           const float& y,
                                           const float& z)
 {
-    unsigned int span = 1u << 10;
-    return morton_key((UInteger32) span*x,
-                      (UInteger32) span*y,
-                      (UInteger32) span*z);
+    unsigned int span = (1u << 10) - 1;
+    return morton_key((UInteger32) (span*x),
+                      (UInteger32) (span*y),
+                      (UInteger32) (span*z));
 
 }
 
@@ -40,10 +40,10 @@ __host__ __device__ UInteger64 morton_key(const double& x,
                                           const double& y,
                                           const double& z)
 {
-    unsigned int span = 1u << 21;
-    return morton_key((UInteger64) span*x,
-                      (UInteger64) span*y,
-                      (UInteger64) span*z);
+    unsigned int span = (1u << 21) - 1;
+    return morton_key((UInteger64) (span*x),
+                      (UInteger64) (span*y),
+                      (UInteger64) (span*z));
 
 }
 
