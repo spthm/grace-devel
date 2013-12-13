@@ -1,7 +1,6 @@
 #include <cmath>
 #include <sstream>
 
-#include <cuda_profiler_api.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
