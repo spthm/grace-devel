@@ -9,9 +9,9 @@
 namespace grace {
 
 __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
-    float dx = ray.dx;
-    float dy = ray.dy;
-    float dz = ray.dz;
+    float rx = ray.dx;
+    float ry = ray.dy;
+    float rz = ray.dz;
     float length = ray.length;
     float s2bx, s2by, s2bz; // Vector from ray start to lower cell corner.
     float s2tx, s2ty, s2tz; // Vector from ray start to upper cell corner.
@@ -26,13 +26,13 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
     s2ty = node.top[1] - ray.oy;
     s2tz = node.top[2] - ray.oz;
 
-    e2bx = s2bx - dx*length;
-    e2by = s2by - dy*length;
-    e2bz = s2bz - dz*length;
+    e2bx = s2bx - rx*length;
+    e2by = s2by - ry*length;
+    e2bz = s2bz - rz*length;
 
-    e2tx = s2tx - dx*length;
-    e2ty = s2ty - dy*length;
-    e2tz = s2tz - dz*length;
+    e2tx = s2tx - rx*length;
+    e2ty = s2ty - ry*length;
+    e2tz = s2tz - rz*length;
 
     switch(ray.dclass)
     {
@@ -44,12 +44,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2tx < 0.0f || e2ty < 0.0f || e2tz < 0.0f)
             return false; // past length of ray
 
-        if (dx*s2by - dy*s2tx < 0.0f ||
-            dx*s2ty - dy*s2bx > 0.0f ||
-            dx*s2tz - dz*s2bx > 0.0f ||
-            dx*s2bz - dz*s2tx < 0.0f ||
-            dy*s2bz - dz*s2ty < 0.0f ||
-            dy*s2tz - dz*s2by > 0.0f ) return false;
+        if (rx*s2by - ry*s2tx < 0.0f ||
+            rx*s2ty - ry*s2bx > 0.0f ||
+            rx*s2tz - rz*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx < 0.0f ||
+            ry*s2bz - rz*s2ty < 0.0f ||
+            ry*s2tz - rz*s2by > 0.0f ) return false;
         break;
 
         // PMM
@@ -60,12 +60,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2bx > 0.0f || e2ty < 0.0f || e2tz < 0.0f)
             return false; // past length of ray
 
-        if (dx*s2ty - dy*s2tx < 0.0f ||
-            dx*s2by - dy*s2bx > 0.0f ||
-            dx*s2bz - dz*s2bx > 0.0f ||
-            dx*s2tz - dz*s2tx < 0.0f ||
-            dy*s2bz - dz*s2ty < 0.0f ||
-            dy*s2tz - dz*s2by > 0.0f) return false;
+        if (rx*s2ty - ry*s2tx < 0.0f ||
+            rx*s2by - ry*s2bx > 0.0f ||
+            rx*s2bz - rz*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx < 0.0f ||
+            ry*s2bz - rz*s2ty < 0.0f ||
+            ry*s2tz - rz*s2by > 0.0f) return false;
         break;
 
         // MPM
@@ -76,12 +76,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2tx < 0.0f || e2by > 0.0f || e2tz < 0.0f)
             return false; // past length of ray
 
-        if (dx*s2by - dy*s2bx < 0.0f ||
-            dx*s2ty - dy*s2tx > 0.0f ||
-            dx*s2tz - dz*s2bx > 0.0f ||
-            dx*s2bz - dz*s2tx < 0.0f ||
-            dy*s2tz - dz*s2ty < 0.0f ||
-            dy*s2bz - dz*s2by > 0.0f) return false;
+        if (rx*s2by - ry*s2bx < 0.0f ||
+            rx*s2ty - ry*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx < 0.0f ||
+            ry*s2tz - rz*s2ty < 0.0f ||
+            ry*s2bz - rz*s2by > 0.0f) return false;
         break;
 
         // PPM
@@ -92,12 +92,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2bx > 0.0f || e2by > 0.0f || e2tz < 0.0f)
             return false; // past length of ray
 
-        if (dx*s2ty - dy*s2bx < 0.0f ||
-            dx*s2by - dy*s2tx > 0.0f ||
-            dx*s2bz - dz*s2bx > 0.0f ||
-            dx*s2tz - dz*s2tx < 0.0f ||
-            dy*s2tz - dz*s2ty < 0.0f ||
-            dy*s2bz - dz*s2by > 0.0f) return false;
+        if (rx*s2ty - ry*s2bx < 0.0f ||
+            rx*s2by - ry*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx < 0.0f ||
+            ry*s2tz - rz*s2ty < 0.0f ||
+            ry*s2bz - rz*s2by > 0.0f) return false;
         break;
 
         // MMP
@@ -108,12 +108,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2tx < 0.0f || e2ty < 0.0f || e2bz > 0.0f)
             return false; // past length of ray
 
-        if (dx*s2by - dy*s2tx < 0.0f ||
-            dx*s2ty - dy*s2bx > 0.0f ||
-            dx*s2tz - dz*s2tx > 0.0f ||
-            dx*s2bz - dz*s2bx < 0.0f ||
-            dy*s2bz - dz*s2by < 0.0f ||
-            dy*s2tz - dz*s2ty > 0.0f) return false;
+        if (rx*s2by - ry*s2tx < 0.0f ||
+            rx*s2ty - ry*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx < 0.0f ||
+            ry*s2bz - rz*s2by < 0.0f ||
+            ry*s2tz - rz*s2ty > 0.0f) return false;
         break;
 
         // PMP
@@ -124,12 +124,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2bx > 0.0f || e2ty < 0.0f || e2bz > 0.0f)
             return false; // past length of ray
 
-        if (dx*s2ty - dy*s2tx < 0.0f ||
-            dx*s2by - dy*s2bx > 0.0f ||
-            dx*s2bz - dz*s2tx > 0.0f ||
-            dx*s2tz - dz*s2bx < 0.0f ||
-            dy*s2bz - dz*s2by < 0.0f ||
-            dy*s2tz - dz*s2ty > 0.0f) return false;
+        if (rx*s2ty - ry*s2tx < 0.0f ||
+            rx*s2by - ry*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx < 0.0f ||
+            ry*s2bz - rz*s2by < 0.0f ||
+            ry*s2tz - rz*s2ty > 0.0f) return false;
         break;
 
         // MPP
@@ -140,12 +140,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2tx < 0.0f || e2by > 0.0f || e2bz > 0.0f)
             return false; // past length of ray
 
-        if (dx*s2by - dy*s2bx < 0.0f ||
-            dx*s2ty - dy*s2tx > 0.0f ||
-            dx*s2tz - dz*s2tx > 0.0f ||
-            dx*s2bz - dz*s2bx < 0.0f ||
-            dy*s2tz - dz*s2by < 0.0f ||
-            dy*s2bz - dz*s2ty > 0.0f) return false;
+        if (rx*s2by - ry*s2bx < 0.0f ||
+            rx*s2ty - ry*s2tx > 0.0f ||
+            rx*s2tz - rz*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx < 0.0f ||
+            ry*s2tz - rz*s2by < 0.0f ||
+            ry*s2bz - rz*s2ty > 0.0f) return false;
         break;
 
         // PPP
@@ -156,12 +156,12 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
         if (e2bx > 0.0f || e2by > 0.0f || e2bz > 0.0f)
             return false; // past length of ray
 
-        if (dx*s2ty - dy*s2bx < 0.0f ||
-            dx*s2by - dy*s2tx > 0.0f ||
-            dx*s2bz - dz*s2tx > 0.0f ||
-            dx*s2tz - dz*s2bx < 0.0f ||
-            dy*s2tz - dz*s2by < 0.0f ||
-            dy*s2bz - dz*s2ty > 0.0f) return false;
+        if (rx*s2ty - ry*s2bx < 0.0f ||
+            rx*s2by - ry*s2tx > 0.0f ||
+            rx*s2bz - rz*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx < 0.0f ||
+            ry*s2tz - rz*s2by < 0.0f ||
+            ry*s2bz - rz*s2ty > 0.0f) return false;
         break;
     }
     // Didn't return false above, so we have a hit.
@@ -169,7 +169,49 @@ __host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
 
 }
 
-__device__ bool sphere_hit(Ray ray, Leaf leaf) {
+template <typename Float>
+__host__ __device__ bool sphere_hit(const Ray& ray,
+                                    const Float& x,
+                                    const Float& y,
+                                    const Float& z,
+                                    const Float& radius)
+{
+    // Ray origin -> sphere centre;
+    float px = ray.ox - x;
+    float py = ray.oy - y;
+    float pz = ray.oz - z;
+
+    // Normalized ray direction.
+    float rx = ray.dx;
+    float ry = ray.dy;
+    float rz = ray.dz;
+
+    // Projection of p onto r.
+    float dot_p = px*rx + py*ry + pz*rz;
+
+    // Impact parameter.
+    float bx = px - dot_p*rx;
+    float by = py - dot_p*ry;
+    float bz = pz - dot_p*rz;
+    float b = sqrtf(bx*bx + by*by +bz*bz);
+
+    if (b >= radius)
+        return false;
+
+    // If dot_p < 0, to hit the ray origin must be inside the sphere.
+    // This is not possible if the distance along the ray (backwards from its
+    // origin) to the point of closest approach is > the sphere radius.
+    if (dot_p < -radius)
+        return false;
+
+    // The ray terminates before reaching the point of closest approach.
+    if (dot_p > ray.length + radius)
+        return false;
+
+    // Otherwise, assume we have a hit.  This counts the following partial
+    // intersections as hits:
+    //     i) Ray starts (anywhere) inside particle.
+    //    ii) Ray ends in a particle, beyond the point of closest approach.
     return true;
 }
 
@@ -231,7 +273,10 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf)
             {
-                if (sphere_hit(ray, leaves[node_index])) {
+                if (sphere_hit(ray,
+                               xs[node_index], ys[node_index], zs[node_index],
+                               radii[node_index]))
+                {
                     if (ray_hit_count < max_ray_hits)
                         hits[hit_offset+ray_hit_count] = node_index;
                     ray_hit_count++;
