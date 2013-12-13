@@ -204,14 +204,14 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     if (dot_p < -radius)
         return false;
 
-    // The ray terminates before reaching the point of closest approach.
+    // The ray terminates before piercing the sphere.
     if (dot_p > ray.length + radius)
         return false;
 
     // Otherwise, assume we have a hit.  This counts the following partial
     // intersections as hits:
-    //     i) Ray starts (anywhere) inside particle.
-    //    ii) Ray ends in a particle, beyond the point of closest approach.
+    //     i) Ray starts (anywhere) inside sphere.
+    //    ii) Ray ends (anywhere) inside sphere.
     return true;
 }
 
