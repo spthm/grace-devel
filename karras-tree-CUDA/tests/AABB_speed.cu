@@ -3,25 +3,28 @@
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/sort.h>
 
 #include "../types.h"
 #include "../nodes.h"
 #include "../ray.h"
 #include "utils.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/morton.cuh"
 
 __global__ void AABB_multi_hit(const grace::Ray* rays,
                                const grace::Node* nodes,
                                const int N_rays,
-                               const int N_AABBs)
+                               const int N_AABBs,
+                               unsigned int* hits)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    bool hit;
 
     while (tid < N_rays)
     {
         for (int i=0; i<N_AABBs; i++) {
-            hit = grace::AABB_hit(rays[tid], nodes[i]);
+            if (grace::AABB_hit(rays[tid], nodes[i]))
+                hits[tid]++;
         }
 
         tid += blockDim.x * gridDim.x;
@@ -36,6 +39,7 @@ int main(void)
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
     thrust::host_vector<grace::Node> h_nodes(N_AABBs);
+    thrust::host_vector<UInteger32> h_keys(N_rays);
 
     // Generate rays
     random_float_functor rng(-1.0f, 1.0f);
@@ -63,7 +67,15 @@ int main(void)
             h_rays[i].dclass += 2;
         if (z >= 0)
             h_rays[i].dclass += 4;
+
+        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
+                                      (h_rays[i].dy+1)/2.f,
+                                      (h_rays[i].dz+1)/2.f);
     }
+    // Sort rays by Morton key.
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
+    h_keys.clear();
+    h_keys.shrink_to_fit();
 
     // Generate AABBs
     float x1, x2, y1, y2, z1, z2;
@@ -85,16 +97,19 @@ int main(void)
     }
 
     // Perform ray-box intersection tests on CPU.
-    double t = (double)clock() / CLOCKS_PER_SEC;
-    for (int i=0; i<N_rays; i++) {
-        for (int j=0; j<N_AABBs; j++) {
-            bool hit = grace::AABB_hit(h_rays[i], h_nodes[j]);
-        }
-    }
-    t = (double)clock() / CLOCKS_PER_SEC - t;
+    // thrust::host_vector<unsigned int> h_hits(N_rays);
+    // double t = (double)clock() / CLOCKS_PER_SEC;
+    // for (int i=0; i<N_rays; i++) {
+    //     for (int j=0; j<N_AABBs; j++) {
+    //         if (grace::AABB_hit(h_rays[i], h_nodes[j]))
+    //             h_hits[i]++;
+    //     }
+    // }
+    // t = (double)clock() / CLOCKS_PER_SEC - t;
 
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<grace::Node> d_nodes = h_nodes;
+    thrust::device_vector<unsigned int> d_hits(N_rays);
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -103,14 +118,15 @@ int main(void)
     AABB_multi_hit<<<48, 512>>>(thrust::raw_pointer_cast(d_rays.data()),
                                 thrust::raw_pointer_cast(d_nodes.data()),
                                                          N_rays,
-                                                         N_AABBs);
+                                                         N_AABBs,
+                                thrust::raw_pointer_cast(d_hits.data()));
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
     std::cout << N_rays << " rays tested against " << N_AABBs << " AABBs in "
               << std::endl;
-    std::cout << "  i) CPU: " << t << " s." << std::endl;
+    // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
     std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
 
 
