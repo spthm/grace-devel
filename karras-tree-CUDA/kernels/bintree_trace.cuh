@@ -46,7 +46,6 @@ __device__ bool AABB_hit(const Ray& ray, const Node& node)
     float iry = 1. / ray.dy;
     float irz = 1. / ray.dz;
 
-    // Assume origin at (0, 0, 0)
     float bx = node.bottom[0];
     float by = node.bottom[1];
     float bz = node.bottom[2];
@@ -54,6 +53,7 @@ __device__ bool AABB_hit(const Ray& ray, const Node& node)
     float ty = node.top[1];
     float tz = node.top[2];
 
+    // Assume origin at (0, 0, 0)
     tmin = (bx) * irx;
     tmax = (tx) * irx;
     tymin = (by) * iry;
@@ -64,7 +64,7 @@ __device__ bool AABB_hit(const Ray& ray, const Node& node)
     tmin = spanBeginFermi(tmin, tmax, tymin, tymax, tzmin, tzmax, 0.0);
     tmax = spanEndFermi(tmin, tmax, tymin, tmax, tzmin, tzmax, ray.length);
 
-    return (tmin <= tmax);
+    return ( (tmin < tmax) && (tmin < ray.length) && (0 < tmax) );
 }
 
 __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node) {
