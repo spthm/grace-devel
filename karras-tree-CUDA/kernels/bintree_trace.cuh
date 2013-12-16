@@ -256,7 +256,7 @@ __global__ void trace(const Ray* rays,
         {
             if (!is_leaf)
             {
-                if (AABB_hit(ray, nodes[node_index])) {
+                if (AABB_hit_plucker(ray, nodes[node_index])) {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
                     is_leaf = nodes[node_index].left_leaf_flag;
