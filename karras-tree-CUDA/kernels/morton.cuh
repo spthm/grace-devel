@@ -8,25 +8,25 @@
 namespace grace {
 
 // 30-bit keys.
-__host__ __device__ UInteger32 morton_key(const UInteger32& x,
-                                          const UInteger32& y,
-                                          const UInteger32& z)
+__host__ __device__ UInteger32 morton_key(const UInteger32 x,
+                                          const UInteger32 y,
+                                          const UInteger32 z)
 {
     return space_by_two_10bit(z) << 2 | space_by_two_10bit(y) << 1 | space_by_two_10bit(x);
 }
 
 // 63-bit keys.
-__host__ __device__ UInteger64 morton_key(const UInteger64& x,
-                                          const UInteger64& y,
-                                          const UInteger64& z)
+__host__ __device__ UInteger64 morton_key(const UInteger64 x,
+                                          const UInteger64 y,
+                                          const UInteger64 z)
 {
     return space_by_two_21bit(z) << 2 | space_by_two_21bit(y) << 1 | space_by_two_21bit(x);
 }
 
 // 30-bit keys from floats.  Assumes floats lie in (0, 1)!
-__host__ __device__ UInteger32 morton_key(const float& x,
-                                          const float& y,
-                                          const float& z)
+__host__ __device__ UInteger32 morton_key(const float x,
+                                          const float y,
+                                          const float z)
 {
     unsigned int span = (1u << 10) - 1;
     return morton_key((UInteger32) (span*x),
@@ -36,9 +36,9 @@ __host__ __device__ UInteger32 morton_key(const float& x,
 }
 
 // 63-bit keys from doubles.  Assumes doubles lie in (0, 1)!
-__host__ __device__ UInteger64 morton_key(const double& x,
-                                          const double& y,
-                                          const double& z)
+__host__ __device__ UInteger64 morton_key(const double x,
+                                          const double y,
+                                          const double z)
 {
     unsigned int span = (1u << 21) - 1;
     return morton_key((UInteger64) (span*x),
