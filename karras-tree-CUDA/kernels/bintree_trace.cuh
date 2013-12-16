@@ -8,7 +8,66 @@
 
 namespace grace {
 
-__host__ __device__ bool AABB_hit(const Ray& ray, const Node& node) {
+// Using video instructions
+__device__ __inline__ int   min_min   (int a, int b, int c) { int v; asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
+__device__ __inline__ int   min_max   (int a, int b, int c) { int v; asm("vmin.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
+__device__ __inline__ int   max_min   (int a, int b, int c) { int v; asm("vmax.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
+__device__ __inline__ int   max_max   (int a, int b, int c) { int v; asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
+__device__ __inline__ float fmin_fmin (float a, float b, float c) { return __int_as_float(min_min(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
+__device__ __inline__ float fmin_fmax (float a, float b, float c) { return __int_as_float(min_max(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
+__device__ __inline__ float fmax_fmin (float a, float b, float c) { return __int_as_float(max_min(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
+__device__ __inline__ float fmax_fmax (float a, float b, float c) { return __int_as_float(max_max(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
+
+
+__device__ __inline__ float magic_max7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
+{
+            float t1 = fmin_fmax(a0, a1, d);
+            float t2 = fmin_fmax(b0, b1, t1);
+            float t3 = fmin_fmax(c0, c1, t2);
+            return t3;
+}
+
+__device__ __inline__ float magic_min7(float a0, float a1, float b0, float b1, float c0, float c1, float d)
+{
+            float t1 = fmax_fmin(a0, a1, d);
+            float t2 = fmax_fmin(b0, b1, t1);
+            float t3 = fmax_fmin(c0, c1, t2);
+            return t3;
+}
+
+__device__ __inline__ float spanBeginFermi(float a0, float a1, float b0, float b1, float c0, float c1, float d) {       return magic_max7(a0, a1, b0, b1, c0, c1, d); }
+__device__ __inline__ float spanEndFermi(float a0, float a1, float b0, float b1, float c0, float c1, float d)   {       return magic_min7(a0, a1, b0, b1, c0, c1, d); }
+
+__device__ bool AABB_hit(const Ray& ray, const Node& node)
+{
+    float tmin, tmax, tymin, tymax, tzmin, tzmax;
+
+    float irx = 1. / ray.dx;
+    float iry = 1. / ray.dy;
+    float irz = 1. / ray.dz;
+
+    // Assume origin at (0, 0, 0)
+    float bx = node.bottom[0];
+    float by = node.bottom[1];
+    float bz = node.bottom[2];
+    float tx = node.top[0];
+    float ty = node.top[1];
+    float tz = node.top[2];
+
+    tmin = (bx) * irx;
+    tmax = (tx) * irx;
+    tymin = (by) * iry;
+    tymax = (ty) * iry;
+    tzmin = (bz) * irz;
+    tzmax = (tz) * irz;
+
+    tmin = spanBeginFermi(tmin, tmax, tymin, tymax, tzmin, tzmax, 0.0);
+    tmax = spanEndFermi(tmin, tmax, tymin, tmax, tzmin, tzmax, ray.length);
+
+    return (tmin <= tmax);
+}
+
+__host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node) {
     float rx = ray.dx;
     float ry = ray.dy;
     float rz = ray.dz;

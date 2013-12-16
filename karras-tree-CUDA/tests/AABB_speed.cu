@@ -12,11 +12,11 @@
 #include "../kernels/bintree_trace.cuh"
 #include "../kernels/morton.cuh"
 
-__global__ void AABB_multi_hit(const grace::Ray* rays,
-                               const grace::Node* nodes,
-                               const int N_rays,
-                               const int N_AABBs,
-                               unsigned int* hits)
+__global__ void AABB_hit_kernel(const grace::Ray* rays,
+                                const grace::Node* nodes,
+                                const int N_rays,
+                                const int N_AABBs,
+                                unsigned int* hits)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -24,6 +24,25 @@ __global__ void AABB_multi_hit(const grace::Ray* rays,
     {
         for (int i=0; i<N_AABBs; i++) {
             if (grace::AABB_hit(rays[tid], nodes[i]))
+                hits[tid]++;
+        }
+
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
+                                        const grace::Node* nodes,
+                                        const int N_rays,
+                                        const int N_AABBs,
+                                        unsigned int* hits)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < N_rays)
+    {
+        for (int i=0; i<N_AABBs; i++) {
+            if (grace::AABB_hit_plucker(rays[tid], nodes[i]))
                 hits[tid]++;
         }
 
@@ -96,7 +115,8 @@ int main(void)
         h_nodes[i].bottom[2] = min(z1, z2);
     }
 
-    // Perform ray-box intersection tests on CPU.
+
+    // Perform simple ray-box intersection tests on CPU.
     // thrust::host_vector<unsigned int> h_hits(N_rays);
     // double t = (double)clock() / CLOCKS_PER_SEC;
     // for (int i=0; i<N_rays; i++) {
@@ -115,19 +135,51 @@ int main(void)
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    AABB_multi_hit<<<48, 512>>>(thrust::raw_pointer_cast(d_rays.data()),
-                                thrust::raw_pointer_cast(d_nodes.data()),
-                                                         N_rays,
-                                                         N_AABBs,
-                                thrust::raw_pointer_cast(d_hits.data()));
+    AABB_hit_kernel<<<48, 512>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        thrust::raw_pointer_cast(d_nodes.data()),
+        N_rays,
+        N_AABBs,
+        thrust::raw_pointer_cast(d_hits.data()));
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
-    std::cout << N_rays << " rays tested against " << N_AABBs << " AABBs in "
-              << std::endl;
+    std::cout << N_rays << " rays tested against " << N_AABBs
+              << " AABBs (simple) in" << std::endl;
     // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
     std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
+    std::cout << d_hits[0] << ", " << d_hits[50000-1]
+              << ", " << d_hits[100000-1] << std::endl;
 
+
+    // Perform plucker ray-box intersection tests on CPU.
+    // thrust::fill(h_hits.begin(), h_hits.end(), 0u);
+    // t = (double)clock() / CLOCKS_PER_SEC;
+    // for (int i=0; i<N_rays; i++) {
+    //     for (int j=0; j<N_AABBs; j++) {
+    //         if (grace::AABB_hit_plucker(h_rays[i], h_nodes[j]))
+    //             h_hits[i]++;
+    //     }
+    // }
+    // t = (double)clock() / CLOCKS_PER_SEC - t;
+
+    thrust::fill(d_hits.begin(), d_hits.end(), 0u);
+    cudaEventRecord(start);
+    AABB_hit_plucker_kernel<<<48, 512>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        thrust::raw_pointer_cast(d_nodes.data()),
+        N_rays,
+        N_AABBs,
+        thrust::raw_pointer_cast(d_hits.data()));
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&elapsed, start, stop);
+    std::cout << N_rays << " rays tested against " << N_AABBs
+              << " AABBs (plucker) in" << std::endl;
+    // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
+    std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
+    std::cout << d_hits[0] << ", " << d_hits[50000-1]
+              << ", " << d_hits[100000-1] << std::endl;
 
 }

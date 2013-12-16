@@ -25,6 +25,7 @@ struct Node
     // AABB.  float should be sufficient (i.e. no need for double).
     float top[3];
     float bottom[3];
+
 };
 
 struct Leaf
