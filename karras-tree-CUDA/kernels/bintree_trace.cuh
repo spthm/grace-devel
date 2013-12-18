@@ -8,7 +8,350 @@
 
 namespace grace {
 
-__host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node) {
+enum CLASSIFICATION
+{ MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
+
+__host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
+                                           // float ox, float oy, float oz,
+                                           // float xbyy, float ybyx, float ybyz,
+                                           // float zbyy, float xbyz, float zbyx,
+                                           // float c_xy, float c_xz, float c_yx,
+                                           // float c_yz, float c_zx, float c_zy)
+{
+    float ox = ray.ox;
+    float oy = ray.oy;
+    float oz = ray.oz;
+
+    float xbyy = ray.xbyy;
+    float ybyx = ray.ybyx;
+    float ybyz = ray.ybyz;
+    float zbyy = ray.zbyy;
+    float xbyz = ray.xbyz;
+    float zbyx = ray.zbyx;
+
+    float c_xy = ray.c_zy;
+    float c_xz = ray.c_zy;
+    float c_yx = ray.c_zy;
+    float c_yz = ray.c_zy;
+    float c_zx = ray.c_zy;
+    float c_zy = ray.c_zy;
+
+    float bx = node.bottom[0];
+    float by = node.bottom[1];
+    float bz = node.bottom[2];
+    float tx = node.top[0];
+    float ty = node.top[1];
+    float tz = node.top[2];
+
+    switch(ray.dclass)
+    {
+    case MMM:
+
+        if ((ox < bx) || (oy < by) || (oz < bz)
+            || (ybyx * bx - ty + c_xy > 0)
+            || (xbyy * by - tx + c_yx > 0)
+            || (ybyz * bz - ty + c_zy > 0)
+            || (zbyy * by - tz + c_yz > 0)
+            || (zbyx * bx - tz + c_xz > 0)
+            || (xbyz * bz - tx + c_zx > 0)
+            )
+            return false;
+
+        return true;
+
+    case MMP:
+
+        if ((ox < bx) || (oy < by) || (oz > tz)
+            || (ybyx * bx - ty + c_xy > 0)
+            || (xbyy * by - tx + c_yx > 0)
+            || (ybyz * tz - ty + c_zy > 0)
+            || (zbyy * by - bz + c_yz < 0)
+            || (zbyx * bx - bz + c_xz < 0)
+            || (xbyz * tz - tx + c_zx > 0)
+            )
+            return false;
+
+        return true;
+
+    case MPM:
+
+        if ((ox < bx) || (oy > ty) || (oz < bz)
+            || (ybyx * bx - by + c_xy < 0)
+            || (xbyy * ty - tx + c_yx > 0)
+            || (ybyz * bz - by + c_zy < 0)
+            || (zbyy * ty - tz + c_yz > 0)
+            || (zbyx * bx - tz + c_xz > 0)
+            || (xbyz * bz - tx + c_zx > 0)
+            )
+            return false;
+
+        return true;
+
+    case MPP:
+
+        if ((ox < bx) || (oy > ty) || (oz > tz)
+            || (ybyx * bx - by + c_xy < 0)
+            || (xbyy * ty - tx + c_yx > 0)
+            || (ybyz * tz - by + c_zy < 0)
+            || (zbyy * ty - bz + c_yz < 0)
+            || (zbyx * bx - bz + c_xz < 0)
+            || (xbyz * tz - tx + c_zx > 0)
+            )
+            return false;
+
+        return true;
+
+    case PMM:
+
+        if ((ox > tx) || (oy < by) || (oz < bz)
+            || (ybyx * tx - ty + c_xy > 0)
+            || (xbyy * by - bx + c_yx < 0)
+            || (ybyz * bz - ty + c_zy > 0)
+            || (zbyy * by - tz + c_yz > 0)
+            || (zbyx * tx - tz + c_xz > 0)
+            || (xbyz * bz - bx + c_zx < 0)
+            )
+            return false;
+
+        return true;
+
+    case PMP:
+
+        if ((ox > tx) || (oy < by) || (oz > tz)
+            || (ybyx * tx - ty + c_xy > 0)
+            || (xbyy * by - bx + c_yx < 0)
+            || (ybyz * tz - ty + c_zy > 0)
+            || (zbyy * by - bz + c_yz < 0)
+            || (zbyx * tx - bz + c_xz < 0)
+            || (xbyz * tz - bx + c_zx < 0)
+            )
+            return false;
+
+        return true;
+
+    case PPM:
+
+        if ((ox > tx) || (oy > ty) || (oz < bz)
+            || (ybyx * tx - by + c_xy < 0)
+            || (xbyy * ty - bx + c_yx < 0)
+            || (ybyz * bz - by + c_zy < 0)
+            || (zbyy * ty - tz + c_yz > 0)
+            || (zbyx * tx - tz + c_xz > 0)
+            || (xbyz * bz - bx + c_zx < 0)
+            )
+            return false;
+
+        return true;
+
+    case PPP:
+
+        if ((ox > tx) || (oy > ty) || (oz > tz)
+            || (ybyx * tx - by + c_xy < 0)
+            || (xbyy * ty - bx + c_yx < 0)
+            || (ybyz * tz - by + c_zy < 0)
+            || (zbyy * ty - bz + c_yz < 0)
+            || (zbyx * tx - bz + c_xz < 0)
+            || (xbyz * tz - bx + c_zx < 0)
+            )
+            return false;
+
+        return true;
+
+    // case OMM:
+
+    //     if((ox < bx) || (ox > tx)
+    //         || (oy < by) || (oz < bz)
+    //         || (ybyz * bz - ty + c_zy > 0)
+    //         || (zbyy * by - tz + c_yz > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case OMP:
+
+    //     if((ox < bx) || (ox > tx)
+    //         || (oy < by) || (oz > tz)
+    //         || (ybyz * tz - ty + c_zy > 0)
+    //         || (zbyy * by - bz + c_yz < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case OPM:
+
+    //     if((ox < bx) || (ox > tx)
+    //         || (oy > ty) || (oz < bz)
+    //         || (ybyz * bz - by + c_zy < 0)
+    //         || (zbyy * ty - tz + c_yz > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case OPP:
+
+    //     if((ox < bx) || (ox > tx)
+    //         || (oy > ty) || (oz > tz)
+    //         || (ybyz * tz - by + c_zy < 0)
+    //         || (zbyy * ty - bz + c_yz < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case MOM:
+
+    //     if((oy < by) || (oy > ty)
+    //         || (ox < bx) || (oz < bz)
+    //         || (zbyx * bx - tz + c_xz > 0)
+    //         || (xbyz * bz - tx + c_zx > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case MOP:
+
+    //     if((oy < by) || (oy > ty)
+    //         || (ox < bx) || (oz > tz)
+    //         || (zbyx * bx - bz + c_xz < 0)
+    //         || (xbyz * tz - tx + c_zx > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case POM:
+
+    //     if((oy < by) || (oy > ty)
+    //         || (ox > tx) || (oz < bz)
+    //         || (zbyx * tx - tz + c_xz > 0)
+    //         || (xbyz * bz - bx + c_zx < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case POP:
+
+    //     if((oy < by) || (oy > ty)
+    //         || (ox > tx) || (oz > tz)
+    //         || (zbyx * tx - bz + c_xz < 0)
+    //         || (xbyz * tz - bx + c_zx < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case MMO:
+
+    //     if((oz < bz) || (oz > tz)
+    //         || (ox < bx) || (oy < by)
+    //         || (ybyx * bx - ty + c_xy > 0)
+    //         || (xbyy * by - tx + c_yx > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case MPO:
+
+    //     if((oz < bz) || (oz > tz)
+    //         || (ox < bx) || (oy > ty)
+    //         || (ybyx * bx - by + c_xy < 0)
+    //         || (xbyy * ty - tx + c_yx > 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case PMO:
+
+    //     if((oz < bz) || (oz > tz)
+    //         || (ox > tx) || (oy < by)
+    //         || (ybyx * tx - ty + c_xy > 0)
+    //         || (xbyy * by - bx + c_yx < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case PPO:
+
+    //     if((oz < bz) || (oz > tz)
+    //         || (ox > tx) || (oy > ty)
+    //         || (ybyx * tx - by + c_xy < 0)
+    //         || (xbyy * ty - bx + c_yx < 0)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case MOO:
+
+    //     if((ox < bx)
+    //         || (oy < by) || (oy > ty)
+    //         || (oz < bz) || (oz > tz)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case POO:
+
+    //     if((ox > tx)
+    //         || (oy < by) || (oy > ty)
+    //         || (oz < bz) || (oz > tz)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    // case OMO:
+
+    //     if((oy < by)
+    //         || (ox < bx) || (ox > tx)
+    //         || (oz < bz) || (oz > tz)
+    //         )
+    //         return false;
+
+    // case OPO:
+
+    //     if((oy > ty)
+    //         || (ox < bx) || (ox > tx)
+    //         || (oz < bz) || (oz > tz)
+    //         )
+    //         return false;
+
+    // case OOM:
+
+    //     if((oz < bz)
+    //         || (ox < bx) || (ox > tx)
+    //         || (oy < by) || (oy > ty)
+    //         )
+    //         return false;
+
+    // case OOP:
+
+    //     if((oz > tz)
+    //         || (ox < bx) || (ox > tx)
+    //         || (oy < by) || (oy > ty)
+    //         )
+    //         return false;
+
+    //     return true;
+
+    }
+
+    return false;
+
+
+}
+
+__host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
+{
     float rx = ray.dx;
     float ry = ray.dy;
     float rz = ray.dz;

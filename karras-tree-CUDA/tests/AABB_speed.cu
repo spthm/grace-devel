@@ -12,18 +12,39 @@
 #include "../kernels/bintree_trace.cuh"
 #include "../kernels/morton.cuh"
 
-__global__ void AABB_hit_kernel(const grace::Ray* rays,
-                                const grace::Node* nodes,
-                                const int N_rays,
-                                const int N_AABBs,
-                                unsigned int* hits)
+__global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
+                                         const grace::Node* nodes,
+                                         const int N_rays,
+                                         const int N_AABBs,
+                                         unsigned int* hits)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_rays)
     {
+        grace::Ray ray = rays[tid];
+        // float ox = ray.ox;
+        // float oy = ray.oy;
+        // float oz = ray.oz;
+
+        float ray.xbyy = ray.dx / ray.dy;
+        float ray.ybyx = 1.0f / ray.xbyy;
+        float ray.ybyz = ray.dy / ray.dz;
+        float ray.zbyy = 1.0f / ray.ybyz;
+        float ray.xbyz = ray.dx / ray.dz;
+        float ray.zbyx = 1.0f / ray.xbyz;
+
+        float ray.c_xy = ray.oy - ray.ybyx*ray.ox;
+        float ray.c_xz = ray.oz - ray.zbyx*ray.ox;
+        float ray.c_yx = ray.ox - ray.xbyy*ray.oy;
+        float ray.c_yz = ray.oz - ray.zbyy*ray.oy;
+        float ray.c_zx = ray.ox - ray.xbyz*ray.oz;
+        float ray.c_zy = ray.oy - ray.ybyz*ray.oz;
+
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit(rays[tid], nodes[i]))
+            if (grace::AABB_hit_eisemann(ray, nodes[i], ox, oy, oz,
+                xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
+                c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
                 hits[tid]++;
         }
 
@@ -135,7 +156,7 @@ int main(void)
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    AABB_hit_kernel<<<48, 512>>>(
+    AABB_hit_eisemann_kernel<<<48, 512>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         thrust::raw_pointer_cast(d_nodes.data()),
         N_rays,
@@ -146,7 +167,7 @@ int main(void)
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
     std::cout << N_rays << " rays tested against " << N_AABBs
-              << " AABBs (simple) in" << std::endl;
+              << " AABBs (ray slopes) in" << std::endl;
     // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
     std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
     std::cout << d_hits[0] << ", " << d_hits[50000-1]
