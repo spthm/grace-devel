@@ -63,7 +63,7 @@ public:
     __host__ __device__ float operator() (unsigned int n)
     {
         unsigned int seed = n;
-        for (int i=0; i<seed_factor; i++) {
+        for (unsigned int i=0; i<seed_factor; i++) {
             seed = hash(seed);
         }
         thrust::default_random_engine rng(seed);

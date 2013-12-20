@@ -29,8 +29,8 @@ int main(int argc, char* argv[])
 {
     typedef grace::Vector3<float> Vector3f;
 
-    int N = 100;
-    int N_rays_per_class = 10;
+    int N = 1000000;
+    int N_rays_per_class = 10000;
     int N_rays = 8*N_rays_per_class;
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
@@ -160,7 +160,7 @@ int main(int argc, char* argv[])
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    grace::gpu::trace<<<28, 1>>>
+    grace::gpu::trace<<<28, TRACE_THREADS_PER_BLOCK>>>
                      (thrust::raw_pointer_cast(d_rays.data()),
                       N_rays,
                       N_hits_per_ray,
@@ -171,9 +171,7 @@ int main(int argc, char* argv[])
                       thrust::raw_pointer_cast(d_x_centres.data()),
                       thrust::raw_pointer_cast(d_y_centres.data()),
                       thrust::raw_pointer_cast(d_z_centres.data()),
-                      thrust::raw_pointer_cast(d_radii.data()),
-                      thrust::raw_pointer_cast(d_debug.data()) );
-    std::cout << "Debug flag: " << d_debug[0] << std::endl;
+                      thrust::raw_pointer_cast(d_radii.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);

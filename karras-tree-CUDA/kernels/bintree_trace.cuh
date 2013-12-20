@@ -555,14 +555,6 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
 
 namespace gpu {
 
-__global__ void debug_trace(void) {
-    int index = 0;
-    while (index >= (unsigned int) threadIdx.x*0u) {
-        index = index - 1;
-    }
-    return;
-}
-
 template <typename Float>
 __global__ void trace(const Ray* rays,
                       const int n_rays,
@@ -581,7 +573,7 @@ __global__ void trace(const Ray* rays,
     bool is_leaf;
     // N (31) levels => N-1 (30) key length.
     // One extra so we can avoid stack_index = -1 before trace exit.
-    int trace_stack[31*256];
+    __shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
     // Top of the stack.  Must provide a valid node index, so points to root.
@@ -596,7 +588,7 @@ __global__ void trace(const Ray* rays,
         hit_offset = ray_index*max_ray_hits;
         ray_hit_count = 0;
 
-        while (stack_index >= threadIdx.x*31)
+        while (stack_index >= (int) threadIdx.x*31)
         {
             if (!is_leaf)
             {
