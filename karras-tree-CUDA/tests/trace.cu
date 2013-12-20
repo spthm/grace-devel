@@ -13,13 +13,24 @@
 #include "../kernels/bintree_build_kernels.cuh"
 #include "../kernels/bintree_trace.cuh"
 
+#define CUDA_HANDLE_ERR(code) { cudaErrorCheck((code), __FILE__, __LINE__); }
+
+inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=true) {
+  if (code != cudaSuccess) {
+    fprintf(stderr,"CUDA Error!\nCode: %s\nFile: %s @ line %d\n", cudaGetErrorString(code), file, line);
+
+    if (abort)
+      exit(code);
+  }
+}
+
 int main(int argc, char* argv[])
 {
 {
     typedef grace::Vector3<float> Vector3f;
 
-    int N = 1000000;
-    int N_rays_per_class = 10000;
+    int N = 100;
+    int N_rays_per_class = 10;
     int N_rays = 8*N_rays_per_class;
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
@@ -144,11 +155,12 @@ int main(int argc, char* argv[])
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<int> d_hits(N_hits_per_ray*N_rays);
     thrust::device_vector<int> d_hit_count(N_rays);
+    thrust::device_vector<int> d_debug(1);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    grace::gpu::trace<<<28, 512>>>
+    grace::gpu::trace<<<28, 1>>>
                      (thrust::raw_pointer_cast(d_rays.data()),
                       N_rays,
                       N_hits_per_ray,
@@ -159,7 +171,11 @@ int main(int argc, char* argv[])
                       thrust::raw_pointer_cast(d_x_centres.data()),
                       thrust::raw_pointer_cast(d_y_centres.data()),
                       thrust::raw_pointer_cast(d_z_centres.data()),
-                      thrust::raw_pointer_cast(d_radii.data()) );
+                      thrust::raw_pointer_cast(d_radii.data()),
+                      thrust::raw_pointer_cast(d_debug.data()) );
+    std::cout << "Debug flag: " << d_debug[0] << std::endl;
+    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
+    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;

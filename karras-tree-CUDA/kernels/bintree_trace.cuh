@@ -12,11 +12,6 @@ enum CLASSIFICATION
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
-                                           // float ox, float oy, float oz,
-                                           // float xbyy, float ybyx, float ybyz,
-                                           // float zbyy, float xbyz, float zbyx,
-                                           // float c_xy, float c_xz, float c_yx,
-                                           // float c_yz, float c_zx, float c_zy)
 {
     float ox = ray.ox;
     float oy = ray.oy;
@@ -560,6 +555,14 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
 
 namespace gpu {
 
+__global__ void debug_trace(void) {
+    int index = 0;
+    while (index >= (unsigned int) threadIdx.x*0u) {
+        index = index - 1;
+    }
+    return;
+}
+
 template <typename Float>
 __global__ void trace(const Ray* rays,
                       const int n_rays,
@@ -576,30 +579,28 @@ __global__ void trace(const Ray* rays,
     int ray_index, stack_index, hit_offset, ray_hit_count;
     Integer32 node_index;
     bool is_leaf;
-    Ray ray;
-    // N levels => N-1 key length.
+    // N (31) levels => N-1 (30) key length.
     // One extra so we can avoid stack_index = -1 before trace exit.
-    int trace_stack[31];
+    int trace_stack[31*256];
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
     // Top of the stack.  Must provide a valid node index, so points to root.
-    trace_stack[0] = 0;
+    trace_stack[threadIdx.x*31] = 0;
 
     while (ray_index <= n_rays)
     {
         node_index = 0;
-        stack_index = 0;
+        stack_index = threadIdx.x*31;
         is_leaf = false;
 
         hit_offset = ray_index*max_ray_hits;
         ray_hit_count = 0;
-        ray = rays[ray_index];
 
-        while (stack_index >= 0)
+        while (stack_index >= threadIdx.x*31)
         {
             if (!is_leaf)
             {
-                if (AABB_hit_plucker(ray, nodes[node_index])) {
+                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index])) {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
                     is_leaf = nodes[node_index].left_leaf_flag;
@@ -616,7 +617,7 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf)
             {
-                if (sphere_hit(ray,
+                if (sphere_hit(rays[ray_index],
                                xs[node_index], ys[node_index], zs[node_index],
                                radii[node_index]))
                 {

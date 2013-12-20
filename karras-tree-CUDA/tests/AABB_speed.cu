@@ -23,28 +23,23 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     while (tid < N_rays)
     {
         grace::Ray ray = rays[tid];
-        // float ox = ray.ox;
-        // float oy = ray.oy;
-        // float oz = ray.oz;
 
-        float ray.xbyy = ray.dx / ray.dy;
-        float ray.ybyx = 1.0f / ray.xbyy;
-        float ray.ybyz = ray.dy / ray.dz;
-        float ray.zbyy = 1.0f / ray.ybyz;
-        float ray.xbyz = ray.dx / ray.dz;
-        float ray.zbyx = 1.0f / ray.xbyz;
+        ray.xbyy = ray.dx / ray.dy;
+        ray.ybyx = 1.0f / ray.xbyy;
+        ray.ybyz = ray.dy / ray.dz;
+        ray.zbyy = 1.0f / ray.ybyz;
+        ray.xbyz = ray.dx / ray.dz;
+        ray.zbyx = 1.0f / ray.xbyz;
 
-        float ray.c_xy = ray.oy - ray.ybyx*ray.ox;
-        float ray.c_xz = ray.oz - ray.zbyx*ray.ox;
-        float ray.c_yx = ray.ox - ray.xbyy*ray.oy;
-        float ray.c_yz = ray.oz - ray.zbyy*ray.oy;
-        float ray.c_zx = ray.ox - ray.xbyz*ray.oz;
-        float ray.c_zy = ray.oy - ray.ybyz*ray.oz;
+        ray.c_xy = ray.oy - ray.ybyx*ray.ox;
+        ray.c_xz = ray.oz - ray.zbyx*ray.ox;
+        ray.c_yx = ray.ox - ray.xbyy*ray.oy;
+        ray.c_yz = ray.oz - ray.zbyy*ray.oy;
+        ray.c_zx = ray.ox - ray.xbyz*ray.oz;
+        ray.c_zy = ray.oy - ray.ybyz*ray.oz;
 
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_eisemann(ray, nodes[i], ox, oy, oz,
-                xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
-                c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
+            if (grace::AABB_hit_eisemann(ray, nodes[i]))
                 hits[tid]++;
         }
 
