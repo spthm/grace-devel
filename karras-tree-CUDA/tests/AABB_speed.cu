@@ -24,22 +24,24 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     {
         grace::Ray ray = rays[tid];
 
-        ray.xbyy = ray.dx / ray.dy;
-        ray.ybyx = 1.0f / ray.xbyy;
-        ray.ybyz = ray.dy / ray.dz;
-        ray.zbyy = 1.0f / ray.ybyz;
-        ray.xbyz = ray.dx / ray.dz;
-        ray.zbyx = 1.0f / ray.xbyz;
+        float xbyy = ray.dx / ray.dy;
+        float ybyx = 1.0f / xbyy;
+        float ybyz = ray.dy / ray.dz;
+        float zbyy = 1.0f / ybyz;
+        float xbyz = ray.dx / ray.dz;
+        float zbyx = 1.0f / xbyz;
 
-        ray.c_xy = ray.oy - ray.ybyx*ray.ox;
-        ray.c_xz = ray.oz - ray.zbyx*ray.ox;
-        ray.c_yx = ray.ox - ray.xbyy*ray.oy;
-        ray.c_yz = ray.oz - ray.zbyy*ray.oy;
-        ray.c_zx = ray.ox - ray.xbyz*ray.oz;
-        ray.c_zy = ray.oy - ray.ybyz*ray.oz;
+        float c_xy = ray.oy - ybyx*ray.ox;
+        float c_xz = ray.oz - zbyx*ray.ox;
+        float c_yx = ray.ox - xbyy*ray.oy;
+        float c_yz = ray.oz - zbyy*ray.oy;
+        float c_zx = ray.ox - xbyz*ray.oz;
+        float c_zy = ray.oy - ybyz*ray.oz;
 
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_eisemann(ray, nodes[i]))
+            if (grace::AABB_hit_eisemann(ray, nodes[i],
+                                         xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
+                                         c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
                 hits[tid]++;
         }
 
@@ -131,18 +133,6 @@ int main(void)
         h_nodes[i].bottom[2] = min(z1, z2);
     }
 
-
-    // Perform simple ray-box intersection tests on CPU.
-    // thrust::host_vector<unsigned int> h_hits(N_rays);
-    // double t = (double)clock() / CLOCKS_PER_SEC;
-    // for (int i=0; i<N_rays; i++) {
-    //     for (int j=0; j<N_AABBs; j++) {
-    //         if (grace::AABB_hit(h_rays[i], h_nodes[j]))
-    //             h_hits[i]++;
-    //     }
-    // }
-    // t = (double)clock() / CLOCKS_PER_SEC - t;
-
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<grace::Node> d_nodes = h_nodes;
     thrust::device_vector<unsigned int> d_hits(N_rays);
@@ -163,8 +153,7 @@ int main(void)
     cudaEventElapsedTime(&elapsed, start, stop);
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (ray slopes) in" << std::endl;
-    // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
-    std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
+    std::cout << "   GPU: " << elapsed << " ms." << std::endl;
     std::cout << d_hits[0] << ", " << d_hits[50000-1]
               << ", " << d_hits[100000-1] << std::endl;
 
@@ -194,7 +183,7 @@ int main(void)
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (plucker) in" << std::endl;
     // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
-    std::cout << " ii) GPU: " << elapsed << " ms." << std::endl;
+    std::cout << "    GPU: " << elapsed << " ms." << std::endl;
     std::cout << d_hits[0] << ", " << d_hits[50000-1]
               << ", " << d_hits[100000-1] << std::endl;
 

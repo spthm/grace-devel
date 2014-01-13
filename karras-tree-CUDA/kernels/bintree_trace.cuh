@@ -11,25 +11,24 @@ namespace grace {
 enum CLASSIFICATION
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
-__host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
+__host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
+                                           const float xbyy, const float ybyx,
+                                           const float ybyz, const float zbyy,
+                                           const float xbyz, const float zbyx,
+                                           const float c_xy, const float c_xz,
+                                           const float c_yx, const float c_yz,
+                                           const float c_zx, const float c_zy)
 {
+
     float ox = ray.ox;
     float oy = ray.oy;
     float oz = ray.oz;
 
-    float xbyy = ray.xbyy;
-    float ybyx = ray.ybyx;
-    float ybyz = ray.ybyz;
-    float zbyy = ray.zbyy;
-    float xbyz = ray.xbyz;
-    float zbyx = ray.zbyx;
+    float dx = ray.dx;
+    float dy = ray.dy;
+    float dz = ray.dz;
 
-    float c_xy = ray.c_zy;
-    float c_xz = ray.c_zy;
-    float c_yx = ray.c_zy;
-    float c_yz = ray.c_zy;
-    float c_zx = ray.c_zy;
-    float c_zy = ray.c_zy;
+    float l = ray.length;
 
     float bx = node.bottom[0];
     float by = node.bottom[1];
@@ -42,122 +41,179 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
     {
     case MMM:
 
-        if ((ox < bx) || (oy < by) || (oz < bz)
-            || (ybyx * bx - ty + c_xy > 0)
-            || (xbyy * by - tx + c_yx > 0)
-            || (ybyz * bz - ty + c_zy > 0)
-            || (zbyy * by - tz + c_yz > 0)
-            || (zbyx * bx - tz + c_xz > 0)
-            || (xbyz * bz - tx + c_zx > 0)
-            )
-            return false;
+        if (bx - ox > 0.0f || by - oy > 0.0f || bz - oz > 0.0f)
+            return false; // on negative part of ray
 
-        return true;
+        else if (tx - ox - dx*l < 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false; // past length of ray
 
-    case MMP:
-
-        if ((ox < bx) || (oy < by) || (oz > tz)
-            || (ybyx * bx - ty + c_xy > 0)
-            || (xbyy * by - tx + c_yx > 0)
-            || (ybyz * tz - ty + c_zy > 0)
-            || (zbyy * by - bz + c_yz < 0)
-            || (zbyx * bx - bz + c_xz < 0)
-            || (xbyz * tz - tx + c_zx > 0)
-            )
-            return false;
-
-        return true;
-
-    case MPM:
-
-        if ((ox < bx) || (oy > ty) || (oz < bz)
-            || (ybyx * bx - by + c_xy < 0)
-            || (xbyy * ty - tx + c_yx > 0)
-            || (ybyz * bz - by + c_zy < 0)
-            || (zbyy * ty - tz + c_yz > 0)
-            || (zbyx * bx - tz + c_xz > 0)
-            || (xbyz * bz - tx + c_zx > 0)
-            )
-            return false;
-
-        return true;
-
-    case MPP:
-
-        if ((ox < bx) || (oy > ty) || (oz > tz)
-            || (ybyx * bx - by + c_xy < 0)
-            || (xbyy * ty - tx + c_yx > 0)
-            || (ybyz * tz - by + c_zy < 0)
-            || (zbyy * ty - bz + c_yz < 0)
-            || (zbyx * bx - bz + c_xz < 0)
-            || (xbyz * tz - tx + c_zx > 0)
-            )
+        else if ((ox < bx) || (oy < by) || (oz < bz) ||
+                 (ybyx * bx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - tx + c_yx > 0.0f) ||
+                 (ybyz * bz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - tz + c_yz > 0.0f) ||
+                 (zbyx * bx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - tx + c_zx > 0.0f))
             return false;
 
         return true;
 
     case PMM:
 
-        if ((ox > tx) || (oy < by) || (oz < bz)
-            || (ybyx * tx - ty + c_xy > 0)
-            || (xbyy * by - bx + c_yx < 0)
-            || (ybyz * bz - ty + c_zy > 0)
-            || (zbyy * by - tz + c_yz > 0)
-            || (zbyx * tx - tz + c_xz > 0)
-            || (xbyz * bz - bx + c_zx < 0)
-            )
+        if (tx - ox < 0.0f || by - oy > 0.0f || bz - oz > 0.0f)
+            return false; // on negative part of ray
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false; // past length of ray
+
+        else if ((ox > tx) || (oy < by) || (oz < bz) ||
+                 (ybyx * tx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - bx + c_yx < 0.0f) ||
+                 (ybyz * bz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - tz + c_yz > 0.0f) ||
+                 (zbyx * tx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - bx + c_zx < 0.0f))
             return false;
 
         return true;
 
-    case PMP:
+    case MPM:
 
-        if ((ox > tx) || (oy < by) || (oz > tz)
-            || (ybyx * tx - ty + c_xy > 0)
-            || (xbyy * by - bx + c_yx < 0)
-            || (ybyz * tz - ty + c_zy > 0)
-            || (zbyy * by - bz + c_yz < 0)
-            || (zbyx * tx - bz + c_xz < 0)
-            || (xbyz * tz - bx + c_zx < 0)
-            )
+        if (bx - ox > 0.0f || ty - oy < 0.0f || bz - oz > 0.0f)
+            return false; // on negative part of ray
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false; // past length of ray
+
+        else if ((ox < bx) || (oy > ty) || (oz < bz) ||
+                 (ybyx * bx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - tx + c_yx > 0.0f) ||
+                 (ybyz * bz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - tz + c_yz > 0.0f) ||
+                 (zbyx * bx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - tx + c_zx > 0.0f))
             return false;
 
         return true;
 
     case PPM:
 
-        if ((ox > tx) || (oy > ty) || (oz < bz)
-            || (ybyx * tx - by + c_xy < 0)
-            || (xbyy * ty - bx + c_yx < 0)
-            || (ybyz * bz - by + c_zy < 0)
-            || (zbyy * ty - tz + c_yz > 0)
-            || (zbyx * tx - tz + c_xz > 0)
-            || (xbyz * bz - bx + c_zx < 0)
-            )
+        if (tx - ox < 0.0f || ty - oy < 0.0f || bz - oz > 0.0f)
+            return false; // on negative part of ray
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false; // past length of ray
+
+        else if ((ox > tx) || (oy > ty) || (oz < bz) ||
+                 (ybyx * tx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - bx + c_yx < 0.0f) ||
+                 (ybyz * bz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - tz + c_yz > 0.0f) ||
+                 (zbyx * tx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+
+    case MMP:
+
+        if (bx - ox > 0.0f || by - oy > 0.0f || tz - oz < 0.0f)
+            return false; // on negative part of ray
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false; // past length of ray
+
+        else if ((ox < bx) || (oy < by) || (oz > tz) ||
+                 (ybyx * bx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - tx + c_yx > 0.0f) ||
+                 (ybyz * tz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - bz + c_yz < 0.0f) ||
+                 (zbyx * bx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - tx + c_zx > 0.0f))
+            return false;
+
+        return true;
+
+    case PMP:
+
+        if (tx - ox < 0.0f || by - oy > 0.0f || tz - oz < 0.0f)
+            return false; // on negative part of ray
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false; // past length of ray
+
+        else if ((ox > tx) || (oy < by) || (oz > tz) ||
+                 (ybyx * tx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - bx + c_yx < 0.0f) ||
+                 (ybyz * tz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - bz + c_yz < 0.0f) ||
+                 (zbyx * tx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+
+    case MPP:
+
+        if (bx - ox > 0.0f || ty - oy < 0.0f || tz - oz < 0.0f)
+            return false; // on negative part of ray
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false; // past length of ray
+
+        else if ((ox < bx) || (oy > ty) || (oz > tz) ||
+                 (ybyx * bx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - tx + c_yx > 0.0f) ||
+                 (ybyz * tz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - bz + c_yz < 0.0f) ||
+                 (zbyx * bx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - tx + c_zx > 0.0f))
             return false;
 
         return true;
 
     case PPP:
 
-        if ((ox > tx) || (oy > ty) || (oz > tz)
-            || (ybyx * tx - by + c_xy < 0)
-            || (xbyy * ty - bx + c_yx < 0)
-            || (ybyz * tz - by + c_zy < 0)
-            || (zbyy * ty - bz + c_yz < 0)
-            || (zbyx * tx - bz + c_xz < 0)
-            || (xbyz * tz - bx + c_zx < 0)
-            )
+        if (tx - ox < 0.0f || ty - oy < 0.0f || tz - oz < 0.0f)
+            return false; // on negative part of ray
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false; // past length of ray
+
+        else if ((ox > tx) || (oy > ty) || (oz > tz) ||
+                 (ybyx * tx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - bx + c_yx < 0.0f) ||
+                 (ybyz * tz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - bz + c_yz < 0.0f) ||
+                 (zbyx * tx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - bx + c_zx < 0.0f))
             return false;
 
         return true;
 
+    // --- IF UNCOMMENTING THE BELOW, RAY LENGTH TESTS MUST BE ADDED --- //
     // case OMM:
 
-    //     if((ox < bx) || (ox > tx)
+    //     if ((ox < bx) || (ox > tx)
     //         || (oy < by) || (oz < bz)
-    //         || (ybyz * bz - ty + c_zy > 0)
-    //         || (zbyy * by - tz + c_yz > 0)
+    //         || (ybyz * bz - ty + c_zy > 0.0f)
+    //         || (zbyy * by - tz + c_yz > 0.0f)
     //         )
     //         return false;
 
@@ -165,10 +221,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OMP:
 
-    //     if((ox < bx) || (ox > tx)
+    //     if ((ox < bx) || (ox > tx)
     //         || (oy < by) || (oz > tz)
-    //         || (ybyz * tz - ty + c_zy > 0)
-    //         || (zbyy * by - bz + c_yz < 0)
+    //         || (ybyz * tz - ty + c_zy > 0.0f)
+    //         || (zbyy * by - bz + c_yz < 0.0f)
     //         )
     //         return false;
 
@@ -176,10 +232,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OPM:
 
-    //     if((ox < bx) || (ox > tx)
+    //     if ((ox < bx) || (ox > tx)
     //         || (oy > ty) || (oz < bz)
-    //         || (ybyz * bz - by + c_zy < 0)
-    //         || (zbyy * ty - tz + c_yz > 0)
+    //         || (ybyz * bz - by + c_zy < 0.0f)
+    //         || (zbyy * ty - tz + c_yz > 0.0f)
     //         )
     //         return false;
 
@@ -187,10 +243,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OPP:
 
-    //     if((ox < bx) || (ox > tx)
+    //     if ((ox < bx) || (ox > tx)
     //         || (oy > ty) || (oz > tz)
-    //         || (ybyz * tz - by + c_zy < 0)
-    //         || (zbyy * ty - bz + c_yz < 0)
+    //         || (ybyz * tz - by + c_zy < 0.0f)
+    //         || (zbyy * ty - bz + c_yz < 0.0f)
     //         )
     //         return false;
 
@@ -198,10 +254,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case MOM:
 
-    //     if((oy < by) || (oy > ty)
+    //     if ((oy < by) || (oy > ty)
     //         || (ox < bx) || (oz < bz)
-    //         || (zbyx * bx - tz + c_xz > 0)
-    //         || (xbyz * bz - tx + c_zx > 0)
+    //         || (zbyx * bx - tz + c_xz > 0.0f)
+    //         || (xbyz * bz - tx + c_zx > 0.0f)
     //         )
     //         return false;
 
@@ -209,10 +265,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case MOP:
 
-    //     if((oy < by) || (oy > ty)
+    //     if ((oy < by) || (oy > ty)
     //         || (ox < bx) || (oz > tz)
-    //         || (zbyx * bx - bz + c_xz < 0)
-    //         || (xbyz * tz - tx + c_zx > 0)
+    //         || (zbyx * bx - bz + c_xz < 0.0f)
+    //         || (xbyz * tz - tx + c_zx > 0.0f)
     //         )
     //         return false;
 
@@ -220,10 +276,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case POM:
 
-    //     if((oy < by) || (oy > ty)
+    //     if ((oy < by) || (oy > ty)
     //         || (ox > tx) || (oz < bz)
-    //         || (zbyx * tx - tz + c_xz > 0)
-    //         || (xbyz * bz - bx + c_zx < 0)
+    //         || (zbyx * tx - tz + c_xz > 0.0f)
+    //         || (xbyz * bz - bx + c_zx < 0.0f)
     //         )
     //         return false;
 
@@ -231,10 +287,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case POP:
 
-    //     if((oy < by) || (oy > ty)
+    //     if ((oy < by) || (oy > ty)
     //         || (ox > tx) || (oz > tz)
-    //         || (zbyx * tx - bz + c_xz < 0)
-    //         || (xbyz * tz - bx + c_zx < 0)
+    //         || (zbyx * tx - bz + c_xz < 0.0f)
+    //         || (xbyz * tz - bx + c_zx < 0.0f)
     //         )
     //         return false;
 
@@ -242,10 +298,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case MMO:
 
-    //     if((oz < bz) || (oz > tz)
+    //     if ((oz < bz) || (oz > tz)
     //         || (ox < bx) || (oy < by)
-    //         || (ybyx * bx - ty + c_xy > 0)
-    //         || (xbyy * by - tx + c_yx > 0)
+    //         || (ybyx * bx - ty + c_xy > 0.0f)
+    //         || (xbyy * by - tx + c_yx > 0.0f)
     //         )
     //         return false;
 
@@ -253,10 +309,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case MPO:
 
-    //     if((oz < bz) || (oz > tz)
+    //     if ((oz < bz) || (oz > tz)
     //         || (ox < bx) || (oy > ty)
-    //         || (ybyx * bx - by + c_xy < 0)
-    //         || (xbyy * ty - tx + c_yx > 0)
+    //         || (ybyx * bx - by + c_xy < 0.0f)
+    //         || (xbyy * ty - tx + c_yx > 0.0f)
     //         )
     //         return false;
 
@@ -264,10 +320,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case PMO:
 
-    //     if((oz < bz) || (oz > tz)
+    //     if ((oz < bz) || (oz > tz)
     //         || (ox > tx) || (oy < by)
-    //         || (ybyx * tx - ty + c_xy > 0)
-    //         || (xbyy * by - bx + c_yx < 0)
+    //         || (ybyx * tx - ty + c_xy > 0.0f)
+    //         || (xbyy * by - bx + c_yx < 0.0f)
     //         )
     //         return false;
 
@@ -275,10 +331,10 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case PPO:
 
-    //     if((oz < bz) || (oz > tz)
+    //     if ((oz < bz) || (oz > tz)
     //         || (ox > tx) || (oy > ty)
-    //         || (ybyx * tx - by + c_xy < 0)
-    //         || (xbyy * ty - bx + c_yx < 0)
+    //         || (ybyx * tx - by + c_xy < 0.0f)
+    //         || (xbyy * ty - bx + c_yx < 0.0f)
     //         )
     //         return false;
 
@@ -286,7 +342,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case MOO:
 
-    //     if((ox < bx)
+    //     if ((ox < bx)
     //         || (oy < by) || (oy > ty)
     //         || (oz < bz) || (oz > tz)
     //         )
@@ -296,7 +352,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case POO:
 
-    //     if((ox > tx)
+    //     if ((ox > tx)
     //         || (oy < by) || (oy > ty)
     //         || (oz < bz) || (oz > tz)
     //         )
@@ -306,7 +362,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OMO:
 
-    //     if((oy < by)
+    //     if ((oy < by)
     //         || (ox < bx) || (ox > tx)
     //         || (oz < bz) || (oz > tz)
     //         )
@@ -314,7 +370,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OPO:
 
-    //     if((oy > ty)
+    //     if ((oy > ty)
     //         || (ox < bx) || (ox > tx)
     //         || (oz < bz) || (oz > tz)
     //         )
@@ -322,7 +378,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OOM:
 
-    //     if((oz < bz)
+    //     if ((oz < bz)
     //         || (ox < bx) || (ox > tx)
     //         || (oy < by) || (oy > ty)
     //         )
@@ -330,7 +386,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
 
     // case OOP:
 
-    //     if((oz > tz)
+    //     if ((oz > tz)
     //         || (ox < bx) || (ox > tx)
     //         || (oy < by) || (oy > ty)
     //         )
@@ -341,8 +397,6 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node)
     }
 
     return false;
-
-
 }
 
 __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
@@ -353,8 +407,6 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
     float length = ray.length;
     float s2bx, s2by, s2bz; // Vector from ray start to lower cell corner.
     float s2tx, s2ty, s2tz; // Vector from ray start to upper cell corner.
-    float e2bx, e2by, e2bz; // Vector from ray end to lower cell corner.
-    float e2tx, e2ty, e2tz; // Vector from ray end to upper cell corner.
 
     s2bx = node.bottom[0] - ray.ox;
     s2by = node.bottom[1] - ray.oy;
@@ -364,14 +416,6 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
     s2ty = node.top[1] - ray.oy;
     s2tz = node.top[2] - ray.oz;
 
-    e2bx = s2bx - rx*length;
-    e2by = s2by - ry*length;
-    e2bz = s2bz - rz*length;
-
-    e2tx = s2tx - rx*length;
-    e2ty = s2ty - ry*length;
-    e2tz = s2tz - rz*length;
-
     switch(ray.dclass)
     {
         // MMM
@@ -379,8 +423,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2bx > 0.0f || s2by > 0.0f || s2bz > 0.0f)
             return false; // on negative part of ray
 
-        if (e2tx < 0.0f || e2ty < 0.0f || e2tz < 0.0f)
-            return false; // past length of ray
+        if (s2tx - rx*length < 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
 
         if (rx*s2by - ry*s2tx < 0.0f ||
             rx*s2ty - ry*s2bx > 0.0f ||
@@ -395,8 +440,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2tx < 0.0f || s2by > 0.0f || s2bz > 0.0f)
             return false; // on negative part of ray
 
-        if (e2bx > 0.0f || e2ty < 0.0f || e2tz < 0.0f)
-            return false; // past length of ray
+        if (s2bx - rx*length > 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
 
         if (rx*s2ty - ry*s2tx < 0.0f ||
             rx*s2by - ry*s2bx > 0.0f ||
@@ -411,8 +457,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2bx > 0.0f || s2ty < 0.0f || s2bz > 0.0f)
             return false; // on negative part of ray
 
-        if (e2tx < 0.0f || e2by > 0.0f || e2tz < 0.0f)
-            return false; // past length of ray
+        if (s2tx - rx*length < 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
 
         if (rx*s2by - ry*s2bx < 0.0f ||
             rx*s2ty - ry*s2tx > 0.0f ||
@@ -427,8 +474,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2tx < 0.0f || s2ty < 0.0f || s2bz > 0.0f)
             return false; // on negative part of ray
 
-        if (e2bx > 0.0f || e2by > 0.0f || e2tz < 0.0f)
-            return false; // past length of ray
+        if (s2bx - rx*length > 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
 
         if (rx*s2ty - ry*s2bx < 0.0f ||
             rx*s2by - ry*s2tx > 0.0f ||
@@ -443,8 +491,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2bx > 0.0f || s2by > 0.0f || s2tz < 0.0f)
             return false; // on negative part of ray
 
-        if (e2tx < 0.0f || e2ty < 0.0f || e2bz > 0.0f)
-            return false; // past length of ray
+        if (s2tx - rx*length < 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
 
         if (rx*s2by - ry*s2tx < 0.0f ||
             rx*s2ty - ry*s2bx > 0.0f ||
@@ -459,8 +508,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2tx < 0.0f || s2by > 0.0f || s2tz < 0.0f)
             return false; // on negative part of ray
 
-        if (e2bx > 0.0f || e2ty < 0.0f || e2bz > 0.0f)
-            return false; // past length of ray
+        if (s2bx - rx*length > 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
 
         if (rx*s2ty - ry*s2tx < 0.0f ||
             rx*s2by - ry*s2bx > 0.0f ||
@@ -475,8 +525,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2bx > 0.0f || s2ty < 0.0f || s2tz < 0.0f)
             return false; // on negative part of ray
 
-        if (e2tx < 0.0f || e2by > 0.0f || e2bz > 0.0f)
-            return false; // past length of ray
+        if (s2tx - rx*length < 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
 
         if (rx*s2by - ry*s2bx < 0.0f ||
             rx*s2ty - ry*s2tx > 0.0f ||
@@ -491,8 +542,9 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         if (s2tx < 0.0f || s2ty < 0.0f || s2tz < 0.0f)
             return false; // on negative part of ray
 
-        if (e2bx > 0.0f || e2by > 0.0f || e2bz > 0.0f)
-            return false; // past length of ray
+        if (s2bx - rx*length > 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
 
         if (rx*s2ty - ry*s2bx < 0.0f ||
             rx*s2by - ry*s2tx > 0.0f ||
@@ -571,7 +623,7 @@ __global__ void trace(const Ray* rays,
     int ray_index, stack_index, hit_offset, ray_hit_count;
     Integer32 node_index;
     bool is_leaf;
-    // N (31) levels => N-1 (30) key length.
+    // N (31) levels => N-1 (30.0f) key length.
     // One extra so we can avoid stack_index = -1 before trace exit.
     __shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
 
@@ -588,18 +640,36 @@ __global__ void trace(const Ray* rays,
         hit_offset = ray_index*max_ray_hits;
         ray_hit_count = 0;
 
+        float xbyy = rays[ray_index].dx / rays[ray_index].dy;
+        float ybyx = 1.0f / xbyy;
+        float ybyz = rays[ray_index].dy / rays[ray_index].dz;
+        float zbyy = 1.0f / ybyz;
+        float xbyz = rays[ray_index].dx / rays[ray_index].dz;
+        float zbyx = 1.0f / xbyz;
+
+        float c_xy = rays[ray_index].oy - ybyx*rays[ray_index].ox;
+        float c_xz = rays[ray_index].oz - zbyx*rays[ray_index].ox;
+        float c_yx = rays[ray_index].ox - xbyy*rays[ray_index].oy;
+        float c_yz = rays[ray_index].oz - zbyy*rays[ray_index].oy;
+        float c_zx = rays[ray_index].ox - xbyz*rays[ray_index].oz;
+        float c_zy = rays[ray_index].oy - ybyz*rays[ray_index].oz;
+
         while (stack_index >= (int) threadIdx.x*31)
         {
             if (!is_leaf)
             {
-                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index])) {
+                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index],
+                                      xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
+                                      c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
+                {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
                     is_leaf = nodes[node_index].left_leaf_flag;
                     node_index = nodes[node_index].left;
 
                 }
-                else {
+                else
+                {
                     node_index = trace_stack[stack_index];
                     stack_index--;
                     is_leaf = nodes[node_index].right_leaf_flag;
