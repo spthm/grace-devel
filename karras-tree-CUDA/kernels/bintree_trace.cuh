@@ -41,7 +41,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     {
     case MMM:
 
-        if (bx - ox > 0.0f || by - oy > 0.0f || bz - oz > 0.0f)
+        if ((ox < bx) || (oy < by) || (oz < bz))
             return false; // on negative part of ray
 
         else if (tx - ox - dx*l < 0.0f ||
@@ -49,8 +49,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  tz - oz - dz*l < 0.0f)
             return false; // past length of ray
 
-        else if ((ox < bx) || (oy < by) || (oz < bz) ||
-                 (ybyx * bx - ty + c_xy > 0.0f) ||
+        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
                  (xbyy * by - tx + c_yx > 0.0f) ||
                  (ybyz * bz - ty + c_zy > 0.0f) ||
                  (zbyy * by - tz + c_yz > 0.0f) ||
@@ -62,7 +61,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case PMM:
 
-        if (tx - ox < 0.0f || by - oy > 0.0f || bz - oz > 0.0f)
+        if ((ox > tx) || (oy < by) || (oz < bz))
             return false; // on negative part of ray
 
         else if (bx - ox - dx*l > 0.0f ||
@@ -70,8 +69,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  tz - oz - dz*l < 0.0f)
             return false; // past length of ray
 
-        else if ((ox > tx) || (oy < by) || (oz < bz) ||
-                 (ybyx * tx - ty + c_xy > 0.0f) ||
+        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
                  (xbyy * by - bx + c_yx < 0.0f) ||
                  (ybyz * bz - ty + c_zy > 0.0f) ||
                  (zbyy * by - tz + c_yz > 0.0f) ||
@@ -83,7 +81,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case MPM:
 
-        if (bx - ox > 0.0f || ty - oy < 0.0f || bz - oz > 0.0f)
+        if ((ox < bx) || (oy > ty) || (oz < bz))
             return false; // on negative part of ray
 
         else if (tx - ox - dx*l < 0.0f ||
@@ -91,8 +89,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  tz - oz - dz*l < 0.0f)
             return false; // past length of ray
 
-        else if ((ox < bx) || (oy > ty) || (oz < bz) ||
-                 (ybyx * bx - by + c_xy < 0.0f) ||
+        else if ((ybyx * bx - by + c_xy < 0.0f) ||
                  (xbyy * ty - tx + c_yx > 0.0f) ||
                  (ybyz * bz - by + c_zy < 0.0f) ||
                  (zbyy * ty - tz + c_yz > 0.0f) ||
@@ -104,7 +101,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case PPM:
 
-        if (tx - ox < 0.0f || ty - oy < 0.0f || bz - oz > 0.0f)
+        if ((ox > tx) || (oy > ty) || (oz < bz))
             return false; // on negative part of ray
 
         else if (bx - ox - dx*l > 0.0f ||
@@ -112,8 +109,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  tz - oz - dz*l < 0.0f)
             return false; // past length of ray
 
-        else if ((ox > tx) || (oy > ty) || (oz < bz) ||
-                 (ybyx * tx - by + c_xy < 0.0f) ||
+        else if ((ybyx * tx - by + c_xy < 0.0f) ||
                  (xbyy * ty - bx + c_yx < 0.0f) ||
                  (ybyz * bz - by + c_zy < 0.0f) ||
                  (zbyy * ty - tz + c_yz > 0.0f) ||
@@ -125,7 +121,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case MMP:
 
-        if (bx - ox > 0.0f || by - oy > 0.0f || tz - oz < 0.0f)
+        if ((ox < bx) || (oy < by) || (oz > tz))
             return false; // on negative part of ray
 
         else if (tx - ox - dx*l < 0.0f ||
@@ -133,8 +129,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  bz - oz - dz*l > 0.0f)
             return false; // past length of ray
 
-        else if ((ox < bx) || (oy < by) || (oz > tz) ||
-                 (ybyx * bx - ty + c_xy > 0.0f) ||
+        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
                  (xbyy * by - tx + c_yx > 0.0f) ||
                  (ybyz * tz - ty + c_zy > 0.0f) ||
                  (zbyy * by - bz + c_yz < 0.0f) ||
@@ -146,7 +141,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case PMP:
 
-        if (tx - ox < 0.0f || by - oy > 0.0f || tz - oz < 0.0f)
+        if ((ox > tx) || (oy < by) || (oz > tz))
             return false; // on negative part of ray
 
         else if (bx - ox - dx*l > 0.0f ||
@@ -154,8 +149,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  bz - oz - dz*l > 0.0f)
             return false; // past length of ray
 
-        else if ((ox > tx) || (oy < by) || (oz > tz) ||
-                 (ybyx * tx - ty + c_xy > 0.0f) ||
+        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
                  (xbyy * by - bx + c_yx < 0.0f) ||
                  (ybyz * tz - ty + c_zy > 0.0f) ||
                  (zbyy * by - bz + c_yz < 0.0f) ||
@@ -167,7 +161,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case MPP:
 
-        if (bx - ox > 0.0f || ty - oy < 0.0f || tz - oz < 0.0f)
+        if ((ox < bx) || (oy > ty) || (oz > tz))
             return false; // on negative part of ray
 
         else if (tx - ox - dx*l < 0.0f ||
@@ -175,8 +169,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  bz - oz - dz*l > 0.0f)
             return false; // past length of ray
 
-        else if ((ox < bx) || (oy > ty) || (oz > tz) ||
-                 (ybyx * bx - by + c_xy < 0.0f) ||
+        else if ((ybyx * bx - by + c_xy < 0.0f) ||
                  (xbyy * ty - tx + c_yx > 0.0f) ||
                  (ybyz * tz - by + c_zy < 0.0f) ||
                  (zbyy * ty - bz + c_yz < 0.0f) ||
@@ -188,7 +181,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
     case PPP:
 
-        if (tx - ox < 0.0f || ty - oy < 0.0f || tz - oz < 0.0f)
+        if ((ox > tx) || (oy > ty) || (oz > tz))
             return false; // on negative part of ray
 
         else if (bx - ox - dx*l > 0.0f ||
@@ -196,8 +189,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                  bz - oz - dz*l > 0.0f)
             return false; // past length of ray
 
-        else if ((ox > tx) || (oy > ty) || (oz > tz) ||
-                 (ybyx * tx - by + c_xy < 0.0f) ||
+        else if ((ybyx * tx - by + c_xy < 0.0f) ||
                  (xbyy * ty - bx + c_yx < 0.0f) ||
                  (ybyz * tz - by + c_zy < 0.0f) ||
                  (zbyy * ty - bz + c_yz < 0.0f) ||

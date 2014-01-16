@@ -115,22 +115,22 @@ int main(void)
     h_keys.shrink_to_fit();
 
     // Generate AABBs
-    float x1, x2, y1, y2, z1, z2;
+    float x0, x1, y0, y1, z0, z1;
     for (int i=0; i<N_AABBs; i++) {
-        x1 = rng(3*N_rays + 6*i+0);
-        x2 = rng(3*N_rays + 6*i+1);
-        y1 = rng(3*N_rays + 6*i+2);
-        y2 = rng(3*N_rays + 6*i+3);
-        z1 = rng(3*N_rays + 6*i+4);
-        z2 = rng(3*N_rays + 6*i+5);
+        x0 = rng(3*N_rays + 6*i+0);
+        x1 = rng(3*N_rays + 6*i+1);
+        y0 = rng(3*N_rays + 6*i+2);
+        y1 = rng(3*N_rays + 6*i+3);
+        z0 = rng(3*N_rays + 6*i+4);
+        z1 = rng(3*N_rays + 6*i+5);
 
-        h_nodes[i].top[0] = max(x1, x2);
-        h_nodes[i].top[1] = max(y1, y2);
-        h_nodes[i].top[2] = max(z1, z2);
+        h_nodes[i].top[0] = max(x0, x1);
+        h_nodes[i].top[1] = max(y0, y1);
+        h_nodes[i].top[2] = max(z0, z1);
 
-        h_nodes[i].bottom[0] = min(x1, x2);
-        h_nodes[i].bottom[1] = min(y1, y2);
-        h_nodes[i].bottom[2] = min(z1, z2);
+        h_nodes[i].bottom[0] = min(x0, x1);
+        h_nodes[i].bottom[1] = min(y0, y1);
+        h_nodes[i].bottom[2] = min(z0, z1);
     }
 
     thrust::device_vector<grace::Ray> d_rays = h_rays;
@@ -151,11 +151,11 @@ int main(void)
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
+    thrust::host_vector<unsigned int> h_eisemann_hits = d_hits;
+
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (ray slopes) in" << std::endl;
-    std::cout << "   GPU: " << elapsed << " ms." << std::endl;
-    std::cout << d_hits[0] << ", " << d_hits[50000-1]
-              << ", " << d_hits[100000-1] << std::endl;
+    std::cout << "    GPU: " << elapsed << " ms." << std::endl;
 
 
     // Perform plucker ray-box intersection tests on CPU.
@@ -180,11 +180,19 @@ int main(void)
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&elapsed, start, stop);
+    thrust::host_vector<unsigned int> h_plucker_hits = d_hits;
+
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (plucker) in" << std::endl;
     // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
     std::cout << "    GPU: " << elapsed << " ms." << std::endl;
-    std::cout << d_hits[0] << ", " << d_hits[50000-1]
-              << ", " << d_hits[100000-1] << std::endl;
+
+    for (int i=0; i<N_rays; i++) {
+        if (h_eisemann_hits[i] != h_plucker_hits[i]) {
+            std::cout << "Eisemann (" << h_eisemann_hits[i] << ") != ("
+                      << h_plucker_hits[i] << ") Plucker!" << std::endl;
+            std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
+        }
+    }
 
 }
