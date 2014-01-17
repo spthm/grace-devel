@@ -42,7 +42,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case MMM:
 
         if ((ox < bx) || (oy < by) || (oz < bz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (tx - ox - dx*l < 0.0f ||
                  ty - oy - dy*l < 0.0f ||
@@ -62,7 +62,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case PMM:
 
         if ((ox > tx) || (oy < by) || (oz < bz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (bx - ox - dx*l > 0.0f ||
                  ty - oy - dy*l < 0.0f ||
@@ -82,7 +82,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case MPM:
 
         if ((ox < bx) || (oy > ty) || (oz < bz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (tx - ox - dx*l < 0.0f ||
                  by - oy - dy*l > 0.0f ||
@@ -102,7 +102,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case PPM:
 
         if ((ox > tx) || (oy > ty) || (oz < bz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (bx - ox - dx*l > 0.0f ||
                  by - oy - dy*l > 0.0f ||
@@ -122,7 +122,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case MMP:
 
         if ((ox < bx) || (oy < by) || (oz > tz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (tx - ox - dx*l < 0.0f ||
                  ty - oy - dy*l < 0.0f ||
@@ -142,7 +142,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case PMP:
 
         if ((ox > tx) || (oy < by) || (oz > tz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (bx - ox - dx*l > 0.0f ||
                  ty - oy - dy*l < 0.0f ||
@@ -162,7 +162,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case MPP:
 
         if ((ox < bx) || (oy > ty) || (oz > tz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (tx - ox - dx*l < 0.0f ||
                  by - oy - dy*l > 0.0f ||
@@ -182,7 +182,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     case PPP:
 
         if ((ox > tx) || (oy > ty) || (oz > tz))
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         else if (bx - ox - dx*l > 0.0f ||
                  by - oy - dy*l > 0.0f ||
@@ -401,7 +401,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // MMM
         case 0:
         if (s2bx > 0.0f || s2by > 0.0f || s2bz > 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2tx - rx*length < 0.0f ||
             s2ty - ry*length < 0.0f ||
@@ -418,7 +418,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // PMM
         case 1:
         if (s2tx < 0.0f || s2by > 0.0f || s2bz > 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2bx - rx*length > 0.0f ||
             s2ty - ry*length < 0.0f ||
@@ -435,7 +435,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // MPM
         case 2:
         if (s2bx > 0.0f || s2ty < 0.0f || s2bz > 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2tx - rx*length < 0.0f ||
             s2by - ry*length > 0.0f ||
@@ -452,7 +452,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // PPM
         case 3:
         if (s2tx < 0.0f || s2ty < 0.0f || s2bz > 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2bx - rx*length > 0.0f ||
             s2by - ry*length > 0.0f ||
@@ -469,7 +469,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // MMP
         case 4:
         if (s2bx > 0.0f || s2by > 0.0f || s2tz < 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2tx - rx*length < 0.0f ||
             s2ty - ry*length < 0.0f ||
@@ -486,7 +486,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // PMP
         case 5:
         if (s2tx < 0.0f || s2by > 0.0f || s2tz < 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2bx - rx*length > 0.0f ||
             s2ty - ry*length < 0.0f ||
@@ -503,7 +503,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // MPP
         case 6:
         if (s2bx > 0.0f || s2ty < 0.0f || s2tz < 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2tx - rx*length < 0.0f ||
             s2by - ry*length > 0.0f ||
@@ -520,7 +520,7 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
         // PPP
         case 7:
         if (s2tx < 0.0f || s2ty < 0.0f || s2tz < 0.0f)
-            return false; // on negative part of ray
+            return false; // AABB entirely in wrong octant wrt ray origin
 
         if (s2bx - rx*length > 0.0f ||
             s2by - ry*length > 0.0f ||
