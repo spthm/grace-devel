@@ -16,7 +16,8 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
                                          const grace::Node* nodes,
                                          const int N_rays,
                                          const int N_AABBs,
-                                         unsigned int* hits)
+                                         unsigned int* ray_hits,
+                                         unsigned int* box_hits)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -42,7 +43,10 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
             if (grace::AABB_hit_eisemann(ray, nodes[i],
                                          xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
                                          c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
-                hits[tid]++;
+            {
+                ray_hits[tid]++;
+                //atomicAdd(&(box_hits[i]), 1);
+            }
         }
 
         tid += blockDim.x * gridDim.x;
@@ -53,7 +57,8 @@ __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
                                         const grace::Node* nodes,
                                         const int N_rays,
                                         const int N_AABBs,
-                                        unsigned int* hits)
+                                        unsigned int* ray_hits,
+                                        unsigned int* box_hits)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -61,7 +66,10 @@ __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
     {
         for (int i=0; i<N_AABBs; i++) {
             if (grace::AABB_hit_plucker(rays[tid], nodes[i]))
-                hits[tid]++;
+            {
+                ray_hits[tid]++;
+                //atomicAdd(&(box_hits[i]), 1);
+            }
         }
 
         tid += blockDim.x * gridDim.x;
@@ -78,11 +86,10 @@ int main(void)
     thrust::host_vector<grace::Node> h_nodes(N_AABBs);
     thrust::host_vector<UInteger32> h_keys(N_rays);
 
-    // Generate rays
+    // Generate rays.  RNG in [-1, 1).
     random_float_functor rng(-1.0f, 1.0f);
     float x, y, z, N;
     for (int i=0; i<N_rays; i++) {
-        // RNG in (-1, 1).
         x = rng(3*i+0);
         y = rng(3*i+1);
         z = rng(3*i+2);
@@ -135,7 +142,8 @@ int main(void)
 
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<grace::Node> d_nodes = h_nodes;
-    thrust::device_vector<unsigned int> d_hits(N_rays);
+    thrust::device_vector<unsigned int> d_ray_hits(N_rays);
+    thrust::device_vector<unsigned int> d_box_hits(N_AABBs);
 
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
@@ -146,12 +154,14 @@ int main(void)
         thrust::raw_pointer_cast(d_nodes.data()),
         N_rays,
         N_AABBs,
-        thrust::raw_pointer_cast(d_hits.data()));
+        thrust::raw_pointer_cast(d_ray_hits.data()),
+        thrust::raw_pointer_cast(d_box_hits.data()));
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
-    thrust::host_vector<unsigned int> h_eisemann_hits = d_hits;
+    thrust::host_vector<unsigned int> h_eisemann_ray_hits = d_ray_hits;
+    thrust::host_vector<unsigned int> h_eisemann_box_hits = d_box_hits;
 
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (ray slopes) in" << std::endl;
@@ -159,39 +169,75 @@ int main(void)
 
 
     // Perform plucker ray-box intersection tests on CPU.
-    // thrust::fill(h_hits.begin(), h_hits.end(), 0u);
+    // thrust::fill(h_ray_hits.begin(), h_ray_hits.end(), 0u);
     // t = (double)clock() / CLOCKS_PER_SEC;
     // for (int i=0; i<N_rays; i++) {
     //     for (int j=0; j<N_AABBs; j++) {
     //         if (grace::AABB_hit_plucker(h_rays[i], h_nodes[j]))
-    //             h_hits[i]++;
+    //         {
+    //             h_ray_hits[i]++;
+    //             // h_box_hits[i]++;
+    //         }
     //     }
     // }
     // t = (double)clock() / CLOCKS_PER_SEC - t;
 
-    thrust::fill(d_hits.begin(), d_hits.end(), 0u);
+    thrust::fill(d_ray_hits.begin(), d_ray_hits.end(), 0u);
+    thrust::fill(d_box_hits.begin(), d_box_hits.end(), 0u);
     cudaEventRecord(start);
     AABB_hit_plucker_kernel<<<48, 512>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         thrust::raw_pointer_cast(d_nodes.data()),
         N_rays,
         N_AABBs,
-        thrust::raw_pointer_cast(d_hits.data()));
+        thrust::raw_pointer_cast(d_ray_hits.data()),
+        thrust::raw_pointer_cast(d_box_hits.data()));
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&elapsed, start, stop);
-    thrust::host_vector<unsigned int> h_plucker_hits = d_hits;
+    thrust::host_vector<unsigned int> h_plucker_ray_hits = d_ray_hits;
+    thrust::host_vector<unsigned int> h_plucker_box_hits = d_box_hits;
 
     std::cout << N_rays << " rays tested against " << N_AABBs
               << " AABBs (plucker) in" << std::endl;
-    // std::cout << "  i) CPU: " << t*1000. << " ms." << std::endl;
+    // std::cout << "    CPU: " << t*1000. << " ms." << std::endl;
     std::cout << "    GPU: " << elapsed << " ms." << std::endl;
+    std::cout << std::endl;
 
-    for (int i=0; i<N_rays; i++) {
-        if (h_eisemann_hits[i] != h_plucker_hits[i]) {
-            std::cout << "Eisemann (" << h_eisemann_hits[i] << ") != ("
-                      << h_plucker_hits[i] << ") Plucker!" << std::endl;
+    for (int i=0; i<N_rays; i++)
+    {
+        if (h_eisemann_ray_hits[i] != h_plucker_ray_hits[i])
+        {
+            std::cout << "Ray " << i << ": Eisemann (" << h_eisemann_ray_hits[i]
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
+            std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
+                      << h_rays[i].oy << ", " << h_rays[i].oz << ")."
+                      << std::endl;
+            std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
+                      << h_rays[i].dy << ", " << h_rays[i].dz << ")."
+                      << std::endl;
+            std::cout << std::endl;
+        }
+    }
+
+    std::cout << std::endl;
+
+    for (int i=0; i<N_AABBs; i++)
+    {
+        if (h_eisemann_box_hits[i] != h_plucker_box_hits[i])
+        {
+            std::cout << "Box " << i << ": Eisemann (" << h_eisemann_box_hits[i]
+                      << ") != (" << h_plucker_box_hits[i] << ") Plucker!"
+                      << std::endl;
+            std::cout << "AABB (bx, by, bz): (" << h_nodes[i].bottom[0] << ", "
+                      << h_nodes[i].bottom[1] << ", " << h_nodes[i].bottom[2]
+                      << ")" << std::endl;
+            std::cout << "AABB (tx, ty, tz): (" << h_nodes[i].top[0] << ", "
+                      << h_nodes[i].top[1] << ", " << h_nodes[i].top[2]
+                      << ")" << std::endl;
+            std::cout << std::endl;
         }
     }
 

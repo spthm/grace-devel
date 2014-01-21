@@ -191,6 +191,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
 
         else if ((ybyx * tx - by + c_xy < 0.0f) ||
                  (xbyy * ty - bx + c_yx < 0.0f) ||
+                 // ( (bx > ox) && (ybyx * bx - ty + c_xy > 0.0f) ) ||
                  (ybyz * tz - by + c_zy < 0.0f) ||
                  (zbyy * ty - bz + c_yz < 0.0f) ||
                  (zbyx * tx - bz + c_xz < 0.0f) ||
