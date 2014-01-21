@@ -25,24 +25,24 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     {
         grace::Ray ray = rays[tid];
 
-        float xbyy = ray.dx / ray.dy;
-        float ybyx = 1.0f / xbyy;
-        float ybyz = ray.dy / ray.dz;
-        float zbyy = 1.0f / ybyz;
-        float xbyz = ray.dx / ray.dz;
-        float zbyx = 1.0f / xbyz;
+        grace::SlopeProp slope;
 
-        float c_xy = ray.oy - ybyx*ray.ox;
-        float c_xz = ray.oz - zbyx*ray.ox;
-        float c_yx = ray.ox - xbyy*ray.oy;
-        float c_yz = ray.oz - zbyy*ray.oy;
-        float c_zx = ray.ox - xbyz*ray.oz;
-        float c_zy = ray.oy - ybyz*ray.oz;
+        slope.xbyy = ray.dx / ray.dy;
+        slope.ybyx = 1.0f / slope.xbyy;
+        slope.ybyz = ray.dy / ray.dz;
+        slope.zbyy = 1.0f / slope.ybyz;
+        slope.xbyz = ray.dx / ray.dz;
+        slope.zbyx = 1.0f / slope.xbyz;
+
+        slope.c_xy = ray.oy - slope.ybyx*ray.ox;
+        slope.c_xz = ray.oz - slope.zbyx*ray.ox;
+        slope.c_yx = ray.ox - slope.xbyy*ray.oy;
+        slope.c_yz = ray.oz - slope.zbyy*ray.oy;
+        slope.c_zx = ray.ox - slope.xbyz*ray.oz;
+        slope.c_zy = ray.oy - slope.ybyz*ray.oz;
 
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_eisemann(ray, nodes[i],
-                                         xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
-                                         c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
+            if (grace::AABB_hit_eisemann(ray, nodes[i], slope))
             {
                 ray_hits[tid]++;
                 //atomicAdd(&(box_hits[i]), 1);

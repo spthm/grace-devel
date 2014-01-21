@@ -12,12 +12,7 @@ enum CLASSIFICATION
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
-                                           const float xbyy, const float ybyx,
-                                           const float ybyz, const float zbyy,
-                                           const float xbyz, const float zbyx,
-                                           const float c_xy, const float c_xz,
-                                           const float c_yx, const float c_yz,
-                                           const float c_zx, const float c_zy)
+                                           const SlopeProp& slope)
 {
 
     float ox = ray.ox;
@@ -36,6 +31,19 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
     float tx = node.top[0];
     float ty = node.top[1];
     float tz = node.top[2];
+
+    float xbyy = slope.xbyy;
+    float ybyx = slope.ybyx;
+    float ybyz = slope.ybyz;
+    float zbyy = slope.zbyy;
+    float xbyz = slope.xbyz;
+    float zbyx = slope.zbyx;
+    float c_xy = slope.c_xy;
+    float c_xz = slope.c_xz;
+    float c_yx = slope.c_yx;
+    float c_yz = slope.c_yz;
+    float c_zx = slope.c_xz;
+    float c_zy = slope.c_zy;
 
     switch(ray.dclass)
     {
@@ -445,27 +453,27 @@ __global__ void trace(const Ray* rays,
         hit_offset = ray_index*max_ray_hits;
         ray_hit_count = 0;
 
-        float xbyy = rays[ray_index].dx / rays[ray_index].dy;
-        float ybyx = 1.0f / xbyy;
-        float ybyz = rays[ray_index].dy / rays[ray_index].dz;
-        float zbyy = 1.0f / ybyz;
-        float xbyz = rays[ray_index].dx / rays[ray_index].dz;
-        float zbyx = 1.0f / xbyz;
+        SlopeProp slope;
 
-        float c_xy = rays[ray_index].oy - ybyx*rays[ray_index].ox;
-        float c_xz = rays[ray_index].oz - zbyx*rays[ray_index].ox;
-        float c_yx = rays[ray_index].ox - xbyy*rays[ray_index].oy;
-        float c_yz = rays[ray_index].oz - zbyy*rays[ray_index].oy;
-        float c_zx = rays[ray_index].ox - xbyz*rays[ray_index].oz;
-        float c_zy = rays[ray_index].oy - ybyz*rays[ray_index].oz;
+        slope.xbyy = rays[ray_index].dx / rays[ray_index].dy;
+        slope.ybyx = 1.0f / slope.xbyy;
+        slope.ybyz = rays[ray_index].dy / rays[ray_index].dz;
+        slope.zbyy = 1.0f / slope.ybyz;
+        slope.xbyz = rays[ray_index].dx / rays[ray_index].dz;
+        slope.zbyx = 1.0f / slope.xbyz;
+
+        slope.c_xy = rays[ray_index].oy - slope.ybyx*rays[ray_index].ox;
+        slope.c_xz = rays[ray_index].oz - slope.zbyx*rays[ray_index].ox;
+        slope.c_yx = rays[ray_index].ox - slope.xbyy*rays[ray_index].oy;
+        slope.c_yz = rays[ray_index].oz - slope.zbyy*rays[ray_index].oy;
+        slope.c_zx = rays[ray_index].ox - slope.xbyz*rays[ray_index].oz;
+        slope.c_zy = rays[ray_index].oy - slope.ybyz*rays[ray_index].oz;
 
         while (stack_index >= (int) threadIdx.x*31)
         {
             if (!is_leaf)
             {
-                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index],
-                                      xbyy, ybyx, ybyz, zbyy, xbyz, zbyx,
-                                      c_xy, c_xz, c_yx, c_yz, c_zx, c_zy))
+                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index], slope))
                 {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
