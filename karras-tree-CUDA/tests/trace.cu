@@ -111,39 +111,45 @@ int main(int argc, char* argv[])
     grace::find_AABBs(d_nodes, d_leaves,
                       d_x_centres, d_y_centres, d_z_centres, d_radii);
 
-    // Generate the rays (all emitted from box centre with length 1).
+    // Generate the rays (emitted from box centre (.5, .5, .5) of length 2).
     thrust::host_vector<grace::Ray> h_rays(N_rays);
     thrust::host_vector<float> h_dxs(N_rays);
     thrust::host_vector<float> h_dys(N_rays);
     thrust::host_vector<float> h_dzs(N_rays);
+    thrust::host_vector<UInteger32> h_keys(N_rays);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dxs.begin(),
-                      random_float_functor(0u, 2u) );
+                      random_float_functor(0u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dys.begin(),
-                      random_float_functor(1u, 2u) );
+                      random_float_functor(1u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dzs.begin(),
-                      random_float_functor(2u, 2u) );
+                      random_float_functor(2u, -1.0f, 1.0f) );
     for (int i=0; i<N_rays; i++) {
         float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
                            h_dys[i]*h_dys[i] +
                            h_dzs[i]*h_dzs[i]);
-        h_rays[i].dx = -h_dxs[i] / N_dir;
-        h_rays[i].dy = -h_dys[i] / N_dir;
-        h_rays[i].dz = -h_dzs[i] / N_dir;
+        h_rays[i].dx = h_dxs[i] / N_dir;
+        h_rays[i].dy = h_dys[i] / N_dir;
+        h_rays[i].dz = h_dzs[i] / N_dir;
         h_rays[i].ox = h_rays[i].oy = h_rays[i].oz = 0.5f;
-        h_rays[i].length = 1;
+        h_rays[i].length = 2;
         h_rays[i].dclass = 0;
-        // if (h_dxs[i] >= 0)
-        //     h_rays[i].dclass += 1;
-        // if (h_dys[i] >= 0)
-        //     h_rays[i].dclass += 2;
-        // if (h_dzs[i] >= 0)
-        //     h_rays[i].dclass += 4;
+        if (h_dxs[i] >= 0)
+            h_rays[i].dclass += 1;
+        if (h_dys[i] >= 0)
+            h_rays[i].dclass += 2;
+        if (h_dzs[i] >= 0)
+            h_rays[i].dclass += 4;
+
+        // morton_key(float, float, float) requires floats in (0, 1).
+        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
+                                      (h_rays[i].dy+1)/2.f,
+                                      (h_rays[i].dz+1)/2.f);
     }
     h_dxs.clear();
     h_dxs.shrink_to_fit();
@@ -152,6 +158,8 @@ int main(int argc, char* argv[])
     h_dzs.clear();
     h_dxs.shrink_to_fit();
 
+    // Sort rays by Morton key.
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<int> d_hits(N_hits_per_ray*N_rays);
     thrust::device_vector<int> d_hit_count(N_rays);

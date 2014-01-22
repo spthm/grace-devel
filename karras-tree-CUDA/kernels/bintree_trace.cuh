@@ -11,6 +11,27 @@ namespace grace {
 enum CLASSIFICATION
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
+__inline__ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
+{
+    SlopeProp slope;
+
+    slope.xbyy = ray.dx / ray.dy;
+    slope.ybyx = 1.0f / slope.xbyy;
+    slope.ybyz = ray.dy / ray.dz;
+    slope.zbyy = 1.0f / slope.ybyz;
+    slope.xbyz = ray.dx / ray.dz;
+    slope.zbyx = 1.0f / slope.xbyz;
+
+    slope.c_xy = ray.oy - slope.ybyx*ray.ox;
+    slope.c_xz = ray.oz - slope.zbyx*ray.ox;
+    slope.c_yx = ray.ox - slope.xbyy*ray.oy;
+    slope.c_yz = ray.oz - slope.zbyy*ray.oy;
+    slope.c_zx = ray.ox - slope.xbyz*ray.oz;
+    slope.c_zy = ray.oy - slope.ybyz*ray.oz;
+
+    return slope;
+}
+
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
                                            const SlopeProp& slope)
 {
@@ -374,10 +395,10 @@ __host__ __device__ bool AABB_hit_plucker(const Ray& ray, const Node& node)
 
 template <typename Float>
 __host__ __device__ bool sphere_hit(const Ray& ray,
-                                    const Float& x,
-                                    const Float& y,
-                                    const Float& z,
-                                    const Float& radius)
+                                    const Float x,
+                                    const Float y,
+                                    const Float z,
+                                    const Float radius)
 {
     // Ray origin -> sphere centre;
     float px = ray.ox - x;
@@ -453,27 +474,14 @@ __global__ void trace(const Ray* rays,
         hit_offset = ray_index*max_ray_hits;
         ray_hit_count = 0;
 
-        SlopeProp slope;
-
-        slope.xbyy = rays[ray_index].dx / rays[ray_index].dy;
-        slope.ybyx = 1.0f / slope.xbyy;
-        slope.ybyz = rays[ray_index].dy / rays[ray_index].dz;
-        slope.zbyy = 1.0f / slope.ybyz;
-        slope.xbyz = rays[ray_index].dx / rays[ray_index].dz;
-        slope.zbyx = 1.0f / slope.xbyz;
-
-        slope.c_xy = rays[ray_index].oy - slope.ybyx*rays[ray_index].ox;
-        slope.c_xz = rays[ray_index].oz - slope.zbyx*rays[ray_index].ox;
-        slope.c_yx = rays[ray_index].ox - slope.xbyy*rays[ray_index].oy;
-        slope.c_yz = rays[ray_index].oz - slope.zbyy*rays[ray_index].oy;
-        slope.c_zx = rays[ray_index].ox - slope.xbyz*rays[ray_index].oz;
-        slope.c_zy = rays[ray_index].oy - slope.ybyz*rays[ray_index].oz;
+        Ray ray = rays[ray_index];
+        SlopeProp slope = slope_properties(rays[ray_index]);
 
         while (stack_index >= (int) threadIdx.x*31)
         {
             if (!is_leaf)
             {
-                if (AABB_hit_eisemann(rays[ray_index], nodes[node_index], slope))
+                if (AABB_hit_eisemann(ray, nodes[node_index], slope))
                 {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
@@ -492,7 +500,7 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf)
             {
-                if (sphere_hit(rays[ray_index],
+                if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
                                radii[node_index]))
                 {

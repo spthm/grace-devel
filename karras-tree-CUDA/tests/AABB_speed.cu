@@ -25,21 +25,7 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     {
         grace::Ray ray = rays[tid];
 
-        grace::SlopeProp slope;
-
-        slope.xbyy = ray.dx / ray.dy;
-        slope.ybyx = 1.0f / slope.xbyy;
-        slope.ybyz = ray.dy / ray.dz;
-        slope.zbyy = 1.0f / slope.ybyz;
-        slope.xbyz = ray.dx / ray.dz;
-        slope.zbyx = 1.0f / slope.xbyz;
-
-        slope.c_xy = ray.oy - slope.ybyx*ray.ox;
-        slope.c_xz = ray.oz - slope.zbyx*ray.ox;
-        slope.c_yx = ray.ox - slope.xbyy*ray.oy;
-        slope.c_yz = ray.oz - slope.zbyy*ray.oy;
-        slope.c_zx = ray.ox - slope.xbyz*ray.oz;
-        slope.c_zy = ray.oy - slope.ybyz*ray.oz;
+        grace::SlopeProp slope = slope_properties(ray);
 
         for (int i=0; i<N_AABBs; i++) {
             if (grace::AABB_hit_eisemann(ray, nodes[i], slope))
