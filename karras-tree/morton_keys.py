@@ -9,7 +9,7 @@ def map_to_int(value, order):
     return int(value * np.float32(span))
 
 def morton_key_2D(x, y, order=10):
-    """Return the Morton key of two integers x and y."""
+    """Return the Morton key of x and y."""
     if not isinstance(x, int):
         x, y, z = [map_to_int(i, order) for i in (x,y)]
     lookup = [bits.space_by_1(i, order) for i in range(2**order)]
@@ -20,7 +20,7 @@ def morton_key_2D(x, y, order=10):
     return lookup[y] << 1 | lookup[x]
 
 def morton_key_3D(x, y, z, order=10):
-    """Return the Morton key of three integers x, y and z."""
+    """Return the Morton key of x, y and z."""
     if not isinstance(x, int):
         if not isinstance(x, np.int32):
             if not isinstance(x, np.int64):

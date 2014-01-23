@@ -26,12 +26,17 @@ inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=tr
 
 int main(int argc, char* argv[])
 {
+    // Do we save the input and output data?
+    bool save_data = false;
+    if (argc > 1) {
+        if (strcmp("save", argv[1]) == 0)
+            save_data = true;
+    }
 {
     typedef grace::Vector3<float> Vector3f;
 
-    int N = 1000000;
-    int N_rays_per_class = 10000;
-    int N_rays = 8*N_rays_per_class;
+    int N = 1000;
+    int N_rays = 80;
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
 
@@ -194,13 +199,48 @@ int main(int argc, char* argv[])
                                      0, thrust::plus<int>()) / float(N_rays);
     std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
     std::cout << std::endl;
-    std::cout << "Number of rays/class: " << N_rays_per_class << std::endl;
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
     std::cout << "Expected hit count:   " << N_hits_per_ray / 2 << std::endl;
     std::cout << "Mean hits:            " << mean_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
+
+    if (save_data)
+    {
+        std::ofstream outfile;
+
+        outfile.setf(std::ios::fixed, std::ios::floatfield);
+        outfile.precision(9);
+        outfile.width(11);
+        outfile.fill('0');
+
+        thrust::host_vector<float> h_x_centres = d_x_centres;
+        thrust::host_vector<float> h_y_centres = d_y_centres;
+        thrust::host_vector<float> h_z_centres = d_z_centres;
+        thrust::host_vector<float> h_radii = d_radii;
+        outfile.open("spheredata.txt");
+        for (int i=0; i<N; i++) {
+            outfile << h_x_centres[i] << " " << h_y_centres[i] << " "
+                    << h_z_centres[i] << " " << h_radii[i] << std::endl;
+        }
+        outfile.close();
+
+        outfile.open("raydata.txt");
+        for (int i=0; i<N_rays; i++) {
+            outfile << h_rays[i].dx << " " << h_rays[i].dy << " " << h_rays[i].dz
+                    << std::endl;
+        }
+        outfile.close();
+
+        thrust::host_vector<float> h_hit_count = d_hit_count;
+        outfile.open("hitdata.txt");
+        for (int i=0; i<N_rays; i++) {
+            outfile << h_hit_count[i] << std::endl;
+        }
+        outfile.close();
+    }
+
 }
     // Exit cleanly to ensure full profiler trace.
     cudaDeviceReset();
