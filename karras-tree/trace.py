@@ -37,19 +37,19 @@ class Ray(object):
 
         self.key = morton_key_3D(dx, dy, dz)
 
-        self.xbyy = dx / dy;
-        self.ybyx = 1.0 / self.xbyy;
-        self.ybyz = dy / dz;
-        self.zbyy = 1.0 / self.ybyz;
-        self.xbyz = dx / dz;
-        self.zbyx = 1.0 / self.xbyz;
+        self.xbyy = dx / dy
+        self.ybyx = 1.0 / self.xbyy
+        self.ybyz = dy / dz
+        self.zbyy = 1.0 / self.ybyz
+        self.xbyz = dx / dz
+        self.zbyx = 1.0 / self.xbyz
 
-        self.c_xy = oy - self.ybyx*ox;
-        self.c_xz = oz - self.zbyx*ox;
-        self.c_yx = ox - self.xbyy*oy;
-        self.c_yz = oz - self.zbyy*oy;
-        self.c_zx = ox - self.xbyz*oz;
-        self.c_zy = oy - self.ybyz*oz;
+        self.c_xy = oy - self.ybyx*ox
+        self.c_xz = oz - self.zbyx*ox
+        self.c_yx = ox - self.xbyy*oy
+        self.c_yz = oz - self.zbyy*oy
+        self.c_zx = ox - self.xbyz*oz
+        self.c_zy = oy - self.ybyz*oz
 
         dclass_hit_name = self.ray_classes[self.dclass] + '_hit'
         self.dclass_hit_fn = getattr(self, dclass_hit_name)
@@ -199,45 +199,46 @@ class Ray(object):
                 return False
             return True
 
-    def hit(self, box):
+    def AABB_hit(self, box):
         return self.dclass_hit_fn(box)
 
+    def sphere_hit(self, x, y, z, radius):
+        # Ray origin -> sphere centre.
+        px = x - self.ox
+        py = y - self.oy
+        pz = z - self.oz
 
-def sphere_hit(ray, x, y, z, radius):
-    # Ray origin -> sphere centre;
-    px = ray.ox - x;
-    py = ray.oy - y;
-    pz = ray.oz - z;
+        print("(px, py, pz): (%g, %g, %g)" %(px, py, px))
 
-    # Normalized ray direction.
-    rx = ray.dx;
-    ry = ray.dy;
-    rz = ray.dz;
+        # Normalized ray direction.
+        rx = self.dx
+        ry = self.dy
+        rz = self.dz
 
-    # Projection of p onto r.
-    dot_p = px*rx + py*ry + pz*rz;
+        # Projection of p onto r.
+        dot_p = px*rx + py*ry + pz*rz
 
-    # Impact parameter.
-    bx = px - dot_p*rx;
-    by = py - dot_p*ry;
-    bz = pz - dot_p*rz;
-    b = np.sqrt(bx*bx + by*by +bz*bz);
+        # Impact parameter.
+        bx = px - dot_p*rx
+        by = py - dot_p*ry
+        bz = pz - dot_p*rz
+        b = np.sqrt(bx*bx + by*by +bz*bz)
 
-    if (b >= radius):
-        return False
+        if (b >= radius):
+            return False
 
-    # If dot_p < 0, to hit the ray origin must be inside the sphere.
-    # This is not possible if the distance along the ray (backwards from its
-    # origin) to the point of closest approach is > the sphere radius.
-    if (dot_p < -radius):
-        return False
+        # If dot_p < 0, to hit the ray origin must be inside the sphere.
+        # This is not possible if the distance along the ray (backwards from its
+        # origin) to the point of closest approach is > the sphere radius.
+        if (dot_p < -radius):
+            return False
 
-    # The ray terminates before piercing the sphere.
-    if (dot_p > ray.length + radius):
-        return False
+        # The ray terminates before piercing the sphere.
+        if (dot_p > self.length + radius):
+            return False
 
-    # Otherwise, assume we have a hit.  This counts the following partial
-    # intersections as hits:
-    #     i) Ray starts (anywhere) inside sphere.
-    #    ii) Ray ends (anywhere) inside sphere.
-    return True
+        # Otherwise, assume we have a hit.  This counts the following partial
+        # intersections as hits:
+        #     i) Ray starts (anywhere) inside sphere.
+        #    ii) Ray ends (anywhere) inside sphere.
+        return True

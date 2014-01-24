@@ -73,6 +73,7 @@ class BinRadixTree(object):
         print("Building tree...")
         tree.build()
         print("Setting AABBs...")
+        print("")
         tree.find_AABBs()
         return tree
 
@@ -94,6 +95,7 @@ class BinRadixTree(object):
         print("Compacting tree...")
         tree.compact()
         print("Setting AABBs...")
+        print("")
         tree.find_AABBs()
         return tree
 
