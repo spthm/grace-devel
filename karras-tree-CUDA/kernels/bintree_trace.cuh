@@ -400,10 +400,10 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
                                     const Float z,
                                     const Float radius)
 {
-    // Ray origin -> sphere centre;
-    float px = ray.ox - x;
-    float py = ray.oy - y;
-    float pz = ray.oz - z;
+    // Ray origin -> sphere centre.
+    float px = x - ray.ox;
+    float py = y - ray.oy;
+    float pz = z - ray.oz;
 
     // Normalized ray direction.
     float rx = ray.dx;
@@ -418,6 +418,8 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     float by = py - dot_p*ry;
     float bz = pz - dot_p*rz;
     float b = sqrtf(bx*bx + by*by +bz*bz);
+
+    printf("(px, py, pz): (%g, %g, %g)\n", px, py, px);
 
     if (b >= radius)
         return false;
@@ -459,16 +461,20 @@ __global__ void trace(const Ray* rays,
     bool is_leaf;
     // N (31) levels => N-1 (30.0f) key length.
     // One extra so we can avoid stack_index = -1 before trace exit.
-    __shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
+    //__shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
+    int trace_stack[31];
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-    // Top of the stack.  Must provide a valid node index, so points to root.
-    trace_stack[threadIdx.x*31] = 0;
 
     while (ray_index <= n_rays)
     {
+        // Top of the stack.
+        // Must provide a valid node index, so points to root.
+        //stack_index = threadIdx.x*31;
+        stack_index = 0;
+        trace_stack[stack_index] = 0;
+
         node_index = 0;
-        stack_index = threadIdx.x*31;
         is_leaf = false;
 
         hit_offset = ray_index*max_ray_hits;
@@ -477,22 +483,30 @@ __global__ void trace(const Ray* rays,
         Ray ray = rays[ray_index];
         SlopeProp slope = slope_properties(rays[ray_index]);
 
-        while (stack_index >= (int) threadIdx.x*31)
+        //while (stack_index >= (int) threadIdx.x*31)
+        while (stack_index >= 0)
         {
             if (!is_leaf)
             {
+                // Test current node for intersection.
+                // If it is hit, put it at the top of the stack and move to its
+                // left child.
                 if (AABB_hit_eisemann(ray, nodes[node_index], slope))
                 {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
+
                     is_leaf = nodes[node_index].left_leaf_flag;
                     node_index = nodes[node_index].left;
 
                 }
+                // If it is not hit, move to the right child of the node at the
+                // top of the stack.
                 else
                 {
                     node_index = trace_stack[stack_index];
                     stack_index--;
+
                     is_leaf = nodes[node_index].right_leaf_flag;
                     node_index = nodes[node_index].right;
                 }
@@ -500,6 +514,7 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf)
             {
+                // Test sphere inside the current leaf for itersection.
                 if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
                                radii[node_index]))
@@ -508,8 +523,10 @@ __global__ void trace(const Ray* rays,
                         hits[hit_offset+ray_hit_count] = node_index;
                     ray_hit_count++;
                 }
+                // Move to the right child of the node at the top of the stack.
                 node_index = trace_stack[stack_index];
                 stack_index--;
+
                 is_leaf = nodes[node_index].right_leaf_flag;
                 node_index = nodes[node_index].right;
             }
