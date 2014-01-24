@@ -33,7 +33,7 @@ __inline__ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
 }
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
-                                           const Slopeprop& slope,
+                                           const SlopeProp& slope,
                                            const Node& node)
 {
 
@@ -420,8 +420,6 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     float bz = pz - dot_p*rz;
     float b = sqrtf(bx*bx + by*by +bz*bz);
 
-    printf("(px, py, pz): (%g, %g, %g)\n", px, py, px);
-
     if (b >= radius)
         return false;
 
@@ -460,20 +458,21 @@ __global__ void trace(const Ray* rays,
     int ray_index, stack_index, hit_offset, ray_hit_count;
     Integer32 node_index;
     bool is_leaf;
-    // N (31) levels => N-1 (30.0f) key length.
-    // One extra so we can avoid stack_index = -1 before trace exit.
+    // N (31) levels inc. leaves => N-1 (30) key length.
+    // One extra so the bottom of the stack can contain a marker that tells
+    // us we have emptied the stack.
+    // Here that marker is 0 since it must be a valid index of the nodes array!
     //__shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
     int trace_stack[31];
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (ray_index <= n_rays)
+    while (ray_index < n_rays)
     {
         // Top of the stack.
         // Must provide a valid node index, so points to root.
         //stack_index = threadIdx.x*31;
         stack_index = 0;
-        trace_stack[stack_index] = 0;
 
         node_index = 0;
         is_leaf = false;
@@ -487,7 +486,7 @@ __global__ void trace(const Ray* rays,
         //while (stack_index >= (int) threadIdx.x*31)
         while (stack_index >= 0)
         {
-            if (!is_leaf)
+            while (!is_leaf && stack_index >= 0)
             {
                 // Test current node for intersection.
                 // If it is hit, put it at the top of the stack and move to its
@@ -513,7 +512,7 @@ __global__ void trace(const Ray* rays,
                 }
             }
 
-            if (is_leaf)
+            if (is_leaf && stack_index >= 0)
             {
                 // Test sphere inside the current leaf for itersection.
                 if (sphere_hit(ray,

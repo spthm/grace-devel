@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_radii.begin(),
-                      random_float_functor(0.0f, 1.0f) );
+                      random_float_functor(0.0f, 0.1f) );
 
     // Set the AABBs.
     Vector3f bottom(0., 0., 0.);
@@ -241,8 +241,10 @@ int main(int argc, char* argv[])
 
         outfile.open("indata/raydata.txt");
         for (int i=0; i<N_rays; i++) {
-            outfile << h_rays[i].dx << " " << h_rays[i].dy << " " << h_rays[i].dz
-                    << std::endl;
+            outfile << h_rays[i].dx << " " << h_rays[i].dy << " "
+                    << h_rays[i].dz << " " << h_rays[i].ox << " "
+                    << h_rays[i].oy << " " << h_rays[i].oz << " "
+                    << h_rays[i].length << std::endl;
         }
         outfile.close();
 
