@@ -28,7 +28,7 @@ for ray_index in range(len(rays)):
     ray = rays[ray_index]
     while (stack_index >= 0):
 
-        if not is_leaf:
+        while (not is_leaf and stack_index >= 0):
             if ray.AABB_hit(binary_tree.nodes[node_index].AABB):
                 stack_index += 1
                 trace_stack[stack_index] = node_index
@@ -40,7 +40,7 @@ for ray_index in range(len(rays)):
                 is_leaf = binary_tree.nodes[node_index].right.is_leaf()
                 node_index = binary_tree.nodes[node_index].right.index
 
-        if (is_leaf):
+        while (is_leaf and stack_index >= 0):
             if ray.sphere_hit(*spheres[node_index]):
                 ray_hit_count += 1
             # else:

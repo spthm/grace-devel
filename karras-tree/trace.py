@@ -13,7 +13,7 @@ class Ray(object):
                    6: 'MPP',
                    7: 'PPP'}
 
-    def __init__(self, dx, dy, dz, length=2, ox=0, oy=0, oz=0):
+    def __init__(self, dx, dy, dz, ox=0, oy=0, oz=0, length=2):
         super(Ray, self).__init__()
         N = np.sqrt(dx*dx + dy*dy + dz*dz)
 
