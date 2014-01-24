@@ -26,17 +26,30 @@ inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=tr
 
 int main(int argc, char* argv[])
 {
+    typedef grace::Vector3<float> Vector3f;
+
+    unsigned int N = 1000000;
+    unsigned int N_rays = 80000;
     // Do we save the input and output data?
     bool save_data = false;
+
+    if (argc > 3) {
+        N_rays = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
+    if (argc > 2) {
+        N = (unsigned int) std::strtol(argv[2], NULL, 10);
+    }
     if (argc > 1) {
         if (strcmp("save", argv[1]) == 0)
             save_data = true;
     }
-{
-    typedef grace::Vector3<float> Vector3f;
 
-    int N = 1000;
-    int N_rays = 80;
+    std::cout << "Generating " << N << " random points and " << N_rays
+              << " random rays." << std::endl;
+    if (save_data)
+        std::cout << "Will save sphere, ray and hit data." << std::endl;
+{
+
     // Expected.  The factor of 2 is a fudge.
     int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
 
@@ -60,7 +73,7 @@ int main(int argc, char* argv[])
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_radii.begin(),
-                      random_float_functor(0.0f, 0.1f) );
+                      random_float_functor(0.0f, 1.0f) );
 
     // Set the AABBs.
     Vector3f bottom(0., 0., 0.);
@@ -219,14 +232,14 @@ int main(int argc, char* argv[])
         thrust::host_vector<float> h_y_centres = d_y_centres;
         thrust::host_vector<float> h_z_centres = d_z_centres;
         thrust::host_vector<float> h_radii = d_radii;
-        outfile.open("spheredata.txt");
+        outfile.open("indata/spheredata.txt");
         for (int i=0; i<N; i++) {
             outfile << h_x_centres[i] << " " << h_y_centres[i] << " "
                     << h_z_centres[i] << " " << h_radii[i] << std::endl;
         }
         outfile.close();
 
-        outfile.open("raydata.txt");
+        outfile.open("indata/raydata.txt");
         for (int i=0; i<N_rays; i++) {
             outfile << h_rays[i].dx << " " << h_rays[i].dy << " " << h_rays[i].dz
                     << std::endl;
@@ -234,7 +247,7 @@ int main(int argc, char* argv[])
         outfile.close();
 
         thrust::host_vector<float> h_hit_count = d_hit_count;
-        outfile.open("hitdata.txt");
+        outfile.open("outdata/hitdata.txt");
         for (int i=0; i<N_rays; i++) {
             outfile << h_hit_count[i] << std::endl;
         }
