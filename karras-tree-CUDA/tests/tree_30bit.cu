@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
-    else if (argc > 2) {
+    if (argc > 2) {
         if (strcmp("in", argv[2]) == 0) {
             save_in = true;
             std::cout << "Will save random floating point data." << std::endl;
@@ -52,7 +52,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Will save all data." << std::endl;
         }
     }
-    else if (argc > 1) {
+    if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     std::cout << "Will generate " << N << " random points." << std::endl;
