@@ -1,26 +1,16 @@
 import numpy as np
 
 from builder import BinRadixTree
-from trace import Ray, sphere_hit
+from trace import Ray
 
-with open("spheredata.txt") as f:
+with open("../karras-tree-CUDA/tests/indata/spheredata.txt") as f:
     spheres = [[float(n) for n in line.split()] for line in f]
-spheres = np.array(spheres)
 
-with open("raydata.txt") as f:
+with open("../karras-tree-CUDA/tests/indata/raydata.txt") as f:
     rays = [Ray(*[float(n) for n in line.split()]) for line in f]
 
-with open("hitdata.txt") as f:
+with open("../karras-tree-CUDA/tests/outdata/hitdata.txt") as f:
     hitdata = [float(line) for line in f]
-
-# # Generate rays from random directions in [-1, 1).
-# rays = [Ray(*xyz) for xyz in np.random.rand(100, 3)]
-# # Sort rays by their Morton key.
-# rays.sort(key=lambda ray: ray.key)
-
-# # Store spheres as (x, y, z, r).
-# spheres = np.array(np.random.rand(1000,4), dtype=np.float32)
-# #spheres[:,3] /= float(N)
 
 binary_tree = BinRadixTree.from_primitives(spheres)
 
@@ -39,7 +29,7 @@ for ray_index in range(len(rays)):
     while (stack_index >= 0):
 
         if not is_leaf:
-            if ray.hit(binary_tree.nodes[node_index].AABB):
+            if ray.AABB_hit(binary_tree.nodes[node_index].AABB):
                 stack_index += 1
                 trace_stack[stack_index] = node_index
                 is_leaf = binary_tree.nodes[node_index].left.is_leaf()
@@ -51,8 +41,13 @@ for ray_index in range(len(rays)):
                 node_index = binary_tree.nodes[node_index].right.index
 
         if (is_leaf):
-            if sphere_hit(ray, *spheres[node_index]):
+            if ray.sphere_hit(*spheres[node_index]):
                 ray_hit_count += 1
+            # else:
+            #     print "leaf, but missed sphere."
+            #     print spheres[node_index]
+            #     print ray.ox, ray.oy, ray.oz
+            #     print ray.dx, ray.dy, ray.dz
 
             node_index = trace_stack[stack_index]
             stack_index -= 1
@@ -61,10 +56,11 @@ for ray_index in range(len(rays)):
 
     hit_counts[ray_index] = ray_hit_count
 
+print
 for i, n_py_hits in enumerate(hit_counts):
-    if n_py_hits != 0:
-        print "A Py hit"
-        print
+    # if n_py_hits != 0:
+    #     print "A Py hit"
+    #     print
     if n_py_hits != hitdata[i]:
         print "Hit count mismatch at", i
         print "Py hits", n_py_hits, "vs", hitdata[i], "CUDA hits!"
