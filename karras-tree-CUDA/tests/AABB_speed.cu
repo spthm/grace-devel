@@ -28,7 +28,7 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
         grace::SlopeProp slope = slope_properties(ray);
 
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_eisemann(ray, nodes[i], slope))
+            if (grace::AABB_hit_eisemann(ray, slope, nodes[i]))
             {
                 ray_hits[tid]++;
                 //atomicAdd(&(box_hits[i]), 1);

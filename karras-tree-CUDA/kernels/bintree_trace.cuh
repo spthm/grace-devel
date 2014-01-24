@@ -32,8 +32,9 @@ __inline__ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
     return slope;
 }
 
-__host__ __device__ bool AABB_hit_eisemann(const Ray& ray, const Node& node,
-                                           const SlopeProp& slope)
+__host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
+                                           const Slopeprop& slope,
+                                           const Node& node)
 {
 
     float ox = ray.ox;
@@ -491,7 +492,7 @@ __global__ void trace(const Ray* rays,
                 // Test current node for intersection.
                 // If it is hit, put it at the top of the stack and move to its
                 // left child.
-                if (AABB_hit_eisemann(ray, nodes[node_index], slope))
+                if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
                     trace_stack[stack_index] = node_index;
