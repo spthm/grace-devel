@@ -51,9 +51,6 @@ class Ray(object):
         self.c_zx = ox - self.xbyz*oz
         self.c_zy = oy - self.ybyz*oz
 
-        dclass_hit_name = self.ray_classes[self.dclass] + '_hit'
-        self.dclass_hit_fn = getattr(self, dclass_hit_name)
-
 
     def MMM_hit(self, box):
         if ((self.ox < box.bottom[0]) or (self.oy < box.bottom[1]) or (self.oz < box.bottom[2])):
@@ -92,123 +89,126 @@ class Ray(object):
         return True
 
     def MPM_hit(self, box):
-            if ((self.ox < box.bottom[0]) or (self.oy > box.top[1]) or (self.oz < box.bottom[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox < box.bottom[0]) or (self.oy > box.top[1]) or (self.oz < box.bottom[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.top[0] - self.ox - self.dx*self.length < 0 or
-                  box.bottom[1] - self.oy - self.dy*self.length > 0 or
-                  box.top[2] - self.oz - self.dz*self.length < 0):
-                return False # past length of ray
+        elif (box.top[0] - self.ox - self.dx*self.length < 0 or
+              box.bottom[1] - self.oy - self.dy*self.length > 0 or
+              box.top[2] - self.oz - self.dz*self.length < 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.bottom[0] - box.bottom[1] + self.c_xy < 0) or
-                  (self.xbyy * box.top[1] - box.top[0] + self.c_yx > 0) or
-                  (self.ybyz * box.bottom[2] - box.bottom[1] + self.c_zy < 0) or
-                  (self.zbyy * box.top[1] - box.top[2] + self.c_yz > 0) or
-                  (self.zbyx * box.bottom[0] - box.top[2] + self.c_xz > 0) or
-                  (self.xbyz * box.bottom[2] - box.top[0] + self.c_zx > 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.bottom[0] - box.bottom[1] + self.c_xy < 0) or
+              (self.xbyy * box.top[1] - box.top[0] + self.c_yx > 0) or
+              (self.ybyz * box.bottom[2] - box.bottom[1] + self.c_zy < 0) or
+              (self.zbyy * box.top[1] - box.top[2] + self.c_yz > 0) or
+              (self.zbyx * box.bottom[0] - box.top[2] + self.c_xz > 0) or
+              (self.xbyz * box.bottom[2] - box.top[0] + self.c_zx > 0)):
+            return False
+        return True
 
     def PPM_hit(self, box):
-            if ((self.ox > box.top[0]) or (self.oy > box.top[1]) or (self.oz < box.bottom[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox > box.top[0]) or (self.oy > box.top[1]) or (self.oz < box.bottom[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
-                  box.bottom[1] - self.oy - self.dy*self.length > 0 or
-                  box.top[2] - self.oz - self.dz*self.length < 0):
-                return False # past length of ray
+        elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
+              box.bottom[1] - self.oy - self.dy*self.length > 0 or
+              box.top[2] - self.oz - self.dz*self.length < 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.top[0] - box.bottom[1] + self.c_xy < 0) or
-                  (self.xbyy * box.top[1] - box.bottom[0] + self.c_yx < 0) or
-                  (self.ybyz * box.bottom[2] - box.bottom[1] + self.c_zy < 0) or
-                  (self.zbyy * box.top[1] - box.top[2] + self.c_yz > 0) or
-                  (self.zbyx * box.top[0] - box.top[2] + self.c_xz > 0) or
-                  (self.xbyz * box.bottom[2] - box.bottom[0] + self.c_zx < 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.top[0] - box.bottom[1] + self.c_xy < 0) or
+              (self.xbyy * box.top[1] - box.bottom[0] + self.c_yx < 0) or
+              (self.ybyz * box.bottom[2] - box.bottom[1] + self.c_zy < 0) or
+              (self.zbyy * box.top[1] - box.top[2] + self.c_yz > 0) or
+              (self.zbyx * box.top[0] - box.top[2] + self.c_xz > 0) or
+              (self.xbyz * box.bottom[2] - box.bottom[0] + self.c_zx < 0)):
+            return False
+        return True
 
     def MMP_hit(self, box):
-            if ((self.ox < box.bottom[0]) or (self.oy < box.bottom[1]) or (self.oz > box.top[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox < box.bottom[0]) or (self.oy < box.bottom[1]) or (self.oz > box.top[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.top[0] - self.ox - self.dx*self.length < 0 or
-                  box.top[1] - self.oy - self.dy*self.length < 0 or
-                  box.bottom[2] - self.oz - self.dz*self.length > 0):
-                return False # past length of ray
+        elif (box.top[0] - self.ox - self.dx*self.length < 0 or
+              box.top[1] - self.oy - self.dy*self.length < 0 or
+              box.bottom[2] - self.oz - self.dz*self.length > 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.bottom[0] - box.top[1] + self.c_xy > 0) or
-                  (self.xbyy * box.bottom[1] - box.top[0] + self.c_yx > 0) or
-                  (self.ybyz * box.top[2] - box.top[1] + self.c_zy > 0) or
-                  (self.zbyy * box.bottom[1] - box.bottom[2] + self.c_yz < 0) or
-                  (self.zbyx * box.bottom[0] - box.bottom[2] + self.c_xz < 0) or
-                  (self.xbyz * box.top[2] - box.top[0] + self.c_zx > 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.bottom[0] - box.top[1] + self.c_xy > 0) or
+              (self.xbyy * box.bottom[1] - box.top[0] + self.c_yx > 0) or
+              (self.ybyz * box.top[2] - box.top[1] + self.c_zy > 0) or
+              (self.zbyy * box.bottom[1] - box.bottom[2] + self.c_yz < 0) or
+              (self.zbyx * box.bottom[0] - box.bottom[2] + self.c_xz < 0) or
+              (self.xbyz * box.top[2] - box.top[0] + self.c_zx > 0)):
+            return False
+        return True
 
     def PMP_hit(self, box):
-            if ((self.ox > box.top[0]) or (self.oy < box.bottom[1]) or (self.oz > box.top[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox > box.top[0]) or (self.oy < box.bottom[1]) or (self.oz > box.top[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
-                  box.top[1] - self.oy - self.dy*self.length < 0 or
-                  box.bottom[2] - self.oz - self.dz*self.length > 0):
-                return False # past length of ray
+        elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
+              box.top[1] - self.oy - self.dy*self.length < 0 or
+              box.bottom[2] - self.oz - self.dz*self.length > 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.top[0] - box.top[1] + self.c_xy > 0) or
-                  (self.xbyy * box.bottom[1] - box.bottom[0] + self.c_yx < 0) or
-                  (self.ybyz * box.top[2] - box.top[1] + self.c_zy > 0) or
-                  (self.zbyy * box.bottom[1] - box.bottom[2] + self.c_yz < 0) or
-                  (self.zbyx * box.top[0] - box.bottom[2] + self.c_xz < 0) or
-                  (self.xbyz * box.top[2] - box.bottom[0] + self.c_zx < 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.top[0] - box.top[1] + self.c_xy > 0) or
+              (self.xbyy * box.bottom[1] - box.bottom[0] + self.c_yx < 0) or
+              (self.ybyz * box.top[2] - box.top[1] + self.c_zy > 0) or
+              (self.zbyy * box.bottom[1] - box.bottom[2] + self.c_yz < 0) or
+              (self.zbyx * box.top[0] - box.bottom[2] + self.c_xz < 0) or
+              (self.xbyz * box.top[2] - box.bottom[0] + self.c_zx < 0)):
+            return False
+
+        return True
 
     def MPP_hit(self, box):
-            if ((self.ox < box.bottom[0]) or (self.oy > box.top[1]) or (self.oz > box.top[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox < box.bottom[0]) or (self.oy > box.top[1]) or (self.oz > box.top[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.top[0] - self.ox - self.dx*self.length < 0 or
-                  box.bottom[1] - self.oy - self.dy*self.length > 0 or
-                  box.bottom[2] - self.oz - self.dz*self.length > 0):
-                return False # past length of ray
+        elif (box.top[0] - self.ox - self.dx*self.length < 0 or
+              box.bottom[1] - self.oy - self.dy*self.length > 0 or
+              box.bottom[2] - self.oz - self.dz*self.length > 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.bottom[0] - box.bottom[1] + self.c_xy < 0) or
-                  (self.xbyy * box.top[1] - box.top[0] + self.c_yx > 0) or
-                  (self.ybyz * box.top[2] - box.bottom[1] + self.c_zy < 0) or
-                  (self.zbyy * box.top[1] - box.bottom[2] + self.c_yz < 0) or
-                  (self.zbyx * box.bottom[0] - box.bottom[2] + self.c_xz < 0) or
-                  (self.xbyz * box.top[2] - box.top[0] + self.c_zx > 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.bottom[0] - box.bottom[1] + self.c_xy < 0) or
+              (self.xbyy * box.top[1] - box.top[0] + self.c_yx > 0) or
+              (self.ybyz * box.top[2] - box.bottom[1] + self.c_zy < 0) or
+              (self.zbyy * box.top[1] - box.bottom[2] + self.c_yz < 0) or
+              (self.zbyx * box.bottom[0] - box.bottom[2] + self.c_xz < 0) or
+              (self.xbyz * box.top[2] - box.top[0] + self.c_zx > 0)):
+            return False
+
+        return True
 
     def PPP_hit(self, box):
-            if ((self.ox > box.top[0]) or (self.oy > box.top[1]) or (self.oz > box.top[2])):
-                return False # AABB entirely in wrong octant wrt ray origin
+        if ((self.ox > box.top[0]) or (self.oy > box.top[1]) or (self.oz > box.top[2])):
+            return False # AABB entirely in wrong octant wrt ray origin
 
-            elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
-                  box.bottom[1] - self.oy - self.dy*self.length > 0 or
-                  box.bottom[2] - self.oz - self.dz*self.length > 0):
-                return False # past length of ray
+        elif (box.bottom[0] - self.ox - self.dx*self.length > 0 or
+              box.bottom[1] - self.oy - self.dy*self.length > 0 or
+              box.bottom[2] - self.oz - self.dz*self.length > 0):
+            return False # past length of ray
 
-            elif ((self.ybyx * box.top[0] - box.bottom[1] + self.c_xy < 0) or
-                  (self.xbyy * box.top[1] - box.bottom[0] + self.c_yx < 0) or
-                  (self.ybyz * box.top[2] - box.bottom[1] + self.c_zy < 0) or
-                  (self.zbyy * box.top[1] - box.bottom[2] + self.c_yz < 0) or
-                  (self.zbyx * box.top[0] - box.bottom[2] + self.c_xz < 0) or
-                  (self.xbyz * box.top[2] - box.bottom[0] + self.c_zx < 0)):
-                return False
-            return True
+        elif ((self.ybyx * box.top[0] - box.bottom[1] + self.c_xy < 0) or
+              (self.xbyy * box.top[1] - box.bottom[0] + self.c_yx < 0) or
+              (self.ybyz * box.top[2] - box.bottom[1] + self.c_zy < 0) or
+              (self.zbyy * box.top[1] - box.bottom[2] + self.c_yz < 0) or
+              (self.zbyx * box.top[0] - box.bottom[2] + self.c_xz < 0) or
+              (self.xbyz * box.top[2] - box.bottom[0] + self.c_zx < 0)):
+            return False
+
+        return True
 
     def AABB_hit(self, box):
-        return self.dclass_hit_fn(box)
+        dclass_hit_name = self.ray_classes[self.dclass] + '_hit'
+        dclass_hit_fn = getattr(self, dclass_hit_name)
+        return dclass_hit_fn(box)
 
     def sphere_hit(self, x, y, z, radius):
         # Ray origin -> sphere centre.
         px = x - self.ox
         py = y - self.oy
         pz = z - self.oz
-
-        print("(px, py, pz): (%g, %g, %g)" %(px, py, px))
 
         # Normalized ray direction.
         rx = self.dx
