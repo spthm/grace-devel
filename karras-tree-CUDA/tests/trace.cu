@@ -34,20 +34,21 @@ int main(int argc, char* argv[])
     bool save_data = false;
 
     if (argc > 3) {
-        N_rays = (unsigned int) std::strtol(argv[3], NULL, 10);
+        if (strcmp("save", argv[3]) == 0)
+            save_data = true;
     }
     if (argc > 2) {
-        N = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 1) {
-        if (strcmp("save", argv[1]) == 0)
-            save_data = true;
+        N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
 
     std::cout << "Generating " << N << " random points and " << N_rays
               << " random rays." << std::endl;
     if (save_data)
         std::cout << "Will save sphere, ray and hit data." << std::endl;
+    std::cout << std::endl;
 {
 
     // Expected.  The factor of 2 is a fudge.
@@ -75,7 +76,7 @@ int main(int argc, char* argv[])
                       d_radii.begin(),
                       random_float_functor(0.0f, 0.1f) );
 
-    // Set the AABBs.
+    // Set the centre-containing AABBs.
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 
@@ -188,7 +189,7 @@ int main(int argc, char* argv[])
     cudaEventRecord(start);
     grace::gpu::trace<<<28, TRACE_THREADS_PER_BLOCK>>>
                      (thrust::raw_pointer_cast(d_rays.data()),
-                      N_rays,
+                      d_rays.size(),
                       N_hits_per_ray,
                       thrust::raw_pointer_cast(d_hits.data()),
                       thrust::raw_pointer_cast(d_hit_count.data()),
@@ -207,7 +208,7 @@ int main(int argc, char* argv[])
     int max_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                   0, thrust::maximum<int>());
     int min_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  N*10, thrust::minimum<int>());
+                                  N*2, thrust::minimum<int>());
     float mean_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                      0, thrust::plus<int>()) / float(N_rays);
     std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
