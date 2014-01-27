@@ -43,11 +43,6 @@ for ray_index in range(len(rays)):
         while (is_leaf and stack_index >= 0):
             if ray.sphere_hit(*spheres[node_index]):
                 ray_hit_count += 1
-            # else:
-            #     print "leaf, but missed sphere."
-            #     print spheres[node_index]
-            #     print ray.ox, ray.oy, ray.oz
-            #     print ray.dx, ray.dy, ray.dz
 
             node_index = trace_stack[stack_index]
             stack_index -= 1
@@ -58,10 +53,7 @@ for ray_index in range(len(rays)):
 
 print
 for i, n_py_hits in enumerate(hit_counts):
-    # if n_py_hits != 0:
-    #     print "A Py hit"
-    #     print
     if n_py_hits != hitdata[i]:
-        print "Hit count mismatch at", i
+        print "Hit count mismatch at", i+1
         print "Py hits", n_py_hits, "vs", hitdata[i], "CUDA hits!"
         print
