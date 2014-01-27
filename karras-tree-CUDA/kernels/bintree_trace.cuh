@@ -64,7 +64,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
     float c_xz = slope.c_xz;
     float c_yx = slope.c_yx;
     float c_yz = slope.c_yz;
-    float c_zx = slope.c_xz;
+    float c_zx = slope.c_zx;
     float c_zy = slope.c_zy;
 
     switch(ray.dclass)
@@ -481,7 +481,7 @@ __global__ void trace(const Ray* rays,
         ray_hit_count = 0;
 
         Ray ray = rays[ray_index];
-        SlopeProp slope = slope_properties(rays[ray_index]);
+        SlopeProp slope = slope_properties(ray);
 
         //while (stack_index >= (int) threadIdx.x*31)
         while (stack_index >= 0)
