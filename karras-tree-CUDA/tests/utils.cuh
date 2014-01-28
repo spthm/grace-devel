@@ -138,7 +138,7 @@ void read_gadget_gas(std::ifstream& file,
 
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
-    x.resize(N_gas); y.resize(N_gas); x.resize(N_gas);
+    x.resize(N_gas); y.resize(N_gas); z.resize(N_gas);
     h.resize(N_gas); m.resize(N_gas);
 
     N_withmasses = 0;

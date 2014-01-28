@@ -197,7 +197,7 @@ int main(int argc, char* argv[])
     int max_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                   0, thrust::maximum<int>());
     int min_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  N*2, thrust::minimum<int>());
+                                  N, thrust::minimum<int>());
     float mean_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                      0, thrust::plus<int>()) / float(N_rays);
     std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
