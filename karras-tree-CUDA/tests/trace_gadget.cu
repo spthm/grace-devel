@@ -229,6 +229,7 @@ int main(int argc, char* argv[])
     thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
                         h_rays.begin());
 
+    // See http://stackoverflow.com/questions/2654480
     FILE *f;
     unsigned char *img = NULL;
     int w=N_rays_side;
