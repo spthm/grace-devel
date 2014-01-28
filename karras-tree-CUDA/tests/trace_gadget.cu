@@ -18,11 +18,16 @@ int main(int argc, char* argv[])
 {
     typedef grace::Vector3<float> Vector3f;
 
-    unsigned int N_rays = 80000;
+    unsigned int N_rays = 250000;
+    if (argc > 1) {
+        N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
+    }
+    float N_rays_side = floor(pow(N_rays, 0.500001));
 
     std::ifstream file;
-    char* fname[] = "Data_025";
-    std::cout << "Reading in data from Gadget file " << fname << std::endl;
+    std::string fname = "Data_025";
+    std::cout << "Reading in data from Gadget file " << fname << "..."
+              << std::endl;
 
     // Read in gas data from Gadget-2 file.
     // Arrays are resized in read_gadget_gas().
@@ -32,17 +37,27 @@ int main(int argc, char* argv[])
     thrust::host_vector<float> h_radii(1);
     thrust::host_vector<float> h_masses(1);
 
-    file.open(fname);
+    file.open(fname.c_str(), std::ios::binary);
     read_gadget_gas(file, h_x_centres, h_y_centres, h_z_centres,
                           h_radii, h_masses);
+    file.close();
+    // Masses unused.
+    h_masses.clear(); h_masses.shrink_to_fit();
 
+    unsigned int N = h_x_centres.size();
+    // Factor of two is a fudge.
+    unsigned int N_hits_per_ray = floor(pow(N, 0.333334));
+    std::cout << "Will trace " << N_rays << " rays through " << N
+              << " particles..." << std::endl;
+    std::cout << std::endl;
+
+// Device code.
+{
     thrust::device_vector<float> d_x_centres = h_x_centres;
     thrust::device_vector<float> d_y_centres = h_y_centres;
     thrust::device_vector<float> d_z_centres = h_z_centres;
     thrust::device_vector<float> d_radii = h_radii;
-    thrust::device_vector<float> d_masses = h_masses;
 
-{
     // Set the AABBs.
     float max_x = thrust::reduce(h_x_centres.begin(),
                                  h_x_centres.end(),
@@ -67,6 +82,10 @@ int main(int argc, char* argv[])
     float min_z = thrust::reduce(h_z_centres.begin(),
                                  h_z_centres.end(),
                                  max_z,
+                                 thrust::minimum<float>());
+    float max_r = thrust::reduce(h_radii.begin(),
+                                 h_radii.end(),
+                                 -1.0f,
                                  thrust::minimum<float>());
     Vector3f bottom(min_x, min_y, min_z);
     Vector3f top(max_x, max_y, max_z);
@@ -105,12 +124,6 @@ int main(int argc, char* argv[])
                    d_radii.begin(),
                    d_tmp.begin());
     d_radii = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_masses.begin(),
-                   d_tmp.begin());
-    d_masses = d_tmp;
     // Clear temporary storage.
     d_tmp.clear(); d_tmp.shrink_to_fit();
     d_indices.clear(); d_indices.shrink_to_fit();
@@ -124,60 +137,46 @@ int main(int argc, char* argv[])
     grace::find_AABBs(d_nodes, d_leaves,
                       d_x_centres, d_y_centres, d_z_centres, d_radii);
 
-    // Generate the rays, emitted from box side (X, Y, min_z) and of length
-    // max_z - min_z.
+    // Generate the rays, emitted from box side (X, Y, min_z-max_r) and of
+    // length (max_z + max_r) - (min_z - max_r).
+    float span_x = 2*max_r + max_x - min_x;
+    float span_y = 2*max_r + max_y - min_y;
+    float span_z = 2*max_r + max_z - min_z;
+    float spacer_x = span_x / N_rays_side;
+    float spacer_y = span_y / N_rays_side;
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<float> h_dxs(N_rays);
-    thrust::host_vector<float> h_dys(N_rays);
-    thrust::host_vector<float> h_dzs(N_rays);
     thrust::host_vector<UInteger32> h_keys(N_rays);
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dxs.begin(),
-                      random_float_functor(0u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dys.begin(),
-                      random_float_functor(1u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dzs.begin(),
-                      random_float_functor(2u, -1.0f, 1.0f) );
-    for (int i=0; i<N_rays; i++) {
-        float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
-                           h_dys[i]*h_dys[i] +
-                           h_dzs[i]*h_dzs[i]);
-        h_rays[i].dx = h_dxs[i] / N_dir;
-        h_rays[i].dy = h_dys[i] / N_dir;
-        h_rays[i].dz = h_dzs[i] / N_dir;
-        h_rays[i].ox = h_rays[i].oy = h_rays[i].oz = 0.5f;
-        h_rays[i].length = 2;
-        h_rays[i].dclass = 0;
-        if (h_dxs[i] >= 0)
-            h_rays[i].dclass += 1;
-        if (h_dys[i] >= 0)
-            h_rays[i].dclass += 2;
-        if (h_dzs[i] >= 0)
-            h_rays[i].dclass += 4;
+    int i, j;
+    float ox, oy;
+    for (i=0, ox=(min_x-max_r); i<N_rays_side; ox+=spacer_x, i++)
+    {
+        for (j=0, oy=(min_y-max_r); j<N_rays_side; oy+=spacer_y, j++)
+        {
+            // All rays point in +ve z direction.
+            h_rays[i*N_rays_side +j].dx = 0.0f;
+            h_rays[i*N_rays_side +j].dy = 0.0f;
+            h_rays[i*N_rays_side +j].dz = 1.0f;
 
+            h_rays[i*N_rays_side +j].ox = ox;
+            h_rays[i*N_rays_side +j].oy = oy;
+            h_rays[i*N_rays_side +j].oz = min_z - max_r;
+
+            h_rays[i*N_rays_side +j].length = span_z;
+            h_rays[i*N_rays_side +j].dclass = 7;
+        }
+
+        // Since all rays are PPP, base key on origin instead.
         // morton_key(float, float, float) requires floats in (0, 1).
-        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                      (h_rays[i].dy+1)/2.f,
-                                      (h_rays[i].dz+1)/2.f);
+        h_keys[i] = grace::morton_key((ox-(min_x-max_r))/span_x,
+                                      (oy-(min_y-max_r))/span_y,
+                                      0.0f);
     }
-    h_dxs.clear();
-    h_dxs.shrink_to_fit();
-    h_dys.clear();
-    h_dys.shrink_to_fit();
-    h_dzs.clear();
-    h_dxs.shrink_to_fit();
 
     // Sort rays by Morton key.
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<int> d_hits(N_hits_per_ray*N_rays);
     thrust::device_vector<int> d_hit_count(N_rays);
-    thrust::device_vector<int> d_debug(1);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -203,56 +202,90 @@ int main(int argc, char* argv[])
     int max_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                   0, thrust::maximum<int>());
     int min_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  N*2, thrust::minimum<int>());
+                                  N, thrust::minimum<int>());
     float mean_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
                                      0, thrust::plus<int>()) / float(N_rays);
     std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
     std::cout << std::endl;
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Expected hit count:   " << N_hits_per_ray / 2 << std::endl;
+    std::cout << "Expected hit count:   " << N_hits_per_ray << std::endl;
     std::cout << "Mean hits:            " << mean_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
 
-    if (save_data)
+    // Sort ray hit data such that increasing the index moves us along x first,
+    // then y.
+    thrust::host_vector<float> h_pos_keys(N_rays);
+    for (int i=0; i<N_rays; i++) {
+        h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
+    }
+    thrust::host_vector<float> h_hit_count = d_hit_count;
+    thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
+                        h_hit_count.begin());
+    for (int i=0; i<N_rays; i++) {
+        h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
+    }
+    thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
+                        h_rays.begin());
+
+    FILE *f;
+    unsigned char *img = NULL;
+    int w=N_rays_side;
+    int h=N_rays_side;
+    int filesize = 54 + 3*w*h;  //w is your image width, h is image height, both int
+    if( img )
+        free( img );
+    img = (unsigned char *)malloc(3*w*h);
+    memset(img,0,sizeof(img));
+
+    int r, g, b, x, y;
+    for(int i=0; i<w; i++)
     {
-        std::ofstream outfile;
-
-        outfile.setf(std::ios::fixed, std::ios::floatfield);
-        outfile.precision(9);
-        outfile.width(11);
-        outfile.fill('0');
-
-        thrust::host_vector<float> h_x_centres = d_x_centres;
-        thrust::host_vector<float> h_y_centres = d_y_centres;
-        thrust::host_vector<float> h_z_centres = d_z_centres;
-        thrust::host_vector<float> h_radii = d_radii;
-        outfile.open("indata/spheredata.txt");
-        for (int i=0; i<N; i++) {
-            outfile << h_x_centres[i] << " " << h_y_centres[i] << " "
-                    << h_z_centres[i] << " " << h_radii[i] << std::endl;
-        }
-        outfile.close();
-
-        outfile.open("indata/raydata.txt");
-        for (int i=0; i<N_rays; i++) {
-            outfile << h_rays[i].dx << " " << h_rays[i].dy << " "
-                    << h_rays[i].dz << " " << h_rays[i].ox << " "
-                    << h_rays[i].oy << " " << h_rays[i].oz << " "
-                    << h_rays[i].length << std::endl;
-        }
-        outfile.close();
-
-        thrust::host_vector<float> h_hit_count = d_hit_count;
-        outfile.open("outdata/hitdata.txt");
-        for (int i=0; i<N_rays; i++) {
-            outfile << h_hit_count[i] << std::endl;
-        }
-        outfile.close();
+        for(int j=0; j<h; j++)
+    {
+        x=i; y=(h-1)-j;
+        r = g = b = (int) (h_hit_count[i+w*j]*255.0/max_hits);
+        if (r > 255) r=255;
+        if (g > 255) g=255;
+        if (b > 255) b=255;
+        img[(x+y*w)*3+2] = (unsigned char)(r);
+        img[(x+y*w)*3+1] = (unsigned char)(g);
+        img[(x+y*w)*3+0] = (unsigned char)(b);
+        //std::cout << "ox, oy: " << h_rays[i+w*j].ox << ", " << h_rays[i+w*j].oy
+        //          << std::endl;
+    }
     }
 
-}
+    unsigned char bmpfileheader[14] = {'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0};
+    unsigned char bmpinfoheader[40] = {40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0};
+    unsigned char bmppad[3] = {0,0,0};
+
+    bmpfileheader[ 2] = (unsigned char)(filesize    );
+    bmpfileheader[ 3] = (unsigned char)(filesize>> 8);
+    bmpfileheader[ 4] = (unsigned char)(filesize>>16);
+    bmpfileheader[ 5] = (unsigned char)(filesize>>24);
+
+    bmpinfoheader[ 4] = (unsigned char)(       w    );
+    bmpinfoheader[ 5] = (unsigned char)(       w>> 8);
+    bmpinfoheader[ 6] = (unsigned char)(       w>>16);
+    bmpinfoheader[ 7] = (unsigned char)(       w>>24);
+    bmpinfoheader[ 8] = (unsigned char)(       h    );
+    bmpinfoheader[ 9] = (unsigned char)(       h>> 8);
+    bmpinfoheader[10] = (unsigned char)(       h>>16);
+    bmpinfoheader[11] = (unsigned char)(       h>>24);
+
+    f = fopen("img.bmp","wb");
+    fwrite(bmpfileheader,1,14,f);
+    fwrite(bmpinfoheader,1,40,f);
+    for(i=0; i<h; i++)
+    {
+        fwrite(img+(w*(h-i-1)*3),3,w,f);
+        fwrite(bmppad,1,(4-(w*3)%4)%4,f);
+    }
+    fclose(f);
+} // Device code.  Call all thrust destructors etc. before cudaDeviceReset().
+
     // Exit cleanly to ensure full profiler trace.
     cudaDeviceReset();
     return 0;
