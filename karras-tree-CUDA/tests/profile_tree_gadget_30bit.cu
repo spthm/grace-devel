@@ -92,11 +92,15 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<float> h_y_centres(N);
     thrust::host_vector<float> h_z_centres(N);
     thrust::host_vector<float> h_radii(N);
+    thrust::host_vector<float> h_masses(N);
 
     std::cout << "Reading in file..." << std::endl;
     infile.open(infile_name.c_str(), std::ios::binary);
-    read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres, h_radii);
+    read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres,
+                            h_radii, h_masses);
     infile.close();
+    // Masses unused.  Free space.
+    h_masses.clear(); h_masses.shrink_to_fit();
 
 
     // Set the AABBs.

@@ -112,7 +112,8 @@ void read_gadget_gas(std::ifstream& file,
                      thrust::host_vector<float>& x,
                      thrust::host_vector<float>& y,
                      thrust::host_vector<float>& z,
-                     thrust::host_vector<float>& h)
+                     thrust::host_vector<float>& h,
+                     thrust::host_vector<float>& m)
 {
     int i_dummy;
     float f_dummy;
@@ -122,8 +123,13 @@ void read_gadget_gas(std::ifstream& file,
     file.seekg(std::ios::beg);
     gadget_header header = read_gadget_header(file);
 
+    /* ------ Gas particles have index 0 ------ */
+
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
+    x.resize(N_gas); y.resize(N_gas); x.resize(N_gas);
+    h.resize(N_gas); m.resize(N_gas);
+
     N_withmasses = 0;
     skip_spacer(file);
     for(int i=0; i<6; i++) {
@@ -131,7 +137,7 @@ void read_gadget_gas(std::ifstream& file,
             N_withmasses += header.npart[i];
 
         for(int n=0; n<header.npart[i]; n++) {
-            // We only want to read in gas particles.
+            // Save gas particle data only.
             if (i == 0) {
                 file.read((char*)&x[n], sizeof(float));
                 file.read((char*)&y[n], sizeof(float));
@@ -166,9 +172,13 @@ void read_gadget_gas(std::ifstream& file,
     }
     skip_spacer(file);
 
-    // Masses (optional).
+    // Masses (optional).  Spacers only exist if the block exists.
+    // Otherwise, all particles of a given type have equal mass, saved in the
+    // header.
     if (N_withmasses > 0)
         skip_spacer(file);
+    else
+        thrust.fill(m.begin(), m.end(), header.mass[0]);
     for(int i=0; i<6; i++) {
         if (header.mass[i] == 0) {
             for (int n=0; n<header.npart[i]; n++) {
