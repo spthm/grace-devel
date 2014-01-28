@@ -464,6 +464,7 @@ __global__ void trace(const Ray* rays,
     // Here that marker is 0 since it must be a valid index of the nodes array!
     //__shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
     int trace_stack[31];
+    trace_stack[0] = 0;
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -530,6 +531,7 @@ __global__ void trace(const Ray* rays,
                 is_leaf = nodes[node_index].right_leaf_flag;
                 node_index = nodes[node_index].right;
             }
+
         }
         hit_counts[ray_index] = ray_hit_count;
         ray_index += blockDim.x * gridDim.x;
