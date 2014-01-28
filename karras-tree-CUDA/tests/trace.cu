@@ -13,17 +13,6 @@
 #include "../kernels/bintree_build_kernels.cuh"
 #include "../kernels/bintree_trace.cuh"
 
-#define CUDA_HANDLE_ERR(code) { cudaErrorCheck((code), __FILE__, __LINE__); }
-
-inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=true) {
-  if (code != cudaSuccess) {
-    fprintf(stderr,"CUDA Error!\nCode: %s\nFile: %s @ line %d\n", cudaGetErrorString(code), file, line);
-
-    if (abort)
-      exit(code);
-  }
-}
-
 int main(int argc, char* argv[])
 {
     typedef grace::Vector3<float> Vector3f;

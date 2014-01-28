@@ -4,6 +4,17 @@
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 
+#define CUDA_HANDLE_ERR(code) { cudaErrorCheck((code), __FILE__, __LINE__); }
+
+inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=true) {
+  if (code != cudaSuccess) {
+    fprintf(stderr,"CUDA Error!\nCode: %s\nFile: %s @ line %d\n", cudaGetErrorString(code), file, line);
+
+    if (abort)
+      exit(code);
+  }
+}
+
 // See:
 // https://code.google.com/p/thrust/source/browse/examples/monte_carlo.cu
 // as well as:
