@@ -189,7 +189,7 @@ void read_gadget_gas(std::ifstream& file,
     if (N_withmasses > 0)
         skip_spacer(file);
     else
-        thrust.fill(m.begin(), m.end(), header.mass[0]);
+        thrust::fill(m.begin(), m.end(), header.mass[0]);
     for(int i=0; i<6; i++) {
         if (header.mass[i] == 0) {
             for (int n=0; n<header.npart[i]; n++) {
