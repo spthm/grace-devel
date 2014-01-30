@@ -39,6 +39,167 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     }
 }
 
+__host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
+                                          const grace::Node& node)
+{
+    float rx = ray.dx;
+    float ry = ray.dy;
+    float rz = ray.dz;
+    float length = ray.length;
+    float s2bx, s2by, s2bz; // Vector from ray start to lower cell corner.
+    float s2tx, s2ty, s2tz; // Vector from ray start to upper cell corner.
+
+    s2bx = node.bottom[0] - ray.ox;
+    s2by = node.bottom[1] - ray.oy;
+    s2bz = node.bottom[2] - ray.oz;
+
+    s2tx = node.top[0] - ray.ox;
+    s2ty = node.top[1] - ray.oy;
+    s2tz = node.top[2] - ray.oz;
+
+    switch(ray.dclass)
+    {
+        // MMM
+        case 0:
+        if (s2bx > 0.0f || s2by > 0.0f || s2bz > 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2tx - rx*length < 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
+
+        if (rx*s2by - ry*s2tx < 0.0f ||
+            rx*s2ty - ry*s2bx > 0.0f ||
+            rx*s2tz - rz*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx < 0.0f ||
+            ry*s2bz - rz*s2ty < 0.0f ||
+            ry*s2tz - rz*s2by > 0.0f ) return false;
+        break;
+
+        // PMM
+        case 1:
+        if (s2tx < 0.0f || s2by > 0.0f || s2bz > 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2bx - rx*length > 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
+
+        if (rx*s2ty - ry*s2tx < 0.0f ||
+            rx*s2by - ry*s2bx > 0.0f ||
+            rx*s2bz - rz*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx < 0.0f ||
+            ry*s2bz - rz*s2ty < 0.0f ||
+            ry*s2tz - rz*s2by > 0.0f) return false;
+        break;
+
+        // MPM
+        case 2:
+        if (s2bx > 0.0f || s2ty < 0.0f || s2bz > 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2tx - rx*length < 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
+
+        if (rx*s2by - ry*s2bx < 0.0f ||
+            rx*s2ty - ry*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx < 0.0f ||
+            ry*s2tz - rz*s2ty < 0.0f ||
+            ry*s2bz - rz*s2by > 0.0f) return false;
+        break;
+
+        // PPM
+        case 3:
+        if (s2tx < 0.0f || s2ty < 0.0f || s2bz > 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2bx - rx*length > 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2tz - rz*length < 0.0f) return false; // past length of ray
+
+        if (rx*s2ty - ry*s2bx < 0.0f ||
+            rx*s2by - ry*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx < 0.0f ||
+            ry*s2tz - rz*s2ty < 0.0f ||
+            ry*s2bz - rz*s2by > 0.0f) return false;
+        break;
+
+        // MMP
+        case 4:
+        if (s2bx > 0.0f || s2by > 0.0f || s2tz < 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2tx - rx*length < 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
+
+        if (rx*s2by - ry*s2tx < 0.0f ||
+            rx*s2ty - ry*s2bx > 0.0f ||
+            rx*s2tz - rz*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx < 0.0f ||
+            ry*s2bz - rz*s2by < 0.0f ||
+            ry*s2tz - rz*s2ty > 0.0f) return false;
+        break;
+
+        // PMP
+        case 5:
+        if (s2tx < 0.0f || s2by > 0.0f || s2tz < 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2bx - rx*length > 0.0f ||
+            s2ty - ry*length < 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
+
+        if (rx*s2ty - ry*s2tx < 0.0f ||
+            rx*s2by - ry*s2bx > 0.0f ||
+            rx*s2bz - rz*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx < 0.0f ||
+            ry*s2bz - rz*s2by < 0.0f ||
+            ry*s2tz - rz*s2ty > 0.0f) return false;
+        break;
+
+        // MPP
+        case 6:
+        if (s2bx > 0.0f || s2ty < 0.0f || s2tz < 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2tx - rx*length < 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
+
+        if (rx*s2by - ry*s2bx < 0.0f ||
+            rx*s2ty - ry*s2tx > 0.0f ||
+            rx*s2tz - rz*s2tx > 0.0f ||
+            rx*s2bz - rz*s2bx < 0.0f ||
+            ry*s2tz - rz*s2by < 0.0f ||
+            ry*s2bz - rz*s2ty > 0.0f) return false;
+        break;
+
+        // PPP
+        case 7:
+        if (s2tx < 0.0f || s2ty < 0.0f || s2tz < 0.0f)
+            return false; // AABB entirely in wrong octant wrt ray origin
+
+        if (s2bx - rx*length > 0.0f ||
+            s2by - ry*length > 0.0f ||
+            s2bz - rz*length > 0.0f) return false; // past length of ray
+
+        if (rx*s2ty - ry*s2bx < 0.0f ||
+            rx*s2by - ry*s2tx > 0.0f ||
+            rx*s2bz - rz*s2tx > 0.0f ||
+            rx*s2tz - rz*s2bx < 0.0f ||
+            ry*s2tz - rz*s2by < 0.0f ||
+            ry*s2bz - rz*s2ty > 0.0f) return false;
+        break;
+    }
+    // Didn't return false above, so we have a hit.
+    return true;
+
+}
+
 __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
                                         const grace::Node* nodes,
                                         const int N_rays,
@@ -51,7 +212,7 @@ __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
     while (tid < N_rays)
     {
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_plucker(rays[tid], nodes[i]))
+            if (AABB_hit_plucker(rays[tid], nodes[i]))
             {
                 ray_hits[tid]++;
                 //atomicAdd(&(box_hits[i]), 1);
@@ -159,7 +320,7 @@ int main(void)
     // t = (double)clock() / CLOCKS_PER_SEC;
     // for (int i=0; i<N_rays; i++) {
     //     for (int j=0; j<N_AABBs; j++) {
-    //         if (grace::AABB_hit_plucker(h_rays[i], h_nodes[j]))
+    //         if (AABB_hit_plucker(h_rays[i], h_nodes[j]))
     //         {
     //             h_ray_hits[i]++;
     //             // h_box_hits[i]++;
