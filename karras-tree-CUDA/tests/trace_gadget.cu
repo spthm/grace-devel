@@ -246,7 +246,7 @@ int main(int argc, char* argv[])
         for(int j=0; j<h; j++)
     {
         x=i; y=(h-1)-j;
-        r = g = b = (int) (h_hit_count[i+w*j]*255.0/max_hits);
+        r = g = b = (int) ((h_hit_count[i+w*j]-min_hits)*255.0/max_hits);
         if (r > 255) r=255;
         if (g > 255) g=255;
         if (b > 255) b=255;
