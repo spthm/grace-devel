@@ -6,76 +6,27 @@
 #include "../nodes.h"
 #include "../ray.h"
 
-float integral_table[51] = {1.90986019771937,
-                            1.90563449910964,
-                            1.89304415940934,
-                            1.87230928086763,
-                            1.84374947679902,
-                            1.80776276033034,
-                            1.76481079856299,
-                            1.71540816859939,
-                            1.66011373131439,
-                            1.59952322363667,
-                            1.53426266082279,
-                            1.46498233888091,
-                            1.39235130929287,
-                            1.31705223652377,
-                            1.23977618317103,
-                            1.16121278415369,
-                            1.08201943664419,
-                            1.00288866679720,
-                            0.924475767210246,
-                            0.847415371038733,
-                            0.772316688105931,
-                            0.699736940377312,
-                            0.630211918937167,
-                            0.564194562399538,
-                            0.502076205853037,
-                            0.444144023534733,
-                            0.390518196140658,
-                            0.341148855945766,
-                            0.295941946237307,
-                            0.254782896476983,
-                            0.217538645099225,
-                            0.184059547649710,
-                            0.154181189781890,
-                            0.127726122453554,
-                            0.104505535066266,
-                            8.432088120445191,
-                            6.696547102921641,
-                            5.222604427168923,
-                            3.988433820097490,
-                            2.971866601747601,
-                            2.150552303075515,
-                            1.502124104014533,
-                            1.004371608622562,
-                            6.354242122978656,
-                            3.739494884706115,
-                            1.993729589156428,
-                            9.212900163813992,
-                            3.395908945333921,
-                            8.287326418242995,
-                            7.387919939044624,
-                            0.000000000000000E+000}
-
 namespace grace {
+
+float kernel_integral_table[51] = {
+    1.90986019771937, 1.90563449910964, 1.89304415940934, 1.87230928086763,
+    1.84374947679902, 1.80776276033034, 1.76481079856299, 1.71540816859939,
+    1.66011373131439, 1.59952322363667, 1.53426266082279, 1.46498233888091,
+    1.39235130929287, 1.31705223652377, 1.23977618317103, 1.16121278415369,
+    1.08201943664419, 1.00288866679720, 0.924475767210246, 0.847415371038733,
+    0.772316688105931, 0.699736940377312, 0.630211918937167, 0.564194562399538,
+    0.502076205853037, 0.444144023534733, 0.390518196140658, 0.341148855945766,
+    0.295941946237307, 0.254782896476983, 0.217538645099225, 0.184059547649710,
+    0.154181189781890, 0.127726122453554, 0.104505535066266, 8.432088120445191,
+    6.696547102921641, 5.222604427168923, 3.988433820097490, 2.971866601747601,
+    2.150552303075515, 1.502124104014533, 1.004371608622562, 6.354242122978656,
+    3.739494884706115, 1.993729589156428, 9.212900163813992, 3.395908945333921,
+    8.287326418242995, 7.387919939044624, 0.000000000000000E+000};
 
 enum CLASSIFICATION
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
-template <typename Float, typename Tout, typename Tin>
-__inline__ __host__ __device__ process_hit(const Float b_norm,
-                                           const Tin* p_data,
-                                           const int p_index,
-                                           Tout* out_data,
-                                           const int out_index)
-{
-    int b_idx = 50 * b_norm;
-    float kernel_fac = integral_tabel[b_idx];
-    out_data[out_index] = (Float) (kernel_fac * p_data[p_index]);
-}
-
-__inline__ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
+__host__ __device__ SlopeProp slope_properties(const Ray& ray)
 {
     SlopeProp slope;
 
@@ -96,9 +47,9 @@ __inline__ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
     return slope;
 }
 
-__inline__ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
-                                                      const SlopeProp& slope,
-                                                      const Node& node)
+__host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
+                                           const SlopeProp& slope,
+                                           const Node& node)
 {
 
     float ox = ray.ox;
@@ -304,7 +255,8 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
                                     const Float y,
                                     const Float z,
                                     const Float radius,
-                                    Float& b)
+                                    Float& b,
+                                    Float& dot_p)
 {
     // Ray origin -> sphere centre.
     float px = x - ray.ox;
@@ -316,8 +268,8 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     float ry = ray.dy;
     float rz = ray.dz;
 
-    // Projection of p onto r.
-    float dot_p = px*rx + py*ry + pz*rz;
+    // Projection of p onto r, i.e. distance to intersection.
+    dot_p = px*rx + py*ry + pz*rz;
 
     // Impact parameter.
     float bx = px - dot_p*rx;
@@ -362,7 +314,8 @@ __global__ void trace_hitcount(const Ray* rays,
     int ray_index, stack_index, ray_hit_count;
     Integer32 node_index;
     bool is_leaf;
-    float impact_param;
+    // Unused.
+    float b, d;
     // N (31) levels inc. leaves => N-1 (30) key length.
     // One extra so the bottom of the stack can contain a marker that tells
     // us we have emptied the stack.
@@ -391,9 +344,8 @@ __global__ void trace_hitcount(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                // Test current node for intersection.
-                // If it is hit, put it at the top of the stack and move to its
-                // left child.
+                // If current node is hit, put it at the top of the stack and
+                // move to its left child.
                 if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
@@ -417,10 +369,9 @@ __global__ void trace_hitcount(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                // Test sphere inside the current leaf for itersection.
                 if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
-                               radii[node_index], impact_param))
+                               radii[node_index], b, d))
                 {
                     ray_hit_count++;
                 }
@@ -438,29 +389,27 @@ __global__ void trace_hitcount(const Ray* rays,
     }
 }
 
-// Trace through the field and save information for each intersection.
+// Trace through the field and accummulate some property for each intersection.
 template <typename Float, typename Tout, typename Tin>
-__global__ void trace(const Ray* rays,
-                      const int n_rays,
-                      Tout* out_data,
-                      const int* hit_offsets,
-                      const Node* nodes,
-                      const Leaf* leaves,
-                      const Float* xs,
-                      const Float* ys,
-                      const Float* zs,
-                      const Float* radii,
-                      const Tin* p_data)
+__global__ void trace_property(const Ray* rays,
+                               const int n_rays,
+                               Tout* out_data,
+                               const Node* nodes,
+                               const Leaf* leaves,
+                               const Float* xs,
+                               const Float* ys,
+                               const Float* zs,
+                               const Float* radii,
+                               const Tin* p_data,
+                               const Float* b_integrals)
 {
-    int ray_index, stack_index, hit_offset;
+    int ray_index, stack_index;
     Integer32 node_index;
     bool is_leaf;
-    float impact_param;
-    // N (31) levels inc. leaves => N-1 (30) key length.
-    // One extra so the bottom of the stack can contain a marker that tells
-    // us we have emptied the stack.
-    // Here that marker is 0 since it must be a valid index of the nodes array!
-    //__shared__ int trace_stack[31*TRACE_THREADS_PER_BLOCK];
+    // Impact parameter and distance to intersection.
+    float b, d;
+    // Property to trace and accumulate.
+    Tout out;
     int trace_stack[31];
     trace_stack[0] = 0;
 
@@ -468,25 +417,18 @@ __global__ void trace(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        hit_offset = hit_offsets[ray_index];
         Ray ray = rays[ray_index];
         SlopeProp slope = slope_properties(ray);
 
-        // Top of the stack.
-        // Must provide a valid node index, so points to root.
-        //stack_index = threadIdx.x*31;
         stack_index = 0;
         node_index = 0;
         is_leaf = false;
+        out = 0;
 
-        //while (stack_index >= (int) threadIdx.x*31)
         while (stack_index >= 0)
         {
             while (!is_leaf && stack_index >= 0)
             {
-                // Test current node for intersection.
-                // If it is hit, put it at the top of the stack and move to its
-                // left child.
                 if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
@@ -496,8 +438,6 @@ __global__ void trace(const Ray* rays,
                     node_index = nodes[node_index].left;
 
                 }
-                // If it is not hit, move to the right child of the node at the
-                // top of the stack.
                 else
                 {
                     node_index = trace_stack[stack_index];
@@ -511,15 +451,14 @@ __global__ void trace(const Ray* rays,
             if (is_leaf && stack_index >= 0)
             {
                 float r = radii[node_index];
-                // Test sphere inside the current leaf for itersection.
                 if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
-                               r, impact_param)
+                               r, b, d))
                 {
-                    process_hit(impact_param/r, Tin* p_data, p_index,
-                                out_data, out_index)
+                    int b_idx = 50 * b / r;
+                    Float kernel_fac = r * b_integrals[b_idx];
+                    out += (Tout) (kernel_fac * p_data[node_index]);
                 }
-                // Move to the right child of the node at the top of the stack.
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
@@ -528,7 +467,90 @@ __global__ void trace(const Ray* rays,
             }
 
         }
-        hit_counts[ray_index] = ray_hit_count;
+        out_data[ray_index] = out;
+        ray_index += blockDim.x * gridDim.x;
+    }
+}
+
+// Trace through the field and save information for each intersection.
+template <typename Float, typename Tout, typename Tin>
+__global__ void trace(const Ray* rays,
+                      const int n_rays,
+                      Tout* out_data,
+                      Float* hit_dists,
+                      const int* hit_offsets,
+                      const Node* nodes,
+                      const Leaf* leaves,
+                      const Float* xs,
+                      const Float* ys,
+                      const Float* zs,
+                      const Float* radii,
+                      const Tin* p_data,
+                      const Float* b_integrals)
+{
+    int ray_index, stack_index, out_index;
+    Integer32 node_index;
+    bool is_leaf;
+    float b, d;
+    int trace_stack[31];
+    trace_stack[0] = 0;
+
+    ray_index = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (ray_index < n_rays)
+    {
+        out_index = hit_offsets[ray_index];
+        Ray ray = rays[ray_index];
+        SlopeProp slope = slope_properties(ray);
+
+        stack_index = 0;
+        node_index = 0;
+        is_leaf = false;
+
+        while (stack_index >= 0)
+        {
+            while (!is_leaf && stack_index >= 0)
+            {
+                if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
+                {
+                    stack_index++;
+                    trace_stack[stack_index] = node_index;
+
+                    is_leaf = nodes[node_index].left_leaf_flag;
+                    node_index = nodes[node_index].left;
+
+                }
+                else
+                {
+                    node_index = trace_stack[stack_index];
+                    stack_index--;
+
+                    is_leaf = nodes[node_index].right_leaf_flag;
+                    node_index = nodes[node_index].right;
+                }
+            }
+
+            if (is_leaf && stack_index >= 0)
+            {
+                float r = radii[node_index];
+                if (sphere_hit(ray,
+                               xs[node_index], ys[node_index], zs[node_index],
+                               r, b, d))
+                {
+                    int b_idx = 50 * b / r;
+                    Float kernel_fac = r * b_integrals[b_idx];
+                    out_data[out_index] = (Tout) (kernel_fac * p_data[node_index]);
+                    hit_dists[out_index] = d;
+                    out_index++;
+                }
+                node_index = trace_stack[stack_index];
+                stack_index--;
+
+                is_leaf = nodes[node_index].right_leaf_flag;
+                node_index = nodes[node_index].right;
+            }
+
+        }
         ray_index += blockDim.x * gridDim.x;
     }
 }

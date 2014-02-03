@@ -5,6 +5,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
+#include <thrust/scan.h>
 
 #include "utils.cuh"
 #include "../types.h"
@@ -36,17 +37,16 @@ int main(int argc, char* argv[])
     thrust::host_vector<float> h_z_centres(1);
     thrust::host_vector<float> h_radii(1);
     thrust::host_vector<float> h_masses(1);
+    thrust::host_vector<float> h_rho(1);
 
     file.open(fname.c_str(), std::ios::binary);
     read_gadget_gas(file, h_x_centres, h_y_centres, h_z_centres,
-                          h_radii, h_masses);
+                          h_radii, h_masses, h_rho);
     file.close();
     // Masses unused.
     h_masses.clear(); h_masses.shrink_to_fit();
 
     unsigned int N = h_x_centres.size();
-    // Factor of two is a fudge.
-    unsigned int N_hits_per_ray = floor(pow(N, 0.333334));
     std::cout << "Will trace " << N_rays << " rays through " << N
               << " particles..." << std::endl;
     std::cout << std::endl;
@@ -57,6 +57,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<float> d_y_centres = h_y_centres;
     thrust::device_vector<float> d_z_centres = h_z_centres;
     thrust::device_vector<float> d_radii = h_radii;
+    thrust::device_vector<float> d_rho = h_rho;
 
     // Set the AABBs.
     float max_x = thrust::reduce(h_x_centres.begin(),
@@ -97,35 +98,32 @@ int main(int argc, char* argv[])
 
     // Sort all particle arrays by their keys.
     thrust::device_vector<int> d_indices(N);
-    thrust::device_vector<float> d_tmp(N);
+    thrust::device_vector<float> d_sorted(N);
     thrust::sequence(d_indices.begin(), d_indices.end());
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
 
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_x_centres.begin(),
-                   d_tmp.begin());
-    d_x_centres = d_tmp;
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_x_centres.begin(), d_sorted.begin());
+    d_x_centres = d_sorted;
 
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_y_centres.begin(),
-                   d_tmp.begin());
-    d_y_centres = d_tmp;
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_y_centres.begin(), d_sorted.begin());
+    d_y_centres = d_sorted;
 
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_z_centres.begin(),
-                   d_tmp.begin());
-    d_z_centres = d_tmp;
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_z_centres.begin(), d_sorted.begin());
+    d_z_centres = d_sorted;
 
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_radii.begin(),
-                   d_tmp.begin());
-    d_radii = d_tmp;
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_radii.begin(), d_sorted.begin());
+    d_radii = d_sorted;
+
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_rho.begin(), d_sorted.begin());
+    d_rho = d_sorted;
+
     // Clear temporary storage.
-    d_tmp.clear(); d_tmp.shrink_to_fit();
+    d_sorted.clear(); d_sorted.shrink_to_fit();
     d_indices.clear(); d_indices.shrink_to_fit();
 
     // Build the tree hierarchy from the keys.
@@ -172,62 +170,141 @@ int main(int argc, char* argv[])
                                       0.0f);
     }
 
-    // Sort rays by Morton key.
+    // Sort rays by Morton key and trace for per-ray hit couynts.
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<int> d_hits(N_hits_per_ray*N_rays);
-    thrust::device_vector<int> d_hit_count(N_rays);
+    thrust::device_vector<int> d_hit_counts(N_rays);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    grace::gpu::trace<<<28, TRACE_THREADS_PER_BLOCK>>>
-                     (thrust::raw_pointer_cast(d_rays.data()),
-                      d_rays.size(),
-                      N_hits_per_ray,
-                      thrust::raw_pointer_cast(d_hits.data()),
-                      thrust::raw_pointer_cast(d_hit_count.data()),
-                      thrust::raw_pointer_cast(d_nodes.data()),
-                      thrust::raw_pointer_cast(d_leaves.data()),
-                      thrust::raw_pointer_cast(d_x_centres.data()),
-                      thrust::raw_pointer_cast(d_y_centres.data()),
-                      thrust::raw_pointer_cast(d_z_centres.data()),
-                      thrust::raw_pointer_cast(d_radii.data()));
+    grace::gpu::trace_hitcount<<<28, TRACE_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        d_rays.size(),
+        thrust::raw_pointer_cast(d_hit_counts.data()),
+        thrust::raw_pointer_cast(d_nodes.data()),
+        thrust::raw_pointer_cast(d_leaves.data()),
+        thrust::raw_pointer_cast(d_x_centres.data()),
+        thrust::raw_pointer_cast(d_y_centres.data()),
+        thrust::raw_pointer_cast(d_z_centres.data()),
+        thrust::raw_pointer_cast(d_radii.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
-    int max_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
+
+    int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
                                   0, thrust::maximum<int>());
-    int min_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  N, thrust::minimum<int>());
-    float mean_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
+    int min_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
+                                  N+1, thrust::minimum<int>());
+    float mean_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
                                      0, thrust::plus<int>()) / float(N_rays);
-    std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
+    std::cout << "Time for hit-count tracing kernel: " << elapsed << " ms"
+              << std::endl;
+
+
+    thrust::device_vector<float> d_traced_rho(N_rays);
+    // Copy tabulated kernel integrals to device.
+    thrust::device_vector<float> d_b_integrals(grace::kernel_integral_table,
+                                               grace::kernel_integral_table+51);
+    // Trace and integrate through smoothing kernels, accumulating density.
+    cudaEventRecord(start);
+    grace::gpu::trace_property<<<28, TRACE_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        d_rays.size(),
+        thrust::raw_pointer_cast(d_traced_rho.data()),
+        thrust::raw_pointer_cast(d_nodes.data()),
+        thrust::raw_pointer_cast(d_leaves.data()),
+        thrust::raw_pointer_cast(d_x_centres.data()),
+        thrust::raw_pointer_cast(d_y_centres.data()),
+        thrust::raw_pointer_cast(d_z_centres.data()),
+        thrust::raw_pointer_cast(d_radii.data()),
+        thrust::raw_pointer_cast(d_rho.data()),
+        thrust::raw_pointer_cast(d_b_integrals.data()));
+    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
+    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    cudaEventRecord(stop);
+    cudaEventSynchronize(stop);
+    cudaEventElapsedTime(&elapsed, start, stop);
+
+    // Find min, max of output vector for 'plotting'.
+    float max_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
+                                   0.0f, thrust::maximum<float>());
+    float min_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
+                                   1E20, thrust::minimum<float>());
+    std::cout << "Time for acummulating integrating tracing kernel: "
+              << elapsed << " ms" << std::endl;
+
+
+    // Allocate output array based on per-ray hit counts, and calculate
+    // individual ray offsets into this array.
+    // int last_ray_hits = d_hit_counts[N_rays-1];
+    // thrust::exclusive_scan(d_hit_counts.begin(), d_hit_counts.end(),
+    //                        d_hit_counts.begin());
+    // thrust::device_vector<float> d_trace_output(d_hit_counts[N_rays-1]+
+    //                                             last_ray_hits);
+    // thrust::device_vector<float> d_trace_distances(d_trace_output.size());
+
+    // // Trace and integrate through smoothing kernels, accumulating density.
+    // cudaEventRecord(start);
+    // grace::gpu::trace<<<28, TRACE_THREADS_PER_BLOCK>>>(
+    //     thrust::raw_pointer_cast(d_rays.data()),
+    //     d_rays.size(),
+    //     thrust::raw_pointer_cast(d_trace_output.data()),
+    //     thrust::raw_pointer_cast(d_trace_distances.data()),
+    //     thrust::raw_pointer_cast(d_hit_counts.data()),
+    //     thrust::raw_pointer_cast(d_nodes.data()),
+    //     thrust::raw_pointer_cast(d_leaves.data()),
+    //     thrust::raw_pointer_cast(d_x_centres.data()),
+    //     thrust::raw_pointer_cast(d_y_centres.data()),
+    //     thrust::raw_pointer_cast(d_z_centres.data()),
+    //     thrust::raw_pointer_cast(d_radii.data()),
+    //     thrust::raw_pointer_cast(d_rho.data()),
+    //     thrust::raw_pointer_cast(d_b_integrals.data()));
+    // CUDA_HANDLE_ERR( cudaPeekAtLastError() );
+    // CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    // cudaEventRecord(stop);
+    // cudaEventSynchronize(stop);
+    // cudaEventElapsedTime(&elapsed, start, stop);
+    // std::cout << "Time for per-intersection integrating kernel: " << elapsed
+    //           << " ms" << std::endl;
     std::cout << std::endl;
+
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Expected hit count:   " << N_hits_per_ray << std::endl;
     std::cout << "Mean hits:            " << mean_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
+    std::cout << "Max output:           " << max_rho << std::endl;
+    std::cout << "Min output:           " << min_rho << std::endl;
+    std::cout << std::endl;
 
-    // Sort ray hit data such that increasing the index moves us along x first,
-    // then y.
+    // Sort ray hit and ray data such that increasing the index moves us along
+    // x first, then y.
     thrust::host_vector<float> h_pos_keys(N_rays);
     for (int i=0; i<N_rays; i++) {
         h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
     }
-    thrust::host_vector<float> h_hit_count = d_hit_count;
+    thrust::host_vector<float> h_traced_rho = d_traced_rho;
+    thrust::host_vector<int> h_indices(N_rays);
+    thrust::sequence(h_indices.begin(), h_indices.end());
     thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
-                        h_hit_count.begin());
-    for (int i=0; i<N_rays; i++) {
-        h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
+                        h_indices.begin());
+    {
+        thrust::host_vector<float> h_sorted(N_rays);
+        thrust::gather(h_indices.begin(), h_indices.end(),
+                       h_traced_rho.begin(), h_sorted.begin());
+        h_traced_rho = h_sorted;
     }
-    thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
-                        h_rays.begin());
+    {
+        thrust::host_vector<grace::Ray> h_sorted(N_rays);
+        thrust::gather(h_indices.begin(), h_indices.end(),
+                       h_rays.begin(), h_sorted.begin());
+        h_rays = h_sorted;
+    }
+    h_indices.clear(); h_indices.shrink_to_fit();
 
     // See http://stackoverflow.com/questions/2654480
     FILE *f;
@@ -246,15 +323,13 @@ int main(int argc, char* argv[])
         for(int j=0; j<h; j++)
     {
         x=i; y=(h-1)-j;
-        r = g = b = (int) ((h_hit_count[i+w*j]-min_hits)*255.0/max_hits);
+        r = g = b = (int) ( (log10(h_traced_rho[i+w*j]) - log10(min_rho))*255.0/(log10(max_rho)-log10(min_rho)) );
         if (r > 255) r=255;
         if (g > 255) g=255;
         if (b > 255) b=255;
         img[(x+y*w)*3+2] = (unsigned char)(r);
         img[(x+y*w)*3+1] = (unsigned char)(g);
         img[(x+y*w)*3+0] = (unsigned char)(b);
-        //std::cout << "ox, oy: " << h_rays[i+w*j].ox << ", " << h_rays[i+w*j].oy
-        //          << std::endl;
     }
     }
 
@@ -262,19 +337,19 @@ int main(int argc, char* argv[])
     unsigned char bmpinfoheader[40] = {40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0};
     unsigned char bmppad[3] = {0,0,0};
 
-    bmpfileheader[ 2] = (unsigned char)(filesize    );
-    bmpfileheader[ 3] = (unsigned char)(filesize>> 8);
-    bmpfileheader[ 4] = (unsigned char)(filesize>>16);
-    bmpfileheader[ 5] = (unsigned char)(filesize>>24);
+    bmpfileheader[2] = (unsigned char)(filesize);
+    bmpfileheader[3] = (unsigned char)(filesize>>8);
+    bmpfileheader[4] = (unsigned char)(filesize>>16);
+    bmpfileheader[5] = (unsigned char)(filesize>>24);
 
-    bmpinfoheader[ 4] = (unsigned char)(       w    );
-    bmpinfoheader[ 5] = (unsigned char)(       w>> 8);
-    bmpinfoheader[ 6] = (unsigned char)(       w>>16);
-    bmpinfoheader[ 7] = (unsigned char)(       w>>24);
-    bmpinfoheader[ 8] = (unsigned char)(       h    );
-    bmpinfoheader[ 9] = (unsigned char)(       h>> 8);
-    bmpinfoheader[10] = (unsigned char)(       h>>16);
-    bmpinfoheader[11] = (unsigned char)(       h>>24);
+    bmpinfoheader[4] =  (unsigned char)(w);
+    bmpinfoheader[5] =  (unsigned char)(w>>8);
+    bmpinfoheader[6] =  (unsigned char)(w>>16);
+    bmpinfoheader[7] =  (unsigned char)(w>>24);
+    bmpinfoheader[8] =  (unsigned char)(h);
+    bmpinfoheader[9] =  (unsigned char)(h>>8);
+    bmpinfoheader[10] = (unsigned char)(h>>16);
+    bmpinfoheader[11] = (unsigned char)(h>>24);
 
     f = fopen("img.bmp","wb");
     fwrite(bmpfileheader,1,14,f);
@@ -285,7 +360,7 @@ int main(int argc, char* argv[])
         fwrite(bmppad,1,(4-(w*3)%4)%4,f);
     }
     fclose(f);
-} // Device code.  Call all thrust destructors etc. before cudaDeviceReset().
+} // End device code.  Call all thrust destructors etc. before cudaDeviceReset().
 
     // Exit cleanly to ensure full profiler trace.
     cudaDeviceReset();

@@ -124,7 +124,8 @@ void read_gadget_gas(std::ifstream& file,
                      thrust::host_vector<float>& y,
                      thrust::host_vector<float>& z,
                      thrust::host_vector<float>& h,
-                     thrust::host_vector<float>& m)
+                     thrust::host_vector<float>& m,
+                     thrust::host_vector<float>& rho)
 {
     int i_dummy;
     float f_dummy;
@@ -139,7 +140,7 @@ void read_gadget_gas(std::ifstream& file,
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
     x.resize(N_gas); y.resize(N_gas); z.resize(N_gas);
-    h.resize(N_gas); m.resize(N_gas);
+    h.resize(N_gas); m.resize(N_gas); rho.resize(N_gas);
 
     N_withmasses = 0;
     skip_spacer(file);
@@ -213,7 +214,7 @@ void read_gadget_gas(std::ifstream& file,
         // Densities.
         skip_spacer(file);
         for (int n=0; n<N_gas; n++) {
-            file.read((char*)&f_dummy, sizeof(float));
+            file.read((char*)&rho[n], sizeof(float));
         }
         skip_spacer(file);
 
