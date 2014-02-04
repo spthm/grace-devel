@@ -403,11 +403,11 @@ __global__ void trace_property(const Ray* rays,
                                const Tin* p_data,
                                const Float* b_integrals)
 {
-    int ray_index, stack_index;
+    int ray_index, stack_index, b_index;
     Integer32 node_index;
     bool is_leaf;
     // Impact parameter and distance to intersection.
-    float b, d;
+    float b, d, r, ir;
     // Property to trace and accumulate.
     Tout out;
     int trace_stack[31];
@@ -450,13 +450,14 @@ __global__ void trace_property(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                float r = radii[node_index];
+                r = radii[node_index];
                 if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
                                r, b, d))
                 {
-                    int b_idx = 50 * b / r;
-                    Float kernel_fac = r * b_integrals[b_idx];
+                    ir = 1.f / r;
+                    b_index = 50 * b * ir;
+                    Float kernel_fac = b_integrals[b_index] * ir*ir;
                     out += (Tout) (kernel_fac * p_data[node_index]);
                 }
                 node_index = trace_stack[stack_index];
@@ -488,10 +489,10 @@ __global__ void trace(const Ray* rays,
                       const Tin* p_data,
                       const Float* b_integrals)
 {
-    int ray_index, stack_index, out_index;
+    int ray_index, stack_index, out_index, b_index;
     Integer32 node_index;
     bool is_leaf;
-    float b, d;
+    float b, d, r, ir;
     int trace_stack[31];
     trace_stack[0] = 0;
 
@@ -532,13 +533,14 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                float r = radii[node_index];
+                r = radii[node_index];
                 if (sphere_hit(ray,
                                xs[node_index], ys[node_index], zs[node_index],
                                r, b, d))
                 {
-                    int b_idx = 50 * b / r;
-                    Float kernel_fac = r * b_integrals[b_idx];
+                    ir = 1.f / r;
+                    b_index = 50 * b * ir;
+                    Float kernel_fac = b_integrals[b_index] * ir*ir;
                     out_data[out_index] = (Tout) (kernel_fac * p_data[node_index]);
                     hit_dists[out_index] = d;
                     out_index++;
