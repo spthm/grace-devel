@@ -72,6 +72,10 @@ int main(int argc, char* argv[])
                                  h_z_centres.end(),
                                  -1.0f,
                                  thrust::maximum<float>());
+    float max_r = thrust::reduce(h_radii.begin(),
+                                 h_radii.end(),
+                                 -1.0f,
+                                 thrust::maximum<float>());
     float min_x = thrust::reduce(h_x_centres.begin(),
                                  h_x_centres.end(),
                                  max_x,
@@ -83,10 +87,6 @@ int main(int argc, char* argv[])
     float min_z = thrust::reduce(h_z_centres.begin(),
                                  h_z_centres.end(),
                                  max_z,
-                                 thrust::minimum<float>());
-    float max_r = thrust::reduce(h_radii.begin(),
-                                 h_radii.end(),
-                                 -1.0f,
                                  thrust::minimum<float>());
     Vector3f bottom(min_x, min_y, min_z);
     Vector3f top(max_x, max_y, max_z);
