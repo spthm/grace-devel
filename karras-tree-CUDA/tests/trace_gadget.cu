@@ -306,6 +306,13 @@ int main(int argc, char* argv[])
     }
     h_indices.clear(); h_indices.shrink_to_fit();
 
+    // Use log10(rho) because of the increased dynamic range.
+    for (int i=0; i<N_rays; i++) {
+        h_traced_rho[i] = log10(h_traced_rho[i]);
+    }
+    min_rho = log10(min_rho);
+    max_rho = log10(max_rho);
+
     // See http://stackoverflow.com/questions/2654480
     FILE *f;
     unsigned char *img = NULL;
@@ -323,7 +330,7 @@ int main(int argc, char* argv[])
         for(int j=0; j<h; j++)
     {
         x=i; y=(h-1)-j;
-        r = g = b = (int) ( (log10(h_traced_rho[i+w*j]) - log10(min_rho))*255.0/(log10(max_rho)-log10(min_rho)) );
+        r = g = b = (int) ( (h_traced_rho[i+w*j] - min_rho)*255.0/(max_rho-min_rho) );
         if (r > 255) r=255;
         if (g > 255) g=255;
         if (b > 255) b=255;
