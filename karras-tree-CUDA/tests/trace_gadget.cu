@@ -137,8 +137,11 @@ int main(int argc, char* argv[])
 
     // Generate the rays, emitted from box side (X, Y, min_z-max_r) and of
     // length (max_z + max_r) - (min_z - max_r).
-    float span_x = 2*max_r + max_x - min_x;
-    float span_y = 2*max_r + max_y - min_y;
+    // For simplicity, the ray (ox, oy) limits are determined only by the
+    // particle min(x, y) / max(x, y) limits; smoothing lengths are ignored.
+    // This ensures that rays at the edge will hit something!
+    float span_x = max_x - min_x;
+    float span_y = max_y - min_y;
     float span_z = 2*max_r + max_z - min_z;
     float spacer_x = span_x / N_rays_side;
     float spacer_y = span_y / N_rays_side;
@@ -146,9 +149,9 @@ int main(int argc, char* argv[])
     thrust::host_vector<UInteger32> h_keys(N_rays);
     int i, j;
     float ox, oy;
-    for (i=0, ox=(min_x-max_r); i<N_rays_side; ox+=spacer_x, i++)
+    for (i=0, ox=min_x; i<N_rays_side; ox+=spacer_x, i++)
     {
-        for (j=0, oy=(min_y-max_r); j<N_rays_side; oy+=spacer_y, j++)
+        for (j=0, oy=min_y; j<N_rays_side; oy+=spacer_y, j++)
         {
             // All rays point in +ve z direction.
             h_rays[i*N_rays_side +j].dx = 0.0f;
@@ -165,8 +168,8 @@ int main(int argc, char* argv[])
 
         // Since all rays are PPP, base key on origin instead.
         // morton_key(float, float, float) requires floats in (0, 1).
-        h_keys[i] = grace::morton_key((ox-(min_x-max_r))/span_x,
-                                      (oy-(min_y-max_r))/span_y,
+        h_keys[i] = grace::morton_key((ox-min_x)/span_x,
+                                      (oy-min_y)/span_y,
                                       0.0f);
     }
 
