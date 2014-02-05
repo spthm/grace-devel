@@ -237,18 +237,20 @@ int main(int argc, char* argv[])
                                    0.0f, thrust::maximum<float>());
     float min_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
                                    1E20, thrust::minimum<float>());
+    float mean_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
+                                    0.0f, thrust::plus<float>()) / d_traced_rho.size();
     std::cout << "Time for acummulating integrating tracing kernel: "
               << elapsed << " ms" << std::endl;
 
 
     // Allocate output array based on per-ray hit counts, and calculate
     // individual ray offsets into this array.
-    // int last_ray_hits = d_hit_counts[N_rays-1];
-    // thrust::exclusive_scan(d_hit_counts.begin(), d_hit_counts.end(),
-    //                        d_hit_counts.begin());
-    // thrust::device_vector<float> d_trace_output(d_hit_counts[N_rays-1]+
-    //                                             last_ray_hits);
-    // thrust::device_vector<float> d_trace_distances(d_trace_output.size());
+    int last_ray_hits = d_hit_counts[N_rays-1];
+    thrust::exclusive_scan(d_hit_counts.begin(), d_hit_counts.end(),
+                           d_hit_counts.begin());
+    thrust::device_vector<float> d_trace_output(d_hit_counts[N_rays-1]+
+                                                last_ray_hits);
+    thrust::device_vector<float> d_trace_distances(d_trace_output.size());
 
     // // Trace and integrate through smoothing kernels, accumulating density.
     // cudaEventRecord(start);
@@ -273,6 +275,28 @@ int main(int argc, char* argv[])
     // cudaEventElapsedTime(&elapsed, start, stop);
     // std::cout << "Time for per-intersection integrating kernel: " << elapsed
     //           << " ms" << std::endl;
+
+    // // Sort output arrays based on hit distances.
+    // thrust::host_vector<int> h_hit_counts = d_hit_counts;
+    // double t = 0.0;
+    // for (int i=0; i<N_rays_side; i++) {
+    //     int r_start = h_hit_counts[i];
+    //     int r_end;
+    //     if (i == N_rays-1)
+    //         r_end = h_hit_counts[i] + last_ray_hits - 1;
+    //     else
+    //         r_end = h_hit_counts[i+1] - 1;
+    //     cudaEventRecord(start);
+    //     thrust::sort_by_key(d_trace_distances.begin()+r_start,
+    //                         d_trace_distances.begin()+r_end,
+    //                         d_trace_output.begin()+r_start);
+    //     cudaEventRecord(stop);
+    //     cudaEventSynchronize(stop);
+    //     cudaEventElapsedTime(&elapsed, start, stop);
+    //     t += elapsed;
+    // }
+    // std::cout << "Time for per-intersection sorting loop: " << t << " ms"
+    //           << std::endl;
     std::cout << std::endl;
 
     std::cout << "Number of rays:       " << N_rays << std::endl;
@@ -280,6 +304,7 @@ int main(int argc, char* argv[])
     std::cout << "Mean hits:            " << mean_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
+    std::cout << "Mean output           " << mean_rho << std::endl;
     std::cout << "Max output:           " << max_rho << std::endl;
     std::cout << "Min output:           " << min_rho << std::endl;
     std::cout << std::endl;
