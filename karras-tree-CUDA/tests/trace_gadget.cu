@@ -245,12 +245,12 @@ int main(int argc, char* argv[])
 
     // Allocate output array based on per-ray hit counts, and calculate
     // individual ray offsets into this array.
-    int last_ray_hits = d_hit_counts[N_rays-1];
-    thrust::exclusive_scan(d_hit_counts.begin(), d_hit_counts.end(),
-                           d_hit_counts.begin());
-    thrust::device_vector<float> d_trace_output(d_hit_counts[N_rays-1]+
-                                                last_ray_hits);
-    thrust::device_vector<float> d_trace_distances(d_trace_output.size());
+    // int last_ray_hits = d_hit_counts[N_rays-1];
+    // thrust::exclusive_scan(d_hit_counts.begin(), d_hit_counts.end(),
+    //                        d_hit_counts.begin());
+    // thrust::device_vector<float> d_trace_output(d_hit_counts[N_rays-1]+
+    //                                             last_ray_hits);
+    // thrust::device_vector<float> d_trace_distances(d_trace_output.size());
 
     // // Trace and integrate through smoothing kernels, accumulating density.
     // cudaEventRecord(start);
