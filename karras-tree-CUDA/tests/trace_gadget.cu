@@ -353,15 +353,20 @@ int main(int argc, char* argv[])
     memset(img,0,sizeof(img));
 
     int r, g, b, x, y;
+    float r_max = 150.0f;
+    float g_max = 210.0f;
+    float b_max = 255.0f;
     for(int i=0; i<w; i++)
     {
         for(int j=0; j<h; j++)
     {
         x=i; y=(h-1)-j;
-        r = g = b = (int) ( (h_traced_rho[i+w*j] - min_rho)*255.0/(max_rho-min_rho) );
-        if (r > 255) r=255;
-        if (g > 255) g=255;
-        if (b > 255) b=255;
+        r = (int) ( (h_traced_rho[i+w*j] - min_rho)*r_max/(max_rho-min_rho) );
+        g = (int) ( (h_traced_rho[i+w*j] - min_rho)*g_max/(max_rho-min_rho) );
+        b = (int) ( (h_traced_rho[i+w*j] - min_rho)*b_max/(max_rho-min_rho) );
+        if (r > r_max) r=r_max;
+        if (g > g_max) g=g_max;
+        if (b > b_max) b=b_max;
         img[(x+y*w)*3+2] = (unsigned char)(r);
         img[(x+y*w)*3+1] = (unsigned char)(g);
         img[(x+y*w)*3+0] = (unsigned char)(b);
