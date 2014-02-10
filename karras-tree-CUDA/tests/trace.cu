@@ -177,6 +177,7 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_hit_counts.data()),
         thrust::raw_pointer_cast(d_nodes.data()),
         thrust::raw_pointer_cast(d_leaves.data()),
+        d_nodes.size(),
         thrust::raw_pointer_cast(d_x_centres.data()),
         thrust::raw_pointer_cast(d_y_centres.data()),
         thrust::raw_pointer_cast(d_z_centres.data()),

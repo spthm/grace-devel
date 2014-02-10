@@ -308,6 +308,7 @@ __global__ void trace_hitcount(const Ray* rays,
                                unsigned int* hit_counts,
                                const Node* nodes,
                                const Leaf* leaves,
+                               size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
                                const Float* zs,
@@ -346,34 +347,35 @@ __global__ void trace_hitcount(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                // If current node is hit, put it at the top of the stack and
-                // move to its left child.
+                // If current node is hit, put its right child at the top of
+                // the stack and move to its left child.
                 if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = node_index;
+                    trace_stack[stack_index] = nodes[node_index].right;
 
-                    is_leaf = nodes[node_index].left_leaf_flag;
                     node_index = nodes[node_index].left;
 
                 }
-                // If it is not hit, move to the right child of the node at the
-                // top of the stack.
+                // If it is not hit, move to the node at the top of the stack.
                 else
                 {
                     node_index = trace_stack[stack_index];
                     stack_index--;
-
-                    is_leaf = nodes[node_index].right_leaf_flag;
-                    node_index = nodes[node_index].right;
                 }
+
+                // Check if the current node is a leaf.
+                is_leaf = node_index > n_nodes-1;
             }
 
             if (is_leaf && stack_index >= 0)
             {
                 if (sphere_hit(ray,
-                               xs[node_index], ys[node_index], zs[node_index],
-                               radii[node_index], b, d))
+                               xs[node_index-n_nodes],
+                               ys[node_index-n_nodes],
+                               zs[node_index-n_nodes],
+                               radii[node_index-n_nodes],
+                               b, d))
                 {
                     ray_hit_count++;
                 }
@@ -381,8 +383,7 @@ __global__ void trace_hitcount(const Ray* rays,
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = nodes[node_index].right_leaf_flag;
-                node_index = nodes[node_index].right;
+                is_leaf = node_index > n_nodes-1;
             }
 
         }
@@ -398,6 +399,7 @@ __global__ void trace_property(const Ray* rays,
                                Tout* out_data,
                                const Node* nodes,
                                const Leaf* leaves,
+                               size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
                                const Float* zs,
@@ -434,9 +436,8 @@ __global__ void trace_property(const Ray* rays,
                 if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = node_index;
+                    trace_stack[stack_index] = nodes[node_index].right;
 
-                    is_leaf = nodes[node_index].left_leaf_flag;
                     node_index = nodes[node_index].left;
 
                 }
@@ -444,29 +445,29 @@ __global__ void trace_property(const Ray* rays,
                 {
                     node_index = trace_stack[stack_index];
                     stack_index--;
-
-                    is_leaf = nodes[node_index].right_leaf_flag;
-                    node_index = nodes[node_index].right;
                 }
+
+                is_leaf = node_index > n_nodes-1;
             }
 
             if (is_leaf && stack_index >= 0)
             {
-                r = radii[node_index];
+                r = radii[node_index-n_nodes];
                 if (sphere_hit(ray,
-                               xs[node_index], ys[node_index], zs[node_index],
+                               xs[node_index-n_nodes],
+                               ys[node_index-n_nodes],
+                               zs[node_index-n_nodes],
                                r, b, d))
                 {
                     ir = 1.f / r;
                     b_index = 50 * b * ir;
                     Float kernel_fac = b_integrals[b_index] * ir*ir;
-                    out += (Tout) (kernel_fac * p_data[node_index]);
+                    out += (Tout) (kernel_fac * p_data[node_index-n_nodes]);
                 }
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = nodes[node_index].right_leaf_flag;
-                node_index = nodes[node_index].right;
+                is_leaf = node_index > n_nodes-1;
             }
 
         }
@@ -484,6 +485,7 @@ __global__ void trace(const Ray* rays,
                       const unsigned int* hit_offsets,
                       const Node* nodes,
                       const Leaf* leaves,
+                      size_t n_nodes,
                       const Float* xs,
                       const Float* ys,
                       const Float* zs,
@@ -517,9 +519,8 @@ __global__ void trace(const Ray* rays,
                 if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = node_index;
+                    trace_stack[stack_index] = nodes[node_index].right;
 
-                    is_leaf = nodes[node_index].left_leaf_flag;
                     node_index = nodes[node_index].left;
 
                 }
@@ -527,31 +528,32 @@ __global__ void trace(const Ray* rays,
                 {
                     node_index = trace_stack[stack_index];
                     stack_index--;
-
-                    is_leaf = nodes[node_index].right_leaf_flag;
-                    node_index = nodes[node_index].right;
                 }
+
+                is_leaf = node_index > n_nodes-1;
             }
 
             if (is_leaf && stack_index >= 0)
             {
-                r = radii[node_index];
+                r = radii[node_index-n_nodes];
                 if (sphere_hit(ray,
-                               xs[node_index], ys[node_index], zs[node_index],
+                               xs[node_index-n_nodes],
+                               ys[node_index-n_nodes],
+                               zs[node_index-n_nodes],
                                r, b, d))
                 {
                     ir = 1.f / r;
                     b_index = 50 * b * ir;
                     Float kernel_fac = b_integrals[b_index] * ir*ir;
-                    out_data[out_index] = (Tout) (kernel_fac * p_data[node_index]);
+                    out_data[out_index] = (Tout) (kernel_fac *
+                                                  p_data[node_index-n_nodes]);
                     hit_dists[out_index] = d;
                     out_index++;
                 }
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = nodes[node_index].right_leaf_flag;
-                node_index = nodes[node_index].right;
+                is_leaf = node_index > n_nodes-1;
             }
 
         }
