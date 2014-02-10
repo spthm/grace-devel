@@ -256,7 +256,7 @@ int main(int argc, char* argv[]) {
         outfile << "Time for calculating AABBs:        ";
         outfile.width(8);
         outfile << times[4] << " ms." << std::endl;
-        outfile << "Time for total (inc. memory ops): ";
+        outfile << "Time for total (inc. memory ops):  ";
         outfile.width(8);
         outfile << times[0] << " ms." << std::endl;
         outfile.close();
@@ -276,17 +276,13 @@ int main(int argc, char* argv[]) {
         {
             unsigned int right = left + 1;
 
-            h_nodes[left].left = left - 1;
-            h_nodes[left].right = left;
+            h_nodes[left].left = left - 1 + N-1;
+            h_nodes[left].right = left + N-1;
             h_nodes[left].far_end = left - 1;
-            h_nodes[left].left_leaf_flag = true;
-            h_nodes[left].right_leaf_flag = true;
 
-            h_nodes[right].left = right;
-            h_nodes[right].right = right + 1;
+            h_nodes[right].left = right + N-1;
+            h_nodes[right].right = right + 1 +N-1;
             h_nodes[right].far_end = right + 1;
-            h_nodes[right].left_leaf_flag = true;
-            h_nodes[right].right_leaf_flag = true;
 
             h_leaves[left-1].parent = h_leaves[left].parent = left;
             h_leaves[right].parent = h_leaves[right+1].parent = right;
@@ -305,25 +301,19 @@ int main(int argc, char* argv[]) {
                 h_nodes[left].left = left_split;
                 h_nodes[left].right = left_split + 1;
                 h_nodes[left].far_end = left - (1u<<height) + 1;
-                h_nodes[left].left_leaf_flag = false;
-                h_nodes[left].right_leaf_flag = false;
 
                 h_nodes[right].left = right_split;
                 h_nodes[right].right = right_split + 1;
                 h_nodes[right].far_end = right + (1u<<height) - 1;
-                h_nodes[right].left_leaf_flag = false;
-                h_nodes[right].right_leaf_flag = false;
 
                 h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
-                h_nodes[right_split].parent = h_nodes[right_split+1].parent= right;
+                h_nodes[right_split].parent = h_nodes[right_split+1].parent = right;
             }
         }
         // Set up root node and link children to it.
         h_nodes[0].left = N/2 - 1;
         h_nodes[0].right = N/2;
         h_nodes[0].far_end = N - 1;
-        h_nodes[0].left_leaf_flag = false;
-        h_nodes[0].right_leaf_flag = false;
         h_nodes[N/2 - 1].parent = h_nodes[N/2].parent = 0;
 
 

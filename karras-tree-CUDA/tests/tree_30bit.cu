@@ -211,16 +211,32 @@ int main(int argc, char* argv[]) {
         for (unsigned int i=0; i<N-1; i++) {
             outfile << "i:               " << i << std::endl;
             outfile << "level:           " << h_nodes[i].level << std::endl;
-            outfile << "left leaf flag:  "
-                    << (h_nodes[i].left_leaf_flag ? "True" : "False") << std::endl;
-            outfile << "left:            " << h_nodes[i].left << std::endl;
-            outfile << "right leaf flag: "
-                    << (h_nodes[i].right_leaf_flag ? "True": "False")<< std::endl;
-            outfile << "right:           " << h_nodes[i].right << std::endl;
+            // Output the actual index into the leaf array for comparison
+            // to the Python code.
+            if (h_nodes[i].left > N-2) {
+                outfile << "left leaf flag:  True" << std::endl;
+                outfile << "left:            " << h_nodes[i].left - (N-1)
+                        << std::endl;
+            }
+            else {
+                outfile << "left leaf flag:  False" << std::endl;
+                outfile << "left:            " << h_nodes[i].left << std::endl;
+            }
+            if (h_nodes[i].right > N-2) {
+                outfile << "right leaf flag:  True" << std::endl;
+                outfile << "right:            " << h_nodes[i].right - (N-1)
+                        << std::endl;
+            }
+            else {
+                outfile << "right leaf flag:  False" << std::endl;
+                outfile << "right:            " << h_nodes[i].right
+                        << std::endl;
+            }
             outfile << "parent:          " << h_nodes[i].parent << std::endl;
             outfile << "AABB_bottom:     " << h_nodes[i].bottom[0] << ", "
                                            << h_nodes[i].bottom[1] << ", "
-                                           << h_nodes[i].bottom[2] << std::endl;
+                                           << h_nodes[i].bottom[2]
+                                           << std::endl;
             outfile << "AABB_top:        " << h_nodes[i].top[0] << ", "
                                            << h_nodes[i].top[1] << ", "
                                            << h_nodes[i].top[2] << std::endl;
