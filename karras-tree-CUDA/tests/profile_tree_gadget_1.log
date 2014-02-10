@@ -1,0 +1,19 @@
+Device 0:                   Tesla M2090
+MORTON_THREADS_PER_BLOCK:   512
+BUILD_THREADS_PER_BLOCK:    512
+AABB_THREADS_PER_BLOCK:     512
+MAX_BLOCKS:                 112
+Iterations per tree:        100
+Gadget data file name:      Data_025
+
+
+Will generate:
+    i)  A tree from 2097152 SPH particles.
+
+Time for Morton key generation:     0.33952 ms.
+Time for sort-by-key:               8.46851 ms.
+Time for hierarchy generation:     14.41892 ms.
+Time for calculating AABBs:        25.64363 ms.
+Time for total (inc. memory ops): 83.47141 ms.
+
+
