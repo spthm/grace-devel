@@ -19,9 +19,6 @@ struct Node
     // Equal to the common prefix of the keys which this node spans.
     unsigned int level;
 
-    bool left_leaf_flag;
-    bool right_leaf_flag;
-
     // AABB.  float should be sufficient (i.e. no need for double).
     float top[3];
     float bottom[3];

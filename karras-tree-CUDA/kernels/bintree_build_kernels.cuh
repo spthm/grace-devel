@@ -88,20 +88,18 @@ __global__ void build_nodes_kernel(Node* nodes,
         nodes[index].far_end = end_index;
 
         if (split_index == min(index, end_index)) {
-            nodes[index].left_leaf_flag = true;
+            nodes[index].left += n_keys-1;
             leaves[split_index].parent = index;
         }
         else {
-            nodes[index].left_leaf_flag = false;
             nodes[split_index].parent = index;
         }
 
         if (split_index+1 == max(index, end_index)) {
-            nodes[index].right_leaf_flag = true;
+            nodes[index].right+= n_keys-1;
             leaves[split_index+1].parent = index;
         }
         else {
-            nodes[index].right_leaf_flag = false;
             nodes[split_index+1].parent = index;
         }
 
@@ -181,17 +179,17 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
             {
                 left_index = nodes[index].left;
                 right_index = nodes[index].right;
-                if (nodes[index].left_leaf_flag) {
-                    left_bottom = leaves[left_index].bottom;
-                    left_top = leaves[left_index].top;
+                if (left_index > n_leaves-2) {
+                    left_bottom = leaves[left_index-n_leaves+1].bottom;
+                    left_top = leaves[left_index-n_leaves+1].top;
                 }
                 else {
                     left_bottom = nodes[left_index].bottom;
                     left_top = nodes[left_index].top;
                 }
-                if (nodes[index].right_leaf_flag) {
-                    right_bottom = leaves[right_index].bottom;
-                    right_top = leaves[right_index].top;
+                if (right_index > n_leaves-2) {
+                    right_bottom = leaves[right_index-n_leaves+1].bottom;
+                    right_top = leaves[right_index-n_leaves+1].top;
                 }
                 else {
                     right_bottom = nodes[right_index].bottom;
