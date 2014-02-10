@@ -18,7 +18,7 @@ int main(int argc, char* argv[])
     typedef grace::Vector3<float> Vector3f;
 
     unsigned int N = 1000000;
-    unsigned int N_rays = 80000;
+    unsigned int N_rays = 100000;
     // Do we save the input and output data?
     bool save_data = false;
 
@@ -39,9 +39,6 @@ int main(int argc, char* argv[])
         std::cout << "Will save sphere, ray and hit data." << std::endl;
     std::cout << std::endl;
 {
-
-    // Expected.  The factor of 2 is a fudge.
-    int N_hits_per_ray = ceil(2 * pow(N, 0.333333333));
 
     // Generate N random positions and radii, i.e. 4N random floats in [0,1).
     thrust::device_vector<float> d_x_centres(N);
@@ -166,45 +163,42 @@ int main(int argc, char* argv[])
     h_dzs.clear();
     h_dxs.shrink_to_fit();
 
-    // Sort rays by Morton key.
+    // Sort rays by Morton key and trace for per-ray hit couynts.
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<int> d_hits(N_hits_per_ray*N_rays);
-    thrust::device_vector<int> d_hit_count(N_rays);
-    thrust::device_vector<int> d_debug(1);
+    thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    grace::gpu::trace<<<28, TRACE_THREADS_PER_BLOCK>>>
-                     (thrust::raw_pointer_cast(d_rays.data()),
-                      d_rays.size(),
-                      N_hits_per_ray,
-                      thrust::raw_pointer_cast(d_hits.data()),
-                      thrust::raw_pointer_cast(d_hit_count.data()),
-                      thrust::raw_pointer_cast(d_nodes.data()),
-                      thrust::raw_pointer_cast(d_leaves.data()),
-                      thrust::raw_pointer_cast(d_x_centres.data()),
-                      thrust::raw_pointer_cast(d_y_centres.data()),
-                      thrust::raw_pointer_cast(d_z_centres.data()),
-                      thrust::raw_pointer_cast(d_radii.data()));
+    grace::gpu::trace_hitcount<<<28, TRACE_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        d_rays.size(),
+        thrust::raw_pointer_cast(d_hit_counts.data()),
+        thrust::raw_pointer_cast(d_nodes.data()),
+        thrust::raw_pointer_cast(d_leaves.data()),
+        thrust::raw_pointer_cast(d_x_centres.data()),
+        thrust::raw_pointer_cast(d_y_centres.data()),
+        thrust::raw_pointer_cast(d_z_centres.data()),
+        thrust::raw_pointer_cast(d_radii.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
     float elapsed;
     cudaEventElapsedTime(&elapsed, start, stop);
-    int max_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  0, thrust::maximum<int>());
-    int min_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                  N, thrust::minimum<int>());
-    float mean_hits = thrust::reduce(d_hit_count.begin(), d_hit_count.end(),
-                                     0, thrust::plus<int>()) / float(N_rays);
-    std::cout << "Time for tracing kernel: " << elapsed << " ms" << std::endl;
+    int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
+                                  0u, thrust::maximum<unsigned int>());
+    int min_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
+                                  N, thrust::minimum<unsigned int>());
+    float mean_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
+                                     0u, thrust::plus<unsigned int>())
+                                    / float(N_rays);
+    std::cout << "Time for hit-count tracing kernel: " << elapsed
+              << " ms" << std::endl;
     std::cout << std::endl;
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Expected hit count:   " << N_hits_per_ray / 2 << std::endl;
     std::cout << "Mean hits:            " << mean_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
@@ -238,10 +232,10 @@ int main(int argc, char* argv[])
         }
         outfile.close();
 
-        thrust::host_vector<float> h_hit_count = d_hit_count;
+        thrust::host_vector<float> h_hit_counts = d_hit_counts;
         outfile.open("outdata/hitdata.txt");
         for (int i=0; i<N_rays; i++) {
-            outfile << h_hit_count[i] << std::endl;
+            outfile << h_hit_counts[i] << std::endl;
         }
         outfile.close();
     }
