@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
     // Sort rays by Morton key and trace for per-ray hit couynts.
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<int> d_hit_counts(N_rays);
+    thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     cudaEvent_t start, stop;
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
@@ -199,11 +199,12 @@ int main(int argc, char* argv[])
     cudaEventElapsedTime(&elapsed, start, stop);
 
     int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                  0, thrust::maximum<int>());
+                                  0, thrust::maximum<unsigned int>());
     int min_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                  N+1, thrust::minimum<int>());
+                                  N+1, thrust::minimum<unsigned int>());
     float mean_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                     0, thrust::plus<int>()) / float(N_rays);
+                                     0, thrust::plus<unsigned int>())
+                                    / float(N_rays);
     std::cout << "Time for hit-count tracing kernel: " << elapsed << " ms"
               << std::endl;
 
