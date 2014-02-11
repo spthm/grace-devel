@@ -10,7 +10,7 @@
 #include "../types.h"
 #include "../nodes.h"
 #include "../kernels/morton.cuh"
-#include "../kernels/bintree_build_kernels.cuh"
+#include "../kernels/bintree_build.cuh"
 
 #define N_TIMES 5
 

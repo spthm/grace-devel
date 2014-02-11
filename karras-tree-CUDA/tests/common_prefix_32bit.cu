@@ -2,7 +2,7 @@
 #include <bitset>
 
 #include "../types.h"
-#include "../kernels/bintree_build_kernels.cuh"
+#include "../kernels/bintree_build.cuh"
 
 __global__ void common_prefix_kernel(Integer32* is,
                                      Integer32* js,
