@@ -19,8 +19,8 @@ int main(int argc, char* argv[]) {
 
 
 
-    thrust::host_vector<grace::integer32> h_is(5);
-    thrust::host_vector<grace::integer32> h_js(5);
+    thrust::host_vector<grace::integer32> h_is(6);
+    thrust::host_vector<grace::integer32> h_js(6);
     thrust::host_vector<grace::uinteger64> h_keys(6);
 
     // i = 0
