@@ -11,13 +11,17 @@ namespace grace {
 
 namespace gpu {
 
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 // CUDA Kenerls
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 template <typename UInteger>
-__global__ void build_nodes_kernel(Node* nodes,
-                                   Leaf* leaves,
+__global__ void build_nodes_kernel(integer32* nodes_right,
+                                   integer32* nodes_left,
+                                   integer32* nodes_parent,
+                                   integer32* nodes_end,
+                                   unsigned int* nodes_level,
+                                   integer32* leaves_parent,
                                    const UInteger* keys,
                                    const size_t n_keys)
 {
@@ -82,25 +86,25 @@ __global__ void build_nodes_kernel(Node* nodes,
         // If direction == -1 we actually found split_index + 1;
         split_index = index + l*direction + min(direction, 0);
 
-        nodes[index].level = node_prefix;
-        nodes[index].left = split_index;
-        nodes[index].right = split_index+1;
-        nodes[index].far_end = end_index;
+        nodes_level[index] = node_prefix;
+        nodes_left[index] = split_index;
+        nodes_right[index] = split_index+1;
+        nodes_end[index] = end_index;
 
         if (split_index == min(index, end_index)) {
-            nodes[index].left += n_keys-1;
-            leaves[split_index].parent = index;
+            nodes_left[index] += n_keys-1;
+            leaves_parent[split_index] = index;
         }
         else {
-            nodes[split_index].parent = index;
+            nodes_parent[split_index] = index;
         }
 
         if (split_index+1 == max(index, end_index)) {
-            nodes[index].right+= n_keys-1;
-            leaves[split_index+1].parent = index;
+            nodes_right[index] += n_keys-1;
+            leaves_parent[split_index+1] = index;
         }
         else {
-            nodes[split_index+1].parent = index;
+            nodes_parent[split_index+1] = index;
         }
 
         index += blockDim.x * gridDim.x;
@@ -109,8 +113,15 @@ __global__ void build_nodes_kernel(Node* nodes,
 }
 
 template <typename Float>
-__global__ void find_AABBs_kernel(volatile Node* nodes,
-                                  volatile Leaf* leaves,
+__global__ void find_AABBs_kernel(const integer32* nodes_left,
+                                  const integer32* nodes_right,
+                                  const integer32* nodes_parent,
+                                  const integer32* nodes_end,
+                                  volatile float* nodes_top,
+                                  volatile float* nodes_bottom,
+                                  const integer32* leaves_parent,
+                                  volatile float* leaves_top,
+                                  volatile float* leaves_bottom,
                                   const size_t n_leaves,
                                   const Float* xs,
                                   const Float* ys,
@@ -149,20 +160,20 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
             y_max = y_min + 2*r;
             z_max = z_min + 2*r;
 
-            leaves[tid].bottom[0] = x_min;
-            leaves[tid].bottom[1] = y_min;
-            leaves[tid].bottom[2] = z_min;
+            leaves_bottom[3*tid+0] = x_min;
+            leaves_bottom[3*tid+1] = y_min;
+            leaves_bottom[3*tid+2] = z_min;
 
-            leaves[tid].top[0] = x_max;
-            leaves[tid].top[1] = y_max;
-            leaves[tid].top[2] = z_max;
+            leaves_top[3*tid+0] = x_max;
+            leaves_top[3*tid+1] = y_max;
+            leaves_top[3*tid+2] = z_max;
 
             // Travel up the tree.  The second thread to reach a node writes
             // its AABB based on those of its children.
             // The first exits the loop.
-            index = leaves[tid].parent;
-            in_block = (min(nodes[index].far_end, index) >= block_lower &&
-                        max(nodes[index].far_end, index) <= block_upper);
+            index = leaves_parent[tid];
+            in_block = (min(nodes_end[index], index) >= block_lower &&
+                        max(nodes_end[index], index) <= block_upper);
 
             flags = sm_flags;
             flag_index = index % AABB_THREADS_PER_BLOCK;
@@ -177,23 +188,23 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
             first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             while (!first_arrival)
             {
-                left_index = nodes[index].left;
-                right_index = nodes[index].right;
+                left_index = nodes_left[index];
+                right_index = nodes_right[index];
                 if (left_index > n_leaves-2) {
-                    left_bottom = leaves[left_index-n_leaves+1].bottom;
-                    left_top = leaves[left_index-n_leaves+1].top;
+                    left_bottom = &leaves_bottom[3*(left_index-n_leaves+1)];
+                    left_top = &leaves_top[3*(left_index-n_leaves+1)];
                 }
                 else {
-                    left_bottom = nodes[left_index].bottom;
-                    left_top = nodes[left_index].top;
+                    left_bottom = &nodes_bottom[3*left_index];
+                    left_top = &nodes_top[3*left_index];
                 }
                 if (right_index > n_leaves-2) {
-                    right_bottom = leaves[right_index-n_leaves+1].bottom;
-                    right_top = leaves[right_index-n_leaves+1].top;
+                    right_bottom = &leaves_bottom[3*(right_index-n_leaves+1)];
+                    right_top = &leaves_top[3*(right_index-n_leaves+1)];
                 }
                 else {
-                    right_bottom = nodes[right_index].bottom;
-                    right_top = nodes[right_index].top;
+                    right_bottom = &nodes_bottom[3*right_index];
+                    right_top = &nodes_top[3*right_index];
                 }
 
                 x_min = min(left_bottom[0], right_bottom[0]);
@@ -204,13 +215,13 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
                 y_max = max(left_top[1], right_top[1]);
                 z_max = max(left_top[2], right_top[2]);
 
-                nodes[index].bottom[0] = x_min;
-                nodes[index].bottom[1] = y_min;
-                nodes[index].bottom[2] = z_min;
+                nodes_bottom[3*index+0] = x_min;
+                nodes_bottom[3*index+1] = y_min;
+                nodes_bottom[3*index+2] = z_min;
 
-                nodes[index].top[0] = x_max;
-                nodes[index].top[1] = y_max;
-                nodes[index].top[2] = z_max;
+                nodes_top[3*index+0] = x_max;
+                nodes_top[3*index+1] = y_max;
+                nodes_top[3*index+2] = z_max;
 
                 if (index == 0) {
                     // Root node processed, so all nodes processed.
@@ -218,9 +229,9 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
                     break;
                 }
 
-                index = nodes[index].parent;
-                in_block = (min(nodes[index].far_end, index) >= block_lower &&
-                            max(nodes[index].far_end, index) <= block_upper);
+                index = nodes_parent[index];
+                in_block = (min(nodes_end[index], index) >= block_lower &&
+                            max(nodes_end[index], index) <= block_upper);
 
                 flags = sm_flags;
                 flag_index = index % AABB_THREADS_PER_BLOCK;
@@ -273,13 +284,17 @@ __device__ int common_prefix(const integer32 i,
 
 } // namespace gpu
 
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 // C-like wrappers
-//------------------------------------------------------------------------------
+//-----------------------------------------------------------------------------
 
 template <typename UInteger>
-void build_nodes(thrust::device_vector<Node>& d_nodes,
-                 thrust::device_vector<Leaf>& d_leaves,
+void build_nodes(thrust::device_vector<integer32>& d_nodes_left,
+                 thrust::device_vector<integer32>& d_nodes_right,
+                 thrust::device_vector<integer32>& d_nodes_parent,
+                 thrust::device_vector<integer32>& d_nodes_end,
+                 thrust::device_vector<unsigned int>& d_nodes_level,
+                 thrust::device_vector<integer32>& d_leaves_parent,
                  const thrust::device_vector<UInteger>& d_keys)
 {
     size_t n_keys = d_keys.size();
@@ -290,17 +305,26 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
     // TODO: Error if n_keys <= 1.
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
-        (Node*)thrust::raw_pointer_cast(d_nodes.data()),
-        (Leaf*)thrust::raw_pointer_cast(d_leaves.data()),
-        (UInteger*)thrust::raw_pointer_cast(d_keys.data()),
-        n_keys
-    );
-
+        thrust::raw_pointer_cast(d_nodes_left.data()),
+        thrust::raw_pointer_cast(d_nodes_right.data()),
+        thrust::raw_pointer_cast(d_nodes_parent.data()),
+        thrust::raw_pointer_cast(d_nodes_end.data()),
+        thrust::raw_pointer_cast(d_nodes_level.data()),
+        thrust::raw_pointer_cast(d_leaves_parent.data()),
+        thrust::raw_pointer_cast(d_keys.data()),
+        n_keys);
 }
 
 template <typename Float>
-void find_AABBs(thrust::device_vector<Node>& d_nodes,
-                thrust::device_vector<Leaf>& d_leaves,
+void find_AABBs(const thrust::device_vector<integer32>& d_nodes_left,
+                const thrust::device_vector<integer32>& d_nodes_right,
+                const thrust::device_vector<integer32>& d_nodes_parent,
+                const thrust::device_vector<integer32>& d_nodes_end,
+                thrust::device_vector<float>& d_nodes_top,
+                thrust::device_vector<float>& d_nodes_bottom,
+                const thrust::device_vector<integer32>& d_leaves_parent,
+                thrust::device_vector<float>& d_leaves_top,
+                thrust::device_vector<float>& d_leaves_bottom,
                 const thrust::device_vector<Float>& d_sphere_xs,
                 const thrust::device_vector<Float>& d_sphere_ys,
                 const thrust::device_vector<Float>& d_sphere_zs,
@@ -308,15 +332,22 @@ void find_AABBs(thrust::device_vector<Node>& d_nodes,
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
-    size_t n_leaves = d_leaves.size();
+    size_t n_leaves = d_leaves_parent.size();
     d_AABB_flags.resize(n_leaves-1);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
                                         / AABB_THREADS_PER_BLOCK));
 
     gpu::find_AABBs_kernel<<<blocks,AABB_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_nodes.data()),
-        thrust::raw_pointer_cast(d_leaves.data()),
+        thrust::raw_pointer_cast(d_nodes_left.data()),
+        thrust::raw_pointer_cast(d_nodes_right.data()),
+        thrust::raw_pointer_cast(d_nodes_parent.data()),
+        thrust::raw_pointer_cast(d_nodes_end.data()),
+        thrust::raw_pointer_cast(d_nodes_top.data()),
+        thrust::raw_pointer_cast(d_nodes_bottom.data()),
+        thrust::raw_pointer_cast(d_leaves_parent.data()),
+        thrust::raw_pointer_cast(d_leaves_top.data()),
+        thrust::raw_pointer_cast(d_leaves_bottom.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_sphere_xs.data()),
         thrust::raw_pointer_cast(d_sphere_ys.data()),
