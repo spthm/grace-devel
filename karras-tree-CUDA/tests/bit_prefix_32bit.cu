@@ -12,8 +12,8 @@ class bit_prefix_functor
 {
 public:
 
-    __device__ UInteger32 operator() (const UInteger32& a,
-                                      const UInteger32& b) {
+    __device__ grace::uinteger32 operator() (const grace::uinteger32& a,
+                                             const grace::uinteger32& b) {
 
         return grace::gpu::bit_prefix(a, b);
     }
@@ -33,19 +33,19 @@ int main(int argc, char* argv[]) {
     // b = 1011 1001 0001 1011 1111 0101 0110 1101 = 3105617261
     // length of common prefix = 32
 
-    UInteger32 As[2] = {3105617261, 3105617261};
-    UInteger32 Bs[2] = {958133613, 3105617261};
-    UInteger32 actuals[3] = {0, 32};
+    grace::uinteger32 As[2] = {3105617261, 3105617261};
+    grace::uinteger32 Bs[2] = {958133613, 3105617261};
+    grace::uinteger32 actuals[3] = {0, 32};
 
-    thrust::device_vector<UInteger32> d_As(As, As+2);
-    thrust::device_vector<UInteger32> d_Bs(Bs, Bs+2);
+    thrust::device_vector<grace::uinteger32> d_As(As, As+2);
+    thrust::device_vector<grace::uinteger32> d_Bs(Bs, Bs+2);
 
-    thrust::device_vector<UInteger32> d_calculated(2);
+    thrust::device_vector<grace::uinteger32> d_calculated(2);
     thrust::transform(d_As.begin(), d_As.end(),
                       d_Bs.begin(),
                       d_calculated.begin(),
                       bit_prefix_functor());
-    thrust::host_vector<UInteger32> h_calculated = d_calculated;
+    thrust::host_vector<grace::uinteger32> h_calculated = d_calculated;
 
     std::cout << "Testing two edge cases (prefix length = 0, 32):\n" << std::endl;
     for (int i=0; i<2; i++) {
@@ -68,10 +68,10 @@ int main(int argc, char* argv[]) {
     /* Generate N random unsigned integers. */
 
     thrust::default_random_engine rng(1234);
-    thrust::uniform_int_distribution<UInteger32> rand_uint;
+    thrust::uniform_int_distribution<grace::uinteger32> rand_uint;
 
-    thrust::host_vector<UInteger32> h_As(N);
-    thrust::host_vector<UInteger32> h_Bs(N);
+    thrust::host_vector<grace::uinteger32> h_As(N);
+    thrust::host_vector<grace::uinteger32> h_Bs(N);
     for (int i=0; i<N; i++) {
         h_As[i] = rand_uint(rng);
         h_Bs[i] = rand_uint(rng);
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
 
     bool correct = true;
     for (int i=0; i<N; i++) {
-        UInteger32 prefix_length = grace::bit_prefix(h_As[i], h_Bs[i]);
+        grace::uinteger32 prefix_length = grace::bit_prefix(h_As[i], h_Bs[i]);
 
         if (prefix_length != h_calculated[i]) {
             std::cout << "Device prefix length key != host prefix length!" << std::endl;

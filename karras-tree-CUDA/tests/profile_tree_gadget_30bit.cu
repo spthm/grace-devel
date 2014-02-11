@@ -154,7 +154,7 @@ int main(int argc, char* argv[]) {
         thrust::device_vector<float> d_radii = h_radii;
 
         // Generate the Morton keys for each position.
-        thrust::device_vector<UInteger32> d_keys(N);
+        thrust::device_vector<grace::uinteger32> d_keys(N);
         cudaEventRecord(part_start);
         grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
                            d_keys, bottom, top);

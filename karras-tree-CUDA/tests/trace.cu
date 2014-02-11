@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
     Vector3f top(1., 1., 1.);
 
     // Sort the positions by their keys and save the sorted keys.
-    thrust::device_vector<UInteger32> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
     grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
                        d_keys,
                        bottom, top);
@@ -121,7 +121,7 @@ int main(int argc, char* argv[])
     thrust::host_vector<float> h_dxs(N_rays);
     thrust::host_vector<float> h_dys(N_rays);
     thrust::host_vector<float> h_dzs(N_rays);
-    thrust::host_vector<UInteger32> h_keys(N_rays);
+    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dxs.begin(),

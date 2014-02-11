@@ -11,10 +11,10 @@ struct Node
     // anyway, int32 should be sufficient for the indices.
     // Could use uint32 and set the root node to 1.  Then common_prefix
     // may return 0 for out-of-range results, rather than -1.
-    Integer32 left;
-    Integer32 right;
-    Integer32 parent;
-    Integer32 far_end;
+    integer32 left;
+    integer32 right;
+    integer32 parent;
+    integer32 far_end;
 
     // Equal to the common prefix of the keys which this node spans.
     unsigned int level;
@@ -27,7 +27,7 @@ struct Node
 
 struct Leaf
 {
-    Integer32 parent;
+    integer32 parent;
 
     float top[3];
     float bottom[3];

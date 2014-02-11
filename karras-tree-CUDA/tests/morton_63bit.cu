@@ -22,27 +22,27 @@ int main(int argc, char* argv[]) {
 
     /* 10-bit x, y, z integers and binary representation. */
 
-    UInteger64 x_64 = 1365301;
-    UInteger64 y_64 = 2014126;
-    UInteger64 z_64 = 1683051;
+    grace::uinteger64 x_64 = 1365301;
+    grace::uinteger64 y_64 = 2014126;
+    grace::uinteger64 z_64 = 1683051;
 
 
     /* 10-bit spaced-by-two integers and binary representation. */
 
-    UInteger64 spaced_x_64 = 1170975555344961601;
-    UInteger64 spaced_y_64 = 1317338702596309576;
-    UInteger64 spaced_z_64 = 1297353911585505801;
-    UInteger64 key_64 = 8995068606879603957;
+    grace::uinteger64 spaced_x_64 = 1170975555344961601;
+    grace::uinteger64 spaced_y_64 = 1317338702596309576;
+    grace::uinteger64 spaced_z_64 = 1297353911585505801;
+    grace::uinteger64 key_64 = 8995068606879603957;
 
-    UInteger64 my_spaced_x_64 = grace::space_by_two_21bit(x_64);
-    UInteger64 my_spaced_y_64 = grace::space_by_two_21bit(y_64);
-    UInteger64 my_spaced_z_64 = grace::space_by_two_21bit(z_64);
+    grace::uinteger64 my_spaced_x_64 = grace::space_by_two_21bit(x_64);
+    grace::uinteger64 my_spaced_y_64 = grace::space_by_two_21bit(y_64);
+    grace::uinteger64 my_spaced_z_64 = grace::space_by_two_21bit(z_64);
 
 
     /* 30-bit keys and binary representation. */
 
-    UInteger64 my_key_64 = my_spaced_x_64 | my_spaced_y_64 << 1 | my_spaced_z_64 << 2;
-    UInteger64 my_key_2_64 = grace::morton_key(x_64, y_64, z_64);
+    grace::uinteger64 my_key_64 = my_spaced_x_64 | my_spaced_y_64 << 1 | my_spaced_z_64 << 2;
+    grace::uinteger64 my_key_2_64 = grace::morton_key(x_64, y_64, z_64);
 
 
     /* Print everything. */

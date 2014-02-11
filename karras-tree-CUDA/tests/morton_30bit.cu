@@ -22,27 +22,27 @@ int main(int argc, char* argv[]) {
 
     /* 10-bit x, y, z integers and binary representation. */
 
-    UInteger32 x = 309;
-    UInteger32 y = 942;
-    UInteger32 z = 619;
+    grace::uinteger32 x = 309;
+    grace::uinteger32 y = 942;
+    grace::uinteger32 z = 619;
 
 
     /* 10-bit spaced-by-two integers and binary representation. */
 
-    UInteger32 spaced_x = 16814145;
-    UInteger32 spaced_y = 153125448;
-    UInteger32 spaced_z = 134513161;
-    UInteger32 key = 861117685;
+    grace::uinteger32 spaced_x = 16814145;
+    grace::uinteger32 spaced_y = 153125448;
+    grace::uinteger32 spaced_z = 134513161;
+    grace::uinteger32 key = 861117685;
 
-    UInteger32 my_spaced_x = grace::space_by_two_10bit(x);
-    UInteger32 my_spaced_y = grace::space_by_two_10bit(y);
-    UInteger32 my_spaced_z = grace::space_by_two_10bit(z);
+    grace::uinteger32 my_spaced_x = grace::space_by_two_10bit(x);
+    grace::uinteger32 my_spaced_y = grace::space_by_two_10bit(y);
+    grace::uinteger32 my_spaced_z = grace::space_by_two_10bit(z);
 
 
     /* 30-bit keys and binary representation. */
 
-    UInteger32 my_key = my_spaced_x | my_spaced_y << 1 | my_spaced_z << 2;
-    UInteger32 my_key_2 = grace::morton_key(x, y, z);
+    grace::uinteger32 my_key = my_spaced_x | my_spaced_y << 1 | my_spaced_z << 2;
+    grace::uinteger32 my_key_2 = grace::morton_key(x, y, z);
 
     /* Print everything. */
 

@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_x_centres = h_x_centres;
     thrust::device_vector<float> d_y_centres = h_y_centres;
     thrust::device_vector<float> d_z_centres = h_z_centres;
-    thrust::device_vector<UInteger32> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);
 

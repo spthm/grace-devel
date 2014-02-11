@@ -32,16 +32,16 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<double> h_x_random(N);
     thrust::host_vector<double> h_y_random(N);
     thrust::host_vector<double> h_z_random(N);
-    thrust::host_vector<UInteger64> h_morton(N);
+    thrust::host_vector<grace::uinteger64> h_morton(N);
 
     for (unsigned int i=0; i<N; i++) {
         h_x_random[i] = u01(rng);
         h_y_random[i] = u01(rng);
         h_z_random[i] = u01(rng);
 
-        UInteger64 ix = (UInteger64) (h_x_random[i] * ((1u << 21) - 1));
-        UInteger64 iy = (UInteger64) (h_y_random[i] * ((1u << 21) - 1));
-        UInteger64 iz = (UInteger64) (h_z_random[i] * ((1u << 21) - 1));
+        grace::uinteger64 ix = (grace::uinteger64) (h_x_random[i] * ((1u << 21) - 1));
+        grace::uinteger64 iy = (grace::uinteger64) (h_y_random[i] * ((1u << 21) - 1));
+        grace::uinteger64 iz = (grace::uinteger64) (h_z_random[i] * ((1u << 21) - 1));
 
         h_morton[i] = grace::morton_key(ix, iy, iz);
     }
@@ -56,7 +56,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<double> d_x_random = h_x_random;
     thrust::device_vector<double> d_y_random = h_y_random;
     thrust::device_vector<double> d_z_random = h_z_random;
-    thrust::device_vector<UInteger64> d_morton(N);
+    thrust::device_vector<grace::uinteger64> d_morton(N);
     grace::morton_keys(d_x_random, d_y_random, d_z_random,
                        d_morton, bottom, top);
 
@@ -64,7 +64,7 @@ int main(int argc, char* argv[]) {
     /* Verify results are the same. */
 
     unsigned int err_count = 0;
-    thrust::host_vector<UInteger64> h_d_morton_copy = d_morton;
+    thrust::host_vector<grace::uinteger64> h_d_morton_copy = d_morton;
     for (unsigned int i=0; i<N; i++) {
         if (h_morton[i] != h_d_morton_copy[i]) {
             std::cout << "Device morton key != host morton key!" << std::endl;

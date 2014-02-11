@@ -231,7 +231,7 @@ int main(void)
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
     thrust::host_vector<grace::Node> h_nodes(N_AABBs);
-    thrust::host_vector<UInteger32> h_keys(N_rays);
+    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
 
     // Generate rays.  RNG in [-1, 1).
     random_float_functor rng(-1.0f, 1.0f);

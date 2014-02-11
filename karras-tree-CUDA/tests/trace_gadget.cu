@@ -92,7 +92,7 @@ int main(int argc, char* argv[])
     Vector3f top(max_x, max_y, max_z);
 
     // Generate morton keys based on particles' positions.
-    thrust::device_vector<UInteger32> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
     grace::morton_keys(d_x_centres, d_y_centres, d_z_centres, d_keys,
                        bottom, top);
 
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
     float spacer_x = span_x / N_rays_side;
     float spacer_y = span_y / N_rays_side;
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<UInteger32> h_keys(N_rays);
+    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
     int i, j;
     float ox, oy;
     for (i=0, ox=min_x; i<N_rays_side; ox+=spacer_x, i++)

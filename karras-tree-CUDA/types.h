@@ -2,11 +2,6 @@
 
 #include <stdint.h>
 
-#define UInteger32 uint32_t
-#define UInteger64 uint64_t
-#define Integer32 int32_t
-#define Integer64 int64_t
-
 #define MORTON_THREADS_PER_BLOCK 512
 #define BUILD_THREADS_PER_BLOCK 512
 #define AABB_THREADS_PER_BLOCK 512
@@ -14,6 +9,11 @@
 #define MAX_BLOCKS 112 // 7MPs * 16 blocks/MP for compute capability 3.0.
 
 namespace grace {
+
+typedef uint32_t uinteger32;
+typedef uint64_t uinteger64;
+typedef int32_t integer32;
+typedef int64_t integer64;
 
 template <typename T>
 struct Vector3 {

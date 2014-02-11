@@ -4,10 +4,10 @@
 #include "../types.h"
 #include "../kernels/bintree_build.cuh"
 
-__global__ void common_prefix_kernel(Integer32* is,
-                                     Integer32* js,
-                                     UInteger32* keys,
-                                     unsigned int n_keys,
+__global__ void common_prefix_kernel(grace::integer32* is,
+                                     grace::integer32* js,
+                                     grace::uinteger32* keys,
+                                     size_t n_keys,
                                      int* prefix_lengths)
 {
 
@@ -19,9 +19,9 @@ int main(int argc, char* argv[]) {
 
 
 
-    thrust::host_vector<Integer32> h_is(5);
-    thrust::host_vector<Integer32> h_js(5);
-    thrust::host_vector<UInteger32> h_keys(6);
+    thrust::host_vector<grace::integer32> h_is(5);
+    thrust::host_vector<grace::integer32> h_js(5);
+    thrust::host_vector<grace::uinteger32> h_keys(6);
 
     // i = 0
     // j = 1
@@ -81,15 +81,15 @@ int main(int argc, char* argv[]) {
 
     int actuals[6] = {10, 63, 61, 61, -1, -1};
 
-    thrust::device_vector<Integer32> d_is = h_is;
-    thrust::device_vector<Integer32> d_js = h_js;
-    thrust::device_vector<UInteger32> d_keys = h_keys;
+    thrust::device_vector<grace::integer32> d_is = h_is;
+    thrust::device_vector<grace::integer32> d_js = h_js;
+    thrust::device_vector<grace::uinteger32> d_keys = h_keys;
     thrust::device_vector<int> d_prefix_lengths(6);
 
     common_prefix_kernel<<<1,d_prefix_lengths.size()>>>(
-        (Integer32*)thrust::raw_pointer_cast(d_is.data()),
-        (Integer32*)thrust::raw_pointer_cast(d_js.data()),
-        (UInteger32*)thrust::raw_pointer_cast(d_keys.data()),
+        (grace::integer32*)thrust::raw_pointer_cast(d_is.data()),
+        (grace::integer32*)thrust::raw_pointer_cast(d_js.data()),
+        (grace::uinteger32*)thrust::raw_pointer_cast(d_keys.data()),
         d_keys.size(),
         (int*)thrust::raw_pointer_cast(d_prefix_lengths.data())
     );

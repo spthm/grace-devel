@@ -20,7 +20,7 @@ int main(int argc, char* argv[]) {
     typedef grace::Vector3<float> Vector3f;
     std::ofstream outfile;
     thrust::host_vector<float> h_write_f;
-    thrust::host_vector<UInteger32> h_write_uint;
+    thrust::host_vector<grace::uinteger32> h_write_uint;
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
     outfile.precision(9);
@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
 
     /* Generate the Morton key of each position and save them, unsorted. */
 
-    thrust::device_vector<UInteger32> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
 
     Vector3f bottom(0., 0., 0.);
     Vector3f top(1., 1., 1.);

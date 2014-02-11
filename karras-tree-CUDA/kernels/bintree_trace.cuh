@@ -314,8 +314,9 @@ __global__ void trace_hitcount(const Ray* rays,
                                const Float* zs,
                                const Float* radii)
 {
-    int ray_index, stack_index, ray_hit_count;
-    Integer32 node_index;
+    int ray_index, stack_index;
+    unsigned int ray_hit_count;
+    integer32 node_index;
     bool is_leaf;
     // Unused.
     float b, d;
@@ -395,11 +396,11 @@ __global__ void trace_hitcount(const Ray* rays,
 // Trace through the field and accummulate some property for each intersection.
 template <typename Float, typename Tout, typename Tin>
 __global__ void trace_property(const Ray* rays,
-                               const int n_rays,
+                               const size_t n_rays,
                                Tout* out_data,
                                const Node* nodes,
                                const Leaf* leaves,
-                               size_t n_nodes,
+                               const size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
                                const Float* zs,
@@ -408,7 +409,7 @@ __global__ void trace_property(const Ray* rays,
                                const Float* b_integrals)
 {
     int ray_index, stack_index, b_index;
-    Integer32 node_index;
+    integer32 node_index;
     bool is_leaf;
     // Impact parameter and distance to intersection.
     float b, d, r, ir;
@@ -479,13 +480,13 @@ __global__ void trace_property(const Ray* rays,
 // Trace through the field and save information for each intersection.
 template <typename Float, typename Tout, typename Tin>
 __global__ void trace(const Ray* rays,
-                      const int n_rays,
+                      const size_t n_rays,
                       Tout* out_data,
                       Float* hit_dists,
-                      const unsigned int* hit_offsets,
+                      const uinteger32* hit_offsets,
                       const Node* nodes,
                       const Leaf* leaves,
-                      size_t n_nodes,
+                      const size_t n_nodes,
                       const Float* xs,
                       const Float* ys,
                       const Float* zs,
@@ -493,8 +494,9 @@ __global__ void trace(const Ray* rays,
                       const Tin* p_data,
                       const Float* b_integrals)
 {
-    int ray_index, stack_index, out_index, b_index;
-    Integer32 node_index;
+    int ray_index, stack_index, b_index;
+    unsigned int out_index;
+    integer32 node_index;
     bool is_leaf;
     float b, d, r, ir;
     int trace_stack[31];

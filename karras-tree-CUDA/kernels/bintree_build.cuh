@@ -19,9 +19,9 @@ template <typename UInteger>
 __global__ void build_nodes_kernel(Node* nodes,
                                    Leaf* leaves,
                                    const UInteger* keys,
-                                   const UInteger32 n_keys)
+                                   const size_t n_keys)
 {
-    Integer32 index, end_index, split_index;
+    integer32 index, end_index, split_index;
     int prefix_left, prefix_right, min_prefix;
     unsigned int node_prefix;
     unsigned int span_max, l, bit;
@@ -111,15 +111,15 @@ __global__ void build_nodes_kernel(Node* nodes,
 template <typename Float>
 __global__ void find_AABBs_kernel(volatile Node* nodes,
                                   volatile Leaf* leaves,
-                                  const UInteger32 n_leaves,
+                                  const size_t n_leaves,
                                   const Float* xs,
                                   const Float* ys,
                                   const Float* zs,
                                   const Float* radii,
                                   unsigned int* g_flags)
 {
-    Integer32 tid, index, left_index, right_index;
-    Integer32 flag_index, block_lower, block_upper;
+    integer32 tid, index, left_index, right_index;
+    integer32 flag_index, block_lower, block_upper;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
@@ -250,10 +250,10 @@ __global__ void find_AABBs_kernel(volatile Node* nodes,
 
 // TODO: Rename this to e.g. common_prefix_length
 template <typename UInteger>
-__device__ int common_prefix(const Integer32 i,
-                             const Integer32 j,
+__device__ int common_prefix(const integer32 i,
+                             const integer32 j,
                              const UInteger* keys,
-                             const UInteger32 n_keys)
+                             const size_t n_keys)
 {
     // Should be optimized away by the compiler.
     const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
@@ -266,7 +266,7 @@ __device__ int common_prefix(const Integer32 i,
 
     int prefix_length = bit_prefix(key_i, key_j);
     if (prefix_length == n_bits) {
-        prefix_length += bit_prefix((UInteger32)i, (UInteger32)j);
+        prefix_length += bit_prefix((uinteger32)i, (uinteger32)j);
     }
     return prefix_length;
 }
@@ -282,10 +282,10 @@ void build_nodes(thrust::device_vector<Node>& d_nodes,
                  thrust::device_vector<Leaf>& d_leaves,
                  const thrust::device_vector<UInteger>& d_keys)
 {
-    UInteger32 n_keys = d_keys.size();
+    size_t n_keys = d_keys.size();
 
-    int blocks = min(MAX_BLOCKS, (n_keys + BUILD_THREADS_PER_BLOCK-1)
-                                  / BUILD_THREADS_PER_BLOCK);
+    int blocks = min(MAX_BLOCKS, (int) ((n_keys + BUILD_THREADS_PER_BLOCK-1)
+                                        / BUILD_THREADS_PER_BLOCK));
 
     // TODO: Error if n_keys <= 1.
 
@@ -308,11 +308,11 @@ void find_AABBs(thrust::device_vector<Node>& d_nodes,
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
-    UInteger32 n_leaves = d_leaves.size();
+    size_t n_leaves = d_leaves.size();
     d_AABB_flags.resize(n_leaves-1);
 
-    int blocks = min(MAX_BLOCKS, (n_leaves + AABB_THREADS_PER_BLOCK-1)
-                                  / AABB_THREADS_PER_BLOCK);
+    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
+                                        / AABB_THREADS_PER_BLOCK));
 
     gpu::find_AABBs_kernel<<<blocks,AABB_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.data()),

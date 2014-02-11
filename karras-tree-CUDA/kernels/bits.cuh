@@ -22,10 +22,10 @@ __device__ UInteger bit_prefix(const UInteger a, const UInteger b)
 } // namespace gpu
 
 template <typename UInteger>
-__host__ __device__ UInteger32 space_by_two_10bit(const UInteger x)
+__host__ __device__ uinteger32 space_by_two_10bit(const UInteger x)
 {
     // Mask high bits away first, and ensure we have enough bits.
-    UInteger32 x_32 = (UInteger32)x & ((1u << 10) - 1);
+    uinteger32 x_32 = (uinteger32)x & ((1u << 10) - 1);
     x_32 = (x_32 | (x_32 << 16)) & 0x030000FF;
     x_32 = (x_32 | (x_32 <<  8)) & 0x0300F00F;
     x_32 = (x_32 | (x_32 <<  4)) & 0x030C30C3;
@@ -35,10 +35,10 @@ __host__ __device__ UInteger32 space_by_two_10bit(const UInteger x)
 
 // Courtesy of http://stackoverflow.com/a/18529061/927046
 template <typename UInteger>
-__host__ __device__ UInteger64 space_by_two_21bit(const UInteger x)
+__host__ __device__ uinteger64 space_by_two_21bit(const UInteger x)
 {
     // This spaced integer requires 3*21 = 63 bits
-    UInteger64 x_64 = (UInteger64)x & ((1u << 21) - 1);
+    uinteger64 x_64 = (uinteger64)x & ((1u << 21) - 1);
     x_64 = (x_64 | x_64 << 32) & 0x001f00000000ffff;
     x_64 = (x_64 | x_64 << 16) & 0x001f0000ff0000ff;
     x_64 = (x_64 | x_64 <<  8) & 0x100f00f00f00f00f;
