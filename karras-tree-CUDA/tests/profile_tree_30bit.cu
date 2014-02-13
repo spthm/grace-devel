@@ -12,8 +12,6 @@
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 
-#define N_TIMES 6
-
 int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
@@ -68,6 +66,7 @@ int main(int argc, char* argv[]) {
               << " iterations):" << std::endl;
     std::string N_leaves_str;
     if (start == end) {
+        converter.seekp(0);
         converter << (1u << (start-1));
         N_leaves_str = converter.str();
     }
@@ -147,8 +146,8 @@ int main(int argc, char* argv[]) {
 
         cudaEvent_t part_start, part_stop;
         cudaEvent_t tot_start, tot_stop;
-        float part_elapsed, tot_elapsed;
-        double times[N_TIMES];
+        float part_elapsed;
+        double all_tot, morton_tot, sort_tot, tree_tot, aabb_tot;
         cudaEventCreate(&part_start);
         cudaEventCreate(&part_stop);
         cudaEventCreate(&tot_start);
@@ -170,7 +169,7 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            times[1] += part_elapsed;
+            morton_tot += part_elapsed;
 
             // Sort the positions by their keys and save the sorted keys.
             thrust::device_vector<int> d_indices(N);
@@ -205,18 +204,18 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            times[2] += part_elapsed;
+            sort_tot += part_elapsed;
 
 
             // Build the tree hierarchy from the keys.
-            thrust::device_vector<grace::Node> d_nodes(N-1);
-            thrust::device_vector<grace::Leaf> d_leaves(N);
+            grace::Nodes d_nodes(N-1);
+            grace::Leaves d_leaves(N);
             cudaEventRecord(part_start);
             grace::build_nodes(d_nodes, d_leaves, d_keys);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            times[3] += part_elapsed;
+            tree_tot += part_elapsed;
 
             // Find the AABBs.
             cudaEventRecord(part_start);
@@ -225,19 +224,15 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            times[4] += part_elapsed;
+            aabb_tot += part_elapsed;
 
             // Record the total time spent in the loop.
             cudaEventRecord(tot_stop);
             cudaEventSynchronize(tot_stop);
-            cudaEventElapsedTime(&tot_elapsed, tot_start, tot_stop);
-            times[0] += tot_elapsed;
+            cudaEventElapsedTime(&part_elapsed, tot_start, tot_stop);
+            all_tot += part_elapsed;
         }
 
-        // Calculate mean timings and write results to file.
-        for (int i=0; i<N_TIMES; i++) {
-            times[i] /= N_iter;
-        }
         outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
         outfile << "Will generate:" << std::endl;
         outfile << "    i)  A tree from " << N << " random points." << std::endl;
@@ -246,19 +241,19 @@ int main(int argc, char* argv[]) {
         outfile << std::endl;
         outfile << "Time for Morton key generation:    ";
         outfile.width(8);
-        outfile << times[1] << " ms." << std::endl;
+        outfile << morton_tot/N_iter << " ms." << std::endl;
         outfile << "Time for sort-by-key:              ";
         outfile.width(8);
-        outfile << times[2] << " ms." << std::endl;
+        outfile << sort_tot/N_iter << " ms." << std::endl;
         outfile << "Time for hierarchy generation:     ";
         outfile.width(8);
-        outfile << times[3] << " ms." << std::endl;
+        outfile << tree_tot/N_iter << " ms." << std::endl;
         outfile << "Time for calculating AABBs:        ";
         outfile.width(8);
-        outfile << times[4] << " ms." << std::endl;
+        outfile << aabb_tot/N_iter << " ms." << std::endl;
         outfile << "Time for total (inc. memory ops):  ";
         outfile.width(8);
-        outfile << times[0] << " ms." << std::endl;
+        outfile << all_tot/N_iter << " ms." << std::endl;
         outfile.close();
 
 
@@ -268,62 +263,71 @@ int main(int argc, char* argv[]) {
         /**************************************/
 
         // Alloctate host-side vectors.
-        thrust::host_vector<grace::Node> h_nodes(N-1);
-        thrust::host_vector<grace::Leaf> h_leaves(N);
+        grace::H_Nodes h_nodes(N-1);
+        grace::H_Leaves h_leaves(N);
 
         // Set up bottom level (where all nodes connect to leaves).
-        for (unsigned int left=1; left<N-1; left+=4)
+        for (unsigned int i_left=1; i_left<N-1; i_left+=4)
         {
-            unsigned int right = left + 1;
+            unsigned int i_right = i_left + 1;
 
-            h_nodes[left].left = left - 1 + N-1;
-            h_nodes[left].right = left + N-1;
-            h_nodes[left].far_end = left - 1;
+            h_nodes.left[i_left] = i_left - 1 + N-1;
+            h_nodes.right[i_left] = i_left + N-1;
+            h_nodes.end[i_left] = i_left - 1;
 
-            h_nodes[right].left = right + N-1;
-            h_nodes[right].right = right + 1 +N-1;
-            h_nodes[right].far_end = right + 1;
+            h_nodes.left[i_right] = i_right + N-1;
+            h_nodes.right[i_right] = i_right + 1 +N-1;
+            h_nodes.end[i_right] = i_right + 1;
 
-            h_leaves[left-1].parent = h_leaves[left].parent = left;
-            h_leaves[right].parent = h_leaves[right+1].parent = right;
+            h_leaves.parent[i_left-1] = h_leaves.parent[i_left] = i_left;
+            h_leaves.parent[i_right] = h_leaves.parent[i_right+1] = i_right;
         }
         // Set up all except bottom and top levels, starting at bottom-but-one.
         for (unsigned int height=2; height<(levels-1); height++)
         {
-            for (unsigned int left=(1u<<height)-1;
-                              left<N-1;
-                              left+=1u<<(height+1))
+            for (unsigned int i_left=(1u<<height)-1;
+                              i_left<N-1;
+                              i_left+=1u<<(height+1))
             {
-                unsigned int right = left + 1;
-                unsigned int left_split = (2*left - (1u<<height)) / 2;
-                unsigned int right_split = left_split + (1u<<height);
+                unsigned int i_right = i_left + 1;
+                unsigned int i_left_split = (2*i_left - (1u<<height)) / 2;
+                unsigned int i_right_split = i_left_split + (1u<<height);
 
-                h_nodes[left].left = left_split;
-                h_nodes[left].right = left_split + 1;
-                h_nodes[left].far_end = left - (1u<<height) + 1;
+                h_nodes.left[i_left] = i_left_split;
+                h_nodes.right[i_left] = i_left_split + 1;
+                h_nodes.end[i_left] = i_left - (1u<<height) + 1;
 
-                h_nodes[right].left = right_split;
-                h_nodes[right].right = right_split + 1;
-                h_nodes[right].far_end = right + (1u<<height) - 1;
+                h_nodes.left[i_right] = i_right_split;
+                h_nodes.right[i_right] = i_right_split + 1;
+                h_nodes.end[i_right] = i_right + (1u<<height) - 1;
 
-                h_nodes[left_split].parent = h_nodes[left_split+1].parent = left;
-                h_nodes[right_split].parent = h_nodes[right_split+1].parent = right;
+                h_nodes.parent[i_left_split] = h_nodes.parent[i_left_split+1]
+                                             = i_left;
+                h_nodes.parent[i_right_split] = h_nodes.parent[i_right_split+1]
+                                              = i_right;
             }
         }
         // Set up root node and link children to it.
-        h_nodes[0].left = N/2 - 1;
-        h_nodes[0].right = N/2;
-        h_nodes[0].far_end = N - 1;
-        h_nodes[N/2 - 1].parent = h_nodes[N/2].parent = 0;
+        h_nodes.left[0] = N/2 - 1;
+        h_nodes.right[0] = N/2;
+        h_nodes.end[0] = N - 1;
+        h_nodes.parent[N/2 - 1] = h_nodes.parent[N/2] = 0;
 
 
         /* Profile the fully-balanced tree. */
 
+        grace::Nodes d_nodes(N-1);
+        grace::Leaves d_leaves(N);
         part_elapsed = 0;
+        aabb_tot = 0;
         for (int i=0; i<N_iter; i++)
         {
-            thrust::device_vector<grace::Node> d_nodes = h_nodes;
-            thrust::device_vector<grace::Leaf> d_leaves = h_leaves;
+            // NB: Levels and AABBs do not need copying since we don't
+            // build them on the host.
+            d_nodes.left = h_nodes.left;
+            d_nodes.right = h_nodes.right;
+            d_nodes.parent = h_nodes.parent;
+            d_nodes.end = h_nodes.end;
             thrust::device_vector<float> d_x_centres = h_x_centres;
             thrust::device_vector<float> d_y_centres = h_y_centres;
             thrust::device_vector<float> d_z_centres = h_z_centres;
@@ -336,15 +340,15 @@ int main(int argc, char* argv[]) {
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            times[N_TIMES-1] += part_elapsed;
+            aabb_tot += part_elapsed;
         }
 
         // Calculate mean timings and write results to file.
-        times[N_TIMES-1] /= N_iter;
+        aabb_tot /= N_iter;
         outfile.open(file_name.c_str(), std::ofstream::out | std::ofstream::app);
         outfile << "Time for balanced tree AABBs:      ";
         outfile.width(8);
-        outfile << times[N_TIMES-1] << " ms." << std::endl;
+        outfile << aabb_tot << " ms." << std::endl;
         outfile << std::endl << std::endl;
         outfile.close();
     }

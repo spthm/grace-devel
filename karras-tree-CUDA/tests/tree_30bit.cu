@@ -193,20 +193,8 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
-    grace::Nodes d_nodes;
-    grace::Leaves d_leaves;
-
-    d_nodes.left.resize(N-1);
-    d_nodes.right.resize(N-1);
-    d_nodes.parent.resize(N-1);
-    d_nodes.end.resize(N-1);
-    d_nodes.level.resize(N-1);
-    d_nodes.top.resize(3*(N-1));
-    d_nodes.bot.resize(3*(N-1));
-
-    d_leaves.parent.resize(N);
-    d_leaves.top.resize(3*N);
-    d_leaves.bot.resize(3*N);
+    grace::Nodes d_nodes(N-1);
+    grace::Leaves d_leaves(N);
 
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves,

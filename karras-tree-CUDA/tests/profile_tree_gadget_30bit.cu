@@ -12,8 +12,6 @@
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 
-#define N_TIMES 5
-
 int main(int argc, char* argv[]) {
 
     typedef grace::Vector3<float> Vector3f;
@@ -138,8 +136,8 @@ int main(int argc, char* argv[]) {
 
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
-    float part_elapsed, tot_elapsed;
-    double times[N_TIMES];
+    float part_elapsed;
+    double all_tot, morton_tot, sort_tot, tree_tot, aabb_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -161,7 +159,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        times[1] += part_elapsed;
+        morton_tot += part_elapsed;
 
         // Sort the positions by their keys and save the sorted keys.
         thrust::device_vector<int> d_indices(N);
@@ -196,18 +194,18 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        times[2] += part_elapsed;
+        sort_tot += part_elapsed;
 
 
         // Build the tree hierarchy from the keys.
-        thrust::device_vector<grace::Node> d_nodes(N-1);
-        thrust::device_vector<grace::Leaf> d_leaves(N);
+        grace::Nodes d_nodes(N-1);
+        grace::Leaves d_leaves(N);
         cudaEventRecord(part_start);
         grace::build_nodes(d_nodes, d_leaves, d_keys);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        times[3] += part_elapsed;
+        tree_tot += part_elapsed;
 
         // Find the AABBs.
         cudaEventRecord(part_start);
@@ -216,19 +214,15 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        times[4] += part_elapsed;
+        aabb_tot += part_elapsed;
 
         // Record the total time spent in the loop.
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
-        cudaEventElapsedTime(&tot_elapsed, tot_start, tot_stop);
-        times[0] += tot_elapsed;
+        cudaEventElapsedTime(&part_elapsed, tot_start, tot_stop);
+        all_tot += part_elapsed;
     }
 
-    // Calculate mean timings and write results to file.
-    for (int i=0; i<N_TIMES; i++) {
-        times[i] /= N_iter;
-    }
     outfile.open(outfile_name.c_str(),
                  std::ofstream::out | std::ofstream::app);
     outfile << "Will generate:" << std::endl;
@@ -236,19 +230,19 @@ int main(int argc, char* argv[]) {
     outfile << std::endl;
     outfile << "Time for Morton key generation:    ";
     outfile.width(8);
-    outfile << times[1] << " ms." << std::endl;
+    outfile << morton_tot/N_iter << " ms." << std::endl;
     outfile << "Time for sort-by-key:              ";
     outfile.width(8);
-    outfile << times[2] << " ms." << std::endl;
+    outfile << sort_tot/N_iter << " ms." << std::endl;
     outfile << "Time for hierarchy generation:     ";
     outfile.width(8);
-    outfile << times[3] << " ms." << std::endl;
+    outfile << tree_tot/N_iter << " ms." << std::endl;
     outfile << "Time for calculating AABBs:        ";
     outfile.width(8);
-    outfile << times[4] << " ms." << std::endl;
+    outfile << aabb_tot/N_iter << " ms." << std::endl;
     outfile << "Time for total (inc. memory ops): ";
     outfile.width(8);
-    outfile << times[0] << " ms." << std::endl;
+    outfile << all_tot/N_iter << " ms." << std::endl;
     outfile << std::endl << std::endl;
     outfile.close();
 }

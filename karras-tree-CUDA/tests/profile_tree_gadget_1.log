@@ -10,10 +10,10 @@ Gadget data file name:      Data_025
 Will generate:
     i)  A tree from 2097152 SPH particles.
 
-Time for Morton key generation:     0.33928 ms.
-Time for sort-by-key:               8.45708 ms.
-Time for hierarchy generation:     12.27141 ms.
-Time for calculating AABBs:        24.21943 ms.
-Time for total (inc. memory ops): 77.15642 ms.
+Time for Morton key generation:     0.33906 ms.
+Time for sort-by-key:               8.46769 ms.
+Time for hierarchy generation:      3.60149 ms.
+Time for calculating AABBs:        15.59485 ms.
+Time for total (inc. memory ops): 41.84323 ms.
 
 
