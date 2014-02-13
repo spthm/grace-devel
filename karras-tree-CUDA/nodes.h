@@ -1,8 +1,32 @@
 #pragma once
 
+#include <thrust/host_vector.h>
+#include <thrust/device_vector.h>
+
 #include "types.h"
 
 namespace grace {
+
+struct Nodes
+{
+    thrust::device_vector<integer32> left;
+    thrust::device_vector<integer32> right;
+    thrust::device_vector<integer32> parent;
+    thrust::device_vector<integer32> end;
+
+    thrust::device_vector<unsigned int> level;
+
+    thrust::device_vector<float> top;
+    thrust::device_vector<float> bot;
+};
+
+struct Leaves
+{
+    thrust::device_vector<integer32> parent;
+
+    thrust::device_vector<float> top;
+    thrust::device_vector<float> bot;
+};
 
 struct Node
 {

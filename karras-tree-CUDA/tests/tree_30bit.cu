@@ -193,50 +193,39 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
-    thrust::device_vector<grace::integer32> d_nodes_left(N-1);
-    thrust::device_vector<grace::integer32> d_nodes_right(N-1);
-    thrust::device_vector<grace::integer32> d_nodes_parent(N-1);
-    thrust::device_vector<grace::integer32> d_nodes_end(N-1);
-    thrust::device_vector<unsigned int> d_nodes_level(N-1);
-    thrust::device_vector<float> d_nodes_top(3*(N-1));
-    thrust::device_vector<float> d_nodes_bottom(3*(N-1));
+    grace::Nodes d_nodes;
+    grace::Leaves d_leaves;
 
-    thrust::device_vector<grace::integer32> d_leaves_parent(N);
-    thrust::device_vector<float> d_leaves_top(3*N);
-    thrust::device_vector<float> d_leaves_bottom(3*N);
+    d_nodes.left.resize(N-1);
+    d_nodes.right.resize(N-1);
+    d_nodes.parent.resize(N-1);
+    d_nodes.end.resize(N-1);
+    d_nodes.level.resize(N-1);
+    d_nodes.top.resize(3*(N-1));
+    d_nodes.bot.resize(3*(N-1));
 
-    grace::build_nodes(d_nodes_left,
-                       d_nodes_right,
-                       d_nodes_parent,
-                       d_nodes_end,
-                       d_nodes_level,
-                       d_leaves_parent,
-                       d_keys);
-    grace::find_AABBs(d_nodes_left,
-                      d_nodes_right,
-                      d_nodes_parent,
-                      d_nodes_end,
-                      d_nodes_top,
-                      d_nodes_bottom,
-                      d_leaves_parent,
-                      d_leaves_top,
-                      d_leaves_bottom,
+    d_leaves.parent.resize(N);
+    d_leaves.top.resize(3*N);
+    d_leaves.bot.resize(3*N);
+
+    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::find_AABBs(d_nodes, d_leaves,
                       d_x_centres, d_y_centres, d_z_centres, d_radii);
 
 
     /* Save node and leaf data. */
 
-    thrust::host_vector<grace::integer32> h_nodes_left = d_nodes_left;
-    thrust::host_vector<grace::integer32> h_nodes_right = d_nodes_right;
-    thrust::host_vector<grace::integer32> h_nodes_parent = d_nodes_parent;
-    thrust::host_vector<grace::integer32> h_nodes_end = d_nodes_end;
-    thrust::host_vector<unsigned int> h_nodes_level = d_nodes_level;
-    thrust::host_vector<float> h_nodes_top = d_nodes_top;
-    thrust::host_vector<float> h_nodes_bottom = d_nodes_bottom;
+    thrust::host_vector<grace::integer32> h_nodes_left = d_nodes.left;
+    thrust::host_vector<grace::integer32> h_nodes_right = d_nodes.right;
+    thrust::host_vector<grace::integer32> h_nodes_parent = d_nodes.parent;
+    thrust::host_vector<grace::integer32> h_nodes_end = d_nodes.end;
+    thrust::host_vector<unsigned int> h_nodes_level = d_nodes.level;
+    thrust::host_vector<float> h_nodes_top = d_nodes.top;
+    thrust::host_vector<float> h_nodes_bot = d_nodes.bot;
 
-    thrust::host_vector<grace::integer32> h_leaves_parent = d_leaves_parent;
-    thrust::host_vector<float> h_leaves_top = d_leaves_top;
-    thrust::host_vector<float> h_leaves_bottom = d_leaves_bottom;
+    thrust::host_vector<grace::integer32> h_leaves_parent = d_leaves.parent;
+    thrust::host_vector<float> h_leaves_top = d_leaves.top;
+    thrust::host_vector<float> h_leaves_bot = d_leaves.bot;
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
@@ -265,9 +254,9 @@ int main(int argc, char* argv[]) {
                         << std::endl;
             }
             outfile << "parent:          " << h_nodes_parent[i] << std::endl;
-            outfile << "AABB_bottom:     " << h_nodes_bottom[3*i+0] << ", "
-                                           << h_nodes_bottom[3*i+1] << ", "
-                                           << h_nodes_bottom[3*i+2]
+            outfile << "AABB_bottom:     " << h_nodes_bot[3*i+0] << ", "
+                                           << h_nodes_bot[3*i+1] << ", "
+                                           << h_nodes_bot[3*i+2]
                                            << std::endl;
             outfile << "AABB_top:        " << h_nodes_top[3*i+0] << ", "
                                            << h_nodes_top[3*i+1] << ", "
@@ -280,9 +269,9 @@ int main(int argc, char* argv[]) {
         for (unsigned int i=0; i<N; i++) {
             outfile << "i:           " << i << std::endl;
             outfile << "parent:      " << h_leaves_parent[i] << std::endl;
-            outfile << "AABB_bottom: " << h_leaves_bottom[3*i+0] << ", "
-                                       << h_leaves_bottom[3*i+1] << ", "
-                                       << h_leaves_bottom[3*i+2] << std::endl;
+            outfile << "AABB_bottom: " << h_leaves_bot[3*i+0] << ", "
+                                       << h_leaves_bot[3*i+1] << ", "
+                                       << h_leaves_bot[3*i+2] << std::endl;
             outfile << "AABB_top:    " << h_leaves_top[3*i+0] << ", "
                                        << h_leaves_top[3*i+1] << ", "
                                        << h_leaves_top[3*i+2] << std::endl;

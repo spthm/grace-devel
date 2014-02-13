@@ -289,12 +289,7 @@ __device__ int common_prefix(const integer32 i,
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
-void build_nodes(thrust::device_vector<integer32>& d_nodes_left,
-                 thrust::device_vector<integer32>& d_nodes_right,
-                 thrust::device_vector<integer32>& d_nodes_parent,
-                 thrust::device_vector<integer32>& d_nodes_end,
-                 thrust::device_vector<unsigned int>& d_nodes_level,
-                 thrust::device_vector<integer32>& d_leaves_parent,
+void build_nodes(Nodes& d_nodes, Leaves& d_leaves,
                  const thrust::device_vector<UInteger>& d_keys)
 {
     size_t n_keys = d_keys.size();
@@ -305,26 +300,18 @@ void build_nodes(thrust::device_vector<integer32>& d_nodes_left,
     // TODO: Error if n_keys <= 1.
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_nodes_left.data()),
-        thrust::raw_pointer_cast(d_nodes_right.data()),
-        thrust::raw_pointer_cast(d_nodes_parent.data()),
-        thrust::raw_pointer_cast(d_nodes_end.data()),
-        thrust::raw_pointer_cast(d_nodes_level.data()),
-        thrust::raw_pointer_cast(d_leaves_parent.data()),
+        thrust::raw_pointer_cast(d_nodes.left.data()),
+        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.parent.data()),
+        thrust::raw_pointer_cast(d_nodes.end.data()),
+        thrust::raw_pointer_cast(d_nodes.level.data()),
+        thrust::raw_pointer_cast(d_leaves.parent.data()),
         thrust::raw_pointer_cast(d_keys.data()),
         n_keys);
 }
 
 template <typename Float>
-void find_AABBs(const thrust::device_vector<integer32>& d_nodes_left,
-                const thrust::device_vector<integer32>& d_nodes_right,
-                const thrust::device_vector<integer32>& d_nodes_parent,
-                const thrust::device_vector<integer32>& d_nodes_end,
-                thrust::device_vector<float>& d_nodes_top,
-                thrust::device_vector<float>& d_nodes_bottom,
-                const thrust::device_vector<integer32>& d_leaves_parent,
-                thrust::device_vector<float>& d_leaves_top,
-                thrust::device_vector<float>& d_leaves_bottom,
+void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
                 const thrust::device_vector<Float>& d_sphere_xs,
                 const thrust::device_vector<Float>& d_sphere_ys,
                 const thrust::device_vector<Float>& d_sphere_zs,
@@ -332,22 +319,22 @@ void find_AABBs(const thrust::device_vector<integer32>& d_nodes_left,
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
-    size_t n_leaves = d_leaves_parent.size();
+    size_t n_leaves = d_leaves.parent.size();
     d_AABB_flags.resize(n_leaves-1);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
                                         / AABB_THREADS_PER_BLOCK));
 
     gpu::find_AABBs_kernel<<<blocks,AABB_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_nodes_left.data()),
-        thrust::raw_pointer_cast(d_nodes_right.data()),
-        thrust::raw_pointer_cast(d_nodes_parent.data()),
-        thrust::raw_pointer_cast(d_nodes_end.data()),
-        thrust::raw_pointer_cast(d_nodes_top.data()),
-        thrust::raw_pointer_cast(d_nodes_bottom.data()),
-        thrust::raw_pointer_cast(d_leaves_parent.data()),
-        thrust::raw_pointer_cast(d_leaves_top.data()),
-        thrust::raw_pointer_cast(d_leaves_bottom.data()),
+        thrust::raw_pointer_cast(d_nodes.left.data()),
+        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.parent.data()),
+        thrust::raw_pointer_cast(d_nodes.end.data()),
+        thrust::raw_pointer_cast(d_nodes.top.data()),
+        thrust::raw_pointer_cast(d_nodes.bot.data()),
+        thrust::raw_pointer_cast(d_leaves.parent.data()),
+        thrust::raw_pointer_cast(d_leaves.top.data()),
+        thrust::raw_pointer_cast(d_leaves.bot.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_sphere_xs.data()),
         thrust::raw_pointer_cast(d_sphere_ys.data()),
