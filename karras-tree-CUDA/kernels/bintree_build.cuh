@@ -16,8 +16,8 @@ namespace gpu {
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
-__global__ void build_nodes_kernel(integer32* nodes_right,
-                                   integer32* nodes_left,
+__global__ void build_nodes_kernel(integer32* nodes_left,
+                                   integer32* nodes_right,
                                    integer32* nodes_parent,
                                    integer32* nodes_end,
                                    unsigned int* nodes_level,
