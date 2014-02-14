@@ -118,10 +118,10 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
                                   const integer32* nodes_parent,
                                   const integer32* nodes_end,
                                   volatile float* nodes_top,
-                                  volatile float* nodes_bottom,
+                                  volatile float* nodes_bot,
                                   const integer32* leaves_parent,
                                   volatile float* leaves_top,
-                                  volatile float* leaves_bottom,
+                                  volatile float* leaves_bot,
                                   const size_t n_leaves,
                                   const Float* xs,
                                   const Float* ys,
@@ -134,7 +134,7 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
-    volatile Float *left_bottom, *right_bottom, *left_top, *right_top;
+    volatile Float *left_bot, *right_bot, *left_top, *right_top;
     unsigned int* flags;
     bool first_arrival, in_block;
 
@@ -160,9 +160,9 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
             y_max = y_min + 2*r;
             z_max = z_min + 2*r;
 
-            leaves_bottom[3*tid+0] = x_min;
-            leaves_bottom[3*tid+1] = y_min;
-            leaves_bottom[3*tid+2] = z_min;
+            leaves_bot[3*tid+0] = x_min;
+            leaves_bot[3*tid+1] = y_min;
+            leaves_bot[3*tid+2] = z_min;
 
             leaves_top[3*tid+0] = x_max;
             leaves_top[3*tid+1] = y_max;
@@ -191,33 +191,33 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
                 left_index = nodes_left[index];
                 right_index = nodes_right[index];
                 if (left_index > n_leaves-2) {
-                    left_bottom = &leaves_bottom[3*(left_index-n_leaves+1)];
+                    left_bot = &leaves_bot[3*(left_index-n_leaves+1)];
                     left_top = &leaves_top[3*(left_index-n_leaves+1)];
                 }
                 else {
-                    left_bottom = &nodes_bottom[3*left_index];
+                    left_bot = &nodes_bot[3*left_index];
                     left_top = &nodes_top[3*left_index];
                 }
                 if (right_index > n_leaves-2) {
-                    right_bottom = &leaves_bottom[3*(right_index-n_leaves+1)];
+                    right_bot = &leaves_bot[3*(right_index-n_leaves+1)];
                     right_top = &leaves_top[3*(right_index-n_leaves+1)];
                 }
                 else {
-                    right_bottom = &nodes_bottom[3*right_index];
+                    right_bot = &nodes_bot[3*right_index];
                     right_top = &nodes_top[3*right_index];
                 }
 
-                x_min = min(left_bottom[0], right_bottom[0]);
-                y_min = min(left_bottom[1], right_bottom[1]);
-                z_min = min(left_bottom[2], right_bottom[2]);
+                x_min = min(left_bot[0], right_bot[0]);
+                y_min = min(left_bot[1], right_bot[1]);
+                z_min = min(left_bot[2], right_bot[2]);
 
                 x_max = max(left_top[0], right_top[0]);
                 y_max = max(left_top[1], right_top[1]);
                 z_max = max(left_top[2], right_top[2]);
 
-                nodes_bottom[3*index+0] = x_min;
-                nodes_bottom[3*index+1] = y_min;
-                nodes_bottom[3*index+2] = z_min;
+                nodes_bot[3*index+0] = x_min;
+                nodes_bot[3*index+1] = y_min;
+                nodes_bot[3*index+2] = z_min;
 
                 nodes_top[3*index+0] = x_max;
                 nodes_top[3*index+1] = y_max;
