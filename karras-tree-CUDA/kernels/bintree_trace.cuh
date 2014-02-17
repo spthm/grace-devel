@@ -51,8 +51,7 @@ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
                                            const SlopeProp& slope,
-                                           const float* node_top,
-                                           const float* node_bot)
+                                           const Box& node_AABB)
 {
 
     float ox = ray.ox;
@@ -65,12 +64,12 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
 
     float l = ray.length;
 
-    float bx = node_bot[0];
-    float by = node_bot[1];
-    float bz = node_bot[2];
-    float tx = node_top[0];
-    float ty = node_top[1];
-    float tz = node_top[2];
+    float tx = node_AABB.tx;
+    float ty = node_AABB.ty;
+    float tz = node_AABB.tz;
+    float bx = node_AABB.bx;
+    float by = node_AABB.by;
+    float bz = node_AABB.bz;
 
     float xbyy = slope.xbyy;
     float ybyx = slope.ybyx;
@@ -309,8 +308,7 @@ __global__ void trace_hitcount(const Ray* rays,
                                unsigned int* hit_counts,
                                const integer32* nodes_left,
                                const integer32* nodes_right,
-                               const float* nodes_top,
-                               const float* nodes_bot,
+                               const Box* nodes_AABB,
                                size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
@@ -354,8 +352,7 @@ __global__ void trace_hitcount(const Ray* rays,
                 // If current node is hit, put its right child at the top of
                 // the stack and move to its left child.
                 if (AABB_hit_eisemann(ray, slope,
-                                      &nodes_top[3*node_index],
-                                      &nodes_bot[3*node_index]))
+                                      nodes_AABB[node_index]))
                 {
                     stack_index++;
                     trace_stack[stack_index] = nodes_right[node_index];
@@ -405,8 +402,7 @@ __global__ void trace_property(const Ray* rays,
                                Tout* out_data,
                                const integer32* nodes_left,
                                const integer32* nodes_right,
-                               const float* nodes_top,
-                               const float* nodes_bot,
+                               const Box* nodes_AABB,
                                const size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
@@ -442,8 +438,7 @@ __global__ void trace_property(const Ray* rays,
             while (!is_leaf && stack_index >= 0)
             {
                 if (AABB_hit_eisemann(ray, slope,
-                                      &nodes_top[3*node_index],
-                                      &nodes_bot[3*node_index]))
+                                      nodes_AABB[node_index]))
                 {
                     stack_index++;
                     trace_stack[stack_index] = nodes_right[node_index];
@@ -495,8 +490,7 @@ __global__ void trace(const Ray* rays,
                       const uinteger32* hit_offsets,
                       const integer32* nodes_left,
                       const integer32* nodes_right,
-                      const float* nodes_top,
-                      const float* nodes_bot,
+                      const Box* nodes_AABB,
                       const size_t n_nodes,
                       const Float* xs,
                       const Float* ys,
@@ -530,8 +524,7 @@ __global__ void trace(const Ray* rays,
             while (!is_leaf && stack_index >= 0)
             {
                 if (AABB_hit_eisemann(ray, slope,
-                                      &nodes_top[3*node_index],
-                                      &nodes_bot[3*node_index]))
+                                      nodes_AABB[node_index]))
                 {
                     stack_index++;
                     trace_stack[stack_index] = nodes_right[node_index];

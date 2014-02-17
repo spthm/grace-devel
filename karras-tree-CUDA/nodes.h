@@ -7,6 +7,12 @@
 
 namespace grace {
 
+struct Box
+{
+    float tx, ty, tz;
+    float bx, by, bz;
+};
+
 class Nodes
 {
 public:
@@ -17,14 +23,13 @@ public:
 
     thrust::device_vector<unsigned int> level;
 
-    thrust::device_vector<float> top;
-    thrust::device_vector<float> bot;
+    thrust::device_vector<Box> AABB;
 
     Nodes(unsigned int N_nodes) : left(N_nodes), right(N_nodes),
                                   parent(N_nodes),
                                   end(N_nodes),
                                   level(N_nodes),
-                                  top(3*N_nodes), bot(3*N_nodes) {}
+                                  AABB(N_nodes) {}
 };
 
 class Leaves
@@ -32,11 +37,9 @@ class Leaves
 public:
     thrust::device_vector<integer32> parent;
 
-    thrust::device_vector<float> top;
-    thrust::device_vector<float> bot;
+    thrust::device_vector<Box> AABB;
 
-    Leaves(unsigned int N_leaves) : parent(N_leaves),
-                                    top(3*N_leaves), bot(3*N_leaves) {}
+    Leaves(unsigned int N_leaves) : parent(N_leaves), AABB(N_leaves) {}
 };
 
 class H_Nodes
@@ -49,14 +52,13 @@ public:
 
     thrust::host_vector<unsigned int> level;
 
-    thrust::host_vector<float> top;
-    thrust::host_vector<float> bot;
+    thrust::host_vector<Box> AABB;
 
     H_Nodes(unsigned int N_nodes) : left(N_nodes), right(N_nodes),
                                     parent(N_nodes),
                                     end(N_nodes),
                                     level(N_nodes),
-                                    top(3*N_nodes), bot(3*N_nodes) {}
+                                    AABB(N_nodes) {}
 };
 
 class H_Leaves
@@ -64,11 +66,9 @@ class H_Leaves
 public:
     thrust::host_vector<integer32> parent;
 
-    thrust::host_vector<float> top;
-    thrust::host_vector<float> bot;
+    thrust::host_vector<Box> AABB;
 
-    H_Leaves(unsigned int N_leaves) : parent(N_leaves),
-                                      top(3*N_leaves), bot(3*N_leaves) {}
+    H_Leaves(unsigned int N_leaves) : parent(N_leaves), AABB(N_leaves) {}
 };
 
 struct Node

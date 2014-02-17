@@ -117,11 +117,9 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
                                   const integer32* nodes_right,
                                   const integer32* nodes_parent,
                                   const integer32* nodes_end,
-                                  volatile float* nodes_top,
-                                  volatile float* nodes_bot,
+                                  volatile Box* nodes_AABB,
                                   const integer32* leaves_parent,
-                                  volatile float* leaves_top,
-                                  volatile float* leaves_bot,
+                                  volatile Box* leaves_AABB,
                                   const size_t n_leaves,
                                   const Float* xs,
                                   const Float* ys,
@@ -134,7 +132,7 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
     Float r;
-    volatile Float *left_bot, *right_bot, *left_top, *right_top;
+    volatile Box *left_AABB, *right_AABB;
     unsigned int* flags;
     bool first_arrival, in_block;
 
@@ -160,13 +158,13 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
             y_max = y_min + 2*r;
             z_max = z_min + 2*r;
 
-            leaves_bot[3*tid+0] = x_min;
-            leaves_bot[3*tid+1] = y_min;
-            leaves_bot[3*tid+2] = z_min;
+            leaves_AABB[tid].tx = x_max;
+            leaves_AABB[tid].ty = y_max;
+            leaves_AABB[tid].tz = z_max;
 
-            leaves_top[3*tid+0] = x_max;
-            leaves_top[3*tid+1] = y_max;
-            leaves_top[3*tid+2] = z_max;
+            leaves_AABB[tid].bx = x_min;
+            leaves_AABB[tid].by = y_min;
+            leaves_AABB[tid].bz = z_min;
 
             // Travel up the tree.  The second thread to reach a node writes
             // its AABB based on those of its children.
@@ -191,37 +189,33 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
                 left_index = nodes_left[index];
                 right_index = nodes_right[index];
                 if (left_index > n_leaves-2) {
-                    left_bot = &leaves_bot[3*(left_index-n_leaves+1)];
-                    left_top = &leaves_top[3*(left_index-n_leaves+1)];
+                    left_AABB = &leaves_AABB[(left_index-n_leaves+1)];
                 }
                 else {
-                    left_bot = &nodes_bot[3*left_index];
-                    left_top = &nodes_top[3*left_index];
+                    left_AABB = &nodes_AABB[left_index];
                 }
                 if (right_index > n_leaves-2) {
-                    right_bot = &leaves_bot[3*(right_index-n_leaves+1)];
-                    right_top = &leaves_top[3*(right_index-n_leaves+1)];
+                    right_AABB = &leaves_AABB[(right_index-n_leaves+1)];
                 }
                 else {
-                    right_bot = &nodes_bot[3*right_index];
-                    right_top = &nodes_top[3*right_index];
+                    right_AABB = &nodes_AABB[right_index];
                 }
 
-                x_min = min(left_bot[0], right_bot[0]);
-                y_min = min(left_bot[1], right_bot[1]);
-                z_min = min(left_bot[2], right_bot[2]);
+                x_max = max(left_AABB->tx, right_AABB->tx);
+                y_max = max(left_AABB->ty, right_AABB->ty);
+                z_max = max(left_AABB->tz, right_AABB->tz);
 
-                x_max = max(left_top[0], right_top[0]);
-                y_max = max(left_top[1], right_top[1]);
-                z_max = max(left_top[2], right_top[2]);
+                x_min = min(left_AABB->bx, right_AABB->bx);
+                y_min = min(left_AABB->by, right_AABB->by);
+                z_min = min(left_AABB->bz, right_AABB->bz);
 
-                nodes_bot[3*index+0] = x_min;
-                nodes_bot[3*index+1] = y_min;
-                nodes_bot[3*index+2] = z_min;
+                nodes_AABB[index].tx = x_max;
+                nodes_AABB[index].ty = y_max;
+                nodes_AABB[index].tz = z_max;
 
-                nodes_top[3*index+0] = x_max;
-                nodes_top[3*index+1] = y_max;
-                nodes_top[3*index+2] = z_max;
+                nodes_AABB[index].bx = x_min;
+                nodes_AABB[index].by = y_min;
+                nodes_AABB[index].bz = z_min;
 
                 if (index == 0) {
                     // Root node processed, so all nodes processed.
@@ -330,11 +324,9 @@ void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
         thrust::raw_pointer_cast(d_nodes.right.data()),
         thrust::raw_pointer_cast(d_nodes.parent.data()),
         thrust::raw_pointer_cast(d_nodes.end.data()),
-        thrust::raw_pointer_cast(d_nodes.top.data()),
-        thrust::raw_pointer_cast(d_nodes.bot.data()),
+        thrust::raw_pointer_cast(d_nodes.AABB.data()),
         thrust::raw_pointer_cast(d_leaves.parent.data()),
-        thrust::raw_pointer_cast(d_leaves.top.data()),
-        thrust::raw_pointer_cast(d_leaves.bot.data()),
+        thrust::raw_pointer_cast(d_leaves.AABB.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_sphere_xs.data()),
         thrust::raw_pointer_cast(d_sphere_ys.data()),

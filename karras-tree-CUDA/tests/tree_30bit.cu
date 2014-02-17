@@ -203,52 +203,53 @@ int main(int argc, char* argv[]) {
 
     /* Save node and leaf data. */
 
-    thrust::host_vector<grace::integer32> h_nodes_left = d_nodes.left;
-    thrust::host_vector<grace::integer32> h_nodes_right = d_nodes.right;
-    thrust::host_vector<grace::integer32> h_nodes_parent = d_nodes.parent;
-    thrust::host_vector<grace::integer32> h_nodes_end = d_nodes.end;
-    thrust::host_vector<unsigned int> h_nodes_level = d_nodes.level;
-    thrust::host_vector<float> h_nodes_top = d_nodes.top;
-    thrust::host_vector<float> h_nodes_bot = d_nodes.bot;
+    grace::H_Nodes h_nodes(N-1);
+    grace::H_Leaves h_leaves(N);
 
-    thrust::host_vector<grace::integer32> h_leaves_parent = d_leaves.parent;
-    thrust::host_vector<float> h_leaves_top = d_leaves.top;
-    thrust::host_vector<float> h_leaves_bot = d_leaves.bot;
+    h_nodes.left = d_nodes.left;
+    h_nodes.right = d_nodes.right;
+    h_nodes.parent = d_nodes.parent;
+    h_nodes.end = d_nodes.end;
+    h_nodes.level = d_nodes.level;
+    h_nodes.AABB = d_nodes.AABB;
+
+    h_leaves.parent = d_leaves.parent;
+    h_leaves.AABB = d_leaves.AABB;
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
         for (unsigned int i=0; i<N-1; i++) {
             outfile << "i:               " << i << std::endl;
-            outfile << "level:           " << h_nodes_level[i] << std::endl;
+            outfile << "level:           " << h_nodes.level[i] << std::endl;
             // Output the actual index into the leaf array for comparison
             // to the Python code.
-            if (h_nodes_left[i] > N-2) {
+            if (h_nodes.left[i] > N-2) {
                 outfile << "left leaf flag:  True" << std::endl;
-                outfile << "left:            " << h_nodes_left[i] - (N-1)
+                outfile << "left:            " << h_nodes.left[i] - (N-1)
                         << std::endl;
             }
             else {
                 outfile << "left leaf flag:  False" << std::endl;
-                outfile << "left:            " << h_nodes_left[i] << std::endl;
+                outfile << "left:            " << h_nodes.left[i] << std::endl;
             }
-            if (h_nodes_right[i]> N-2) {
+            if (h_nodes.right[i]> N-2) {
                 outfile << "right leaf flag:  True" << std::endl;
-                outfile << "right:            " << h_nodes_right[i] - (N-1)
+                outfile << "right:            " << h_nodes.right[i] - (N-1)
                         << std::endl;
             }
             else {
                 outfile << "right leaf flag:  False" << std::endl;
-                outfile << "right:            " << h_nodes_right[i]
+                outfile << "right:            " << h_nodes.right[i]
                         << std::endl;
             }
-            outfile << "parent:          " << h_nodes_parent[i] << std::endl;
-            outfile << "AABB_bottom:     " << h_nodes_bot[3*i+0] << ", "
-                                           << h_nodes_bot[3*i+1] << ", "
-                                           << h_nodes_bot[3*i+2]
+            outfile << "parent:          " << h_nodes.parent[i] << std::endl;
+            outfile << "AABB_bottom:     " << h_nodes.AABB[i].bx << ", "
+                                           << h_nodes.AABB[i].by << ", "
+                                           << h_nodes.AABB[i].bz
                                            << std::endl;
-            outfile << "AABB_top:        " << h_nodes_top[3*i+0] << ", "
-                                           << h_nodes_top[3*i+1] << ", "
-                                           << h_nodes_top[3*i+2] << std::endl;
+            outfile << "AABB_top:        " << h_nodes.AABB[i].tx << ", "
+                                           << h_nodes.AABB[i].ty << ", "
+                                           << h_nodes.AABB[i].tz << std::endl;
             outfile << std::endl;
         }
         outfile.close();
@@ -256,13 +257,13 @@ int main(int argc, char* argv[]) {
         outfile.open("outdata/leaves.txt");
         for (unsigned int i=0; i<N; i++) {
             outfile << "i:           " << i << std::endl;
-            outfile << "parent:      " << h_leaves_parent[i] << std::endl;
-            outfile << "AABB_bottom: " << h_leaves_bot[3*i+0] << ", "
-                                       << h_leaves_bot[3*i+1] << ", "
-                                       << h_leaves_bot[3*i+2] << std::endl;
-            outfile << "AABB_top:    " << h_leaves_top[3*i+0] << ", "
-                                       << h_leaves_top[3*i+1] << ", "
-                                       << h_leaves_top[3*i+2] << std::endl;
+            outfile << "parent:      " << h_leaves.parent[i] << std::endl;
+            outfile << "AABB_bottom: " << h_leaves.AABB[i].bx << ", "
+                                       << h_leaves.AABB[i].by << ", "
+                                       << h_leaves.AABB[i].bz << std::endl;
+            outfile << "AABB_top:    " << h_leaves.AABB[i].tx << ", "
+                                       << h_leaves.AABB[i].ty << ", "
+                                       << h_leaves.AABB[i].tz << std::endl;
             outfile << std::endl;
         }
     }
