@@ -54,7 +54,7 @@ __global__ void morton_keys_kernel(const Float* xs,
                                    const Float* ys,
                                    const Float* zs,
                                    UInteger* keys,
-                                   const uinteger32 n_keys,
+                                   const size_t n_keys,
                                    const Vector3<Float> scale)
 {
     uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -62,6 +62,25 @@ __global__ void morton_keys_kernel(const Float* xs,
         UInteger x = (UInteger) (scale.x * xs[tid]);
         UInteger y = (UInteger) (scale.y * ys[tid]);
         UInteger z = (UInteger) (scale.z * zs[tid]);
+
+        keys[tid] = morton_key(x, y, z);
+
+        tid += blockDim.x * gridDim.x;
+    }
+    return;
+}
+
+template <typename UInteger, typename Float4>
+__global__ void morton_keys_kernel(const Float4* xyzr,
+                                   UInteger* keys,
+                                   const size_t n_keys,
+                                   const Float4 scale)
+{
+    uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
+    while (tid < n_keys) {
+        UInteger x = (UInteger) (scale.x * xyzr[tid].x);
+        UInteger y = (UInteger) (scale.y * xyzr[tid].y);
+        UInteger z = (UInteger) (scale.z * xyzr[tid].z);
 
         keys[tid] = morton_key(x, y, z);
 
@@ -87,10 +106,6 @@ void morton_keys(const thrust::device_vector<Float>& d_xs,
                          (Float)span / (AABB_top.z - AABB_bottom.z));
     size_t n_keys = d_xs.size();
 
-    scale.x = span / (AABB_top.x - AABB_bottom.x);
-    scale.y = span / (AABB_top.y - AABB_bottom.y);
-    scale.z = span / (AABB_top.z - AABB_bottom.z);
-
     int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
                                         / MORTON_THREADS_PER_BLOCK));
 
@@ -99,6 +114,31 @@ void morton_keys(const thrust::device_vector<Float>& d_xs,
         thrust::raw_pointer_cast(d_xs.data()),
         thrust::raw_pointer_cast(d_ys.data()),
         thrust::raw_pointer_cast(d_zs.data()),
+        thrust::raw_pointer_cast(d_keys.data()),
+        n_keys,
+        scale);
+}
+
+template <typename UInteger, typename Float4>
+void morton_keys(const thrust::device_vector<Float4>& d_spheres_xyzr,
+                 thrust::device_vector<UInteger>& d_keys,
+                 const Float4 AABB_bottom,
+                 const Float4 AABB_top)
+{
+    unsigned int span = CHAR_BIT * sizeof(UInteger) > 32 ?
+                            ((1u << 21) - 1) : ((1u << 10) - 1);
+    Float4 scale = make_float4(span / (AABB_top.x - AABB_bottom.x),
+                               span / (AABB_top.y - AABB_bottom.y),
+                               span / (AABB_top.z - AABB_bottom.z),
+                               0);
+    size_t n_keys = d_spheres_xyzr.size();
+
+    int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
+                                        / MORTON_THREADS_PER_BLOCK));
+
+    d_keys.resize(n_keys);
+    gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
         thrust::raw_pointer_cast(d_keys.data()),
         n_keys,
         scale);

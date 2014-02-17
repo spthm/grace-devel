@@ -116,30 +116,15 @@ int main(int argc, char* argv[]) {
         /*******************************************************************/
 
         // Generate N random positions and radii, i.e. 4N random floats in [0,1).
-        thrust::host_vector<float> h_x_centres(N);
-        thrust::host_vector<float> h_y_centres(N);
-        thrust::host_vector<float> h_z_centres(N);
-        thrust::host_vector<float> h_radii(N);
+        thrust::host_vector<float4> h_spheres_xyzr(N);
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(N),
-                          h_x_centres.begin(),
-                          random_float_functor(0u, seed_factor) );
-        thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                          thrust::counting_iterator<unsigned int>(N),
-                          h_y_centres.begin(),
-                          random_float_functor(1u, seed_factor) );
-        thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                          thrust::counting_iterator<unsigned int>(N),
-                          h_z_centres.begin(),
-                          random_float_functor(2u, seed_factor) );
-        thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                          thrust::counting_iterator<unsigned int>(N),
-                          h_radii.begin(),
-                          random_float_functor(0.0f, 0.1f, seed_factor) );
+                          h_spheres_xyzr.begin(),
+                          random_float4_functor(0.1f, seed_factor) );
 
         // Set the AABBs.
-        Vector3f bottom(0., 0., 0.);
-        Vector3f top(1., 1., 1.);
+        float4 bottom = make_float4(0., 0., 0., 0.);
+        float4 top = make_float4(1., 1., 1., 0.);
 
 
         /* Profile the tree constructed from random data. */
@@ -156,51 +141,21 @@ int main(int argc, char* argv[]) {
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(tot_start);
             // Copy pristine host-side data to GPU.
-            thrust::device_vector<float> d_x_centres = h_x_centres;
-            thrust::device_vector<float> d_y_centres = h_y_centres;
-            thrust::device_vector<float> d_z_centres = h_z_centres;
-            thrust::device_vector<float> d_radii = h_radii;
+            thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
             // Generate the Morton keys for each position.
             thrust::device_vector<grace::uinteger32> d_keys(N);
             cudaEventRecord(part_start);
-            grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
-                               d_keys, bottom, top);
+            grace::morton_keys(d_spheres_xyzr, d_keys, bottom, top);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             morton_tot += part_elapsed;
 
-            // Sort the positions by their keys and save the sorted keys.
-            thrust::device_vector<int> d_indices(N);
-            thrust::device_vector<float> d_tmp(N);
+            // Sort the positions by their keys.
             cudaEventRecord(part_start);
-            thrust::sequence(d_indices.begin(), d_indices.end());
-            thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
-            thrust::gather(d_indices.begin(),
-                           d_indices.end(),
-                           d_x_centres.begin(),
-                           d_tmp.begin());
-            d_x_centres = d_tmp;
-
-            thrust::gather(d_indices.begin(),
-                           d_indices.end(),
-                           d_y_centres.begin(),
-                           d_tmp.begin());
-            d_y_centres = d_tmp;
-
-            thrust::gather(d_indices.begin(),
-                           d_indices.end(),
-                           d_z_centres.begin(),
-                           d_tmp.begin());
-            d_z_centres = d_tmp;
-
-            thrust::gather(d_indices.begin(),
-                           d_indices.end(),
-                           d_radii.begin(),
-                           d_tmp.begin());
-            d_radii = d_tmp;
+            thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                                d_spheres_xyzr.begin());
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -220,7 +175,7 @@ int main(int argc, char* argv[]) {
             // Find the AABBs.
             cudaEventRecord(part_start);
             grace::find_AABBs(d_nodes, d_leaves,
-                              d_x_centres, d_y_centres, d_z_centres, d_radii);
+                              d_spheres_xyzr);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -328,15 +283,11 @@ int main(int argc, char* argv[]) {
             d_nodes.right = h_nodes.right;
             d_nodes.parent = h_nodes.parent;
             d_nodes.end = h_nodes.end;
-            thrust::device_vector<float> d_x_centres = h_x_centres;
-            thrust::device_vector<float> d_y_centres = h_y_centres;
-            thrust::device_vector<float> d_z_centres = h_z_centres;
-            thrust::device_vector<float> d_radii = h_radii;
+            thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
             // Find the AABBs.
             cudaEventRecord(part_start);
-            grace::find_AABBs(d_nodes, d_leaves,
-                              d_x_centres, d_y_centres, d_z_centres, d_radii);
+            grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

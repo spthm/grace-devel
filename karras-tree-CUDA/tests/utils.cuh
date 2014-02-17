@@ -85,6 +85,59 @@ public:
     }
 };
 
+class random_float4_functor
+{
+    float4 xyzw;
+    unsigned int seed;
+    thrust::uniform_real_distribution<float> uniform;
+    const float w_scale;
+    const unsigned int seed_factor;
+
+public:
+    random_float4_functor() : uniform(0.0f, 1.0f), w_scale(1.0f),
+                              seed_factor(1u) {}
+
+    explicit random_float4_functor(const float low_,
+                                  const float high_) :
+        uniform(low_, high_), w_scale(1.0f), seed_factor(1u) {}
+
+    explicit random_float4_functor(const float low_,
+                                  const float high_,
+                                  const float w_scale_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
+
+    explicit random_float4_functor(const float low_,
+                                  const float high_,
+                                  const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(1.0f), seed_factor(seed_factor_) {}
+
+    explicit random_float4_functor(const float w_scale_,
+                                  const unsigned int seed_factor_) :
+        uniform(0.0f, 1.0f), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    explicit random_float4_functor(const float low_,
+                                  const float high_,
+                                  const float w_scale_,
+                                  const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    __host__ __device__ float4 operator() (unsigned int n)
+    {
+        seed = n;
+        for (unsigned int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
+        thrust::default_random_engine rng(seed);
+
+        xyzw.x = uniform(rng);
+        xyzw.y = uniform(rng);
+        xyzw.z = uniform(rng);
+        xyzw.w = w_scale*uniform(rng);
+
+        return xyzw;
+    }
+};
+
 inline void skip_spacer(std::ifstream& file) {
     int dummy;
     file.read((char*)&dummy, sizeof(int));

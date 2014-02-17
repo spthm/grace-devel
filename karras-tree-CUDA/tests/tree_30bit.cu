@@ -20,6 +20,7 @@ int main(int argc, char* argv[]) {
     typedef grace::Vector3<float> Vector3f;
     std::ofstream outfile;
     thrust::host_vector<float> h_write_f;
+    thrust::host_vector<float4> h_write_f4;
     thrust::host_vector<grace::uinteger32> h_write_uint;
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
@@ -57,62 +58,42 @@ int main(int argc, char* argv[]) {
     }
     std::cout << "Will generate " << N << " random points." << std::endl;
 
-    thrust::device_vector<float> d_x_centres(N);
-    thrust::device_vector<float> d_y_centres(N);
-    thrust::device_vector<float> d_z_centres(N);
+
+    /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
+
+    thrust::device_vector<float4> d_spheres_xyzr(N);
 
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
-                      d_x_centres.begin(),
-                      random_float_functor(0u, seed_factor) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_y_centres.begin(),
-                      random_float_functor(1u, seed_factor) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_z_centres.begin(),
-                      random_float_functor(2u, seed_factor) );
-
-
-    /* Generate N random radii as floats in [0,1). */
-
-    thrust::device_vector<float> d_radii(N);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_radii.begin(),
-                      random_float_functor(0.0f, 0.1f, seed_factor) );
+                      d_spheres_xyzr.begin(),
+                      random_float4_functor(0.1f, seed_factor) );
 
 
     /* Save randomly generated data if requested. */
 
     if (save_in) {
-        h_write_f = d_x_centres;
+        h_write_f4 = d_spheres_xyzr;
         outfile.open("indata/x_fdata.txt");
         for (unsigned int i=0; i<N; i++) {
-            outfile << h_write_f[i] << std::endl;
+            outfile << h_write_f4[i].x << std::endl;
         }
         outfile.close();
 
-        h_write_f = d_y_centres;
         outfile.open("indata/y_fdata.txt");
         for (unsigned int i=0; i<N; i++) {
-            outfile << h_write_f[i] << std::endl;
+            outfile << h_write_f4[i].y << std::endl;
         }
         outfile.close();
 
-        h_write_f = d_z_centres;
         outfile.open("indata/z_fdata.txt");
         for (unsigned int i=0; i<N; i++) {
-            outfile << h_write_f[i] << std::endl;
+            outfile << h_write_f4[i].z << std::endl;
         }
         outfile.close();
 
-        h_write_f = d_radii;
         outfile.open("indata/r_fdata.txt");
         for (unsigned int i=0; i<N; i++) {
-            outfile << h_write_f[i] << std::endl;
+            outfile << h_write_f4[i].w << std::endl;
         }
         outfile.close();
     }
@@ -122,11 +103,10 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
-    Vector3f bottom(0., 0., 0.);
-    Vector3f top(1., 1., 1.);
+    float4 bottom = make_float4(0., 0., 0., 0.);
+    float4 top = make_float4(1., 1., 1., 0.);
 
-    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
-                       d_keys, bottom, top);
+    grace::morton_keys(d_spheres_xyzr, d_keys, bottom, top);
 
     if (save_out) {
         h_write_uint = d_keys;
@@ -146,34 +126,7 @@ int main(int argc, char* argv[]) {
 
     /* Sort the position vectors by their keys and save sorted keys. */
 
-    thrust::device_vector<int> d_indices(N);
-    thrust::device_vector<float> d_tmp(N);
-    thrust::sequence(d_indices.begin(), d_indices.end());
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_x_centres.begin(),
-                   d_tmp.begin());
-    d_x_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_y_centres.begin(),
-                   d_tmp.begin());
-    d_y_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_z_centres.begin(),
-                   d_tmp.begin());
-    d_z_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_radii.begin(),
-                   d_tmp.begin());
-    d_radii = d_tmp;
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     if (save_out) {
         h_write_uint = d_keys;
@@ -197,8 +150,7 @@ int main(int argc, char* argv[]) {
     grace::Leaves d_leaves(N);
 
     grace::build_nodes(d_nodes, d_leaves, d_keys);
-    grace::find_AABBs(d_nodes, d_leaves,
-                      d_x_centres, d_y_centres, d_z_centres, d_radii);
+    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
     /* Save node and leaf data. */

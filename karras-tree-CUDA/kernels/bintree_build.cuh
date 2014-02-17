@@ -112,7 +112,7 @@ __global__ void build_nodes_kernel(integer32* nodes_left,
     return;
 }
 
-template <typename Float>
+template <typename Float, typename Float4>
 __global__ void find_AABBs_kernel(const integer32* nodes_left,
                                   const integer32* nodes_right,
                                   const integer32* nodes_parent,
@@ -121,10 +121,7 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
                                   const integer32* leaves_parent,
                                   volatile Box* leaves_AABB,
                                   const size_t n_leaves,
-                                  const Float* xs,
-                                  const Float* ys,
-                                  const Float* zs,
-                                  const Float* radii,
+                                  const Float4* spheres_xyzr,
                                   unsigned int* g_flags)
 {
     integer32 tid, index, left_index, right_index;
@@ -149,10 +146,11 @@ __global__ void find_AABBs_kernel(const integer32* nodes_left,
         if (tid < n_leaves)
         {
             // Find the AABB of each leaf (i.e. each primitive) and write it.
-            r = radii[tid];
-            x_min = xs[tid] - r;
-            y_min = ys[tid] - r;
-            z_min = zs[tid] - r;
+            Float4 xyzr = spheres_xyzr[tid];
+            r = xyzr.w;
+            x_min = xyzr.x - r;
+            y_min = xyzr.y - r;
+            z_min = xyzr.z - r;
 
             x_max = x_min + 2*r;
             y_max = y_min + 2*r;
@@ -304,12 +302,9 @@ void build_nodes(Nodes& d_nodes, Leaves& d_leaves,
         n_keys);
 }
 
-template <typename Float>
+template <typename Float4>
 void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
-                const thrust::device_vector<Float>& d_sphere_xs,
-                const thrust::device_vector<Float>& d_sphere_ys,
-                const thrust::device_vector<Float>& d_sphere_zs,
-                const thrust::device_vector<Float>& d_sphere_radii)
+                const thrust::device_vector<Float4>& d_spheres_xyzr)
 {
     thrust::device_vector<unsigned int> d_AABB_flags;
 
@@ -319,7 +314,7 @@ void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
                                         / AABB_THREADS_PER_BLOCK));
 
-    gpu::find_AABBs_kernel<<<blocks,AABB_THREADS_PER_BLOCK>>>(
+    gpu::find_AABBs_kernel<float, Float4><<<blocks,AABB_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.left.data()),
         thrust::raw_pointer_cast(d_nodes.right.data()),
         thrust::raw_pointer_cast(d_nodes.parent.data()),
@@ -328,10 +323,7 @@ void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
         thrust::raw_pointer_cast(d_leaves.parent.data()),
         thrust::raw_pointer_cast(d_leaves.AABB.data()),
         n_leaves,
-        thrust::raw_pointer_cast(d_sphere_xs.data()),
-        thrust::raw_pointer_cast(d_sphere_ys.data()),
-        thrust::raw_pointer_cast(d_sphere_zs.data()),
-        thrust::raw_pointer_cast(d_sphere_radii.data()),
+        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
         thrust::raw_pointer_cast(d_AABB_flags.data())
     );
 }
