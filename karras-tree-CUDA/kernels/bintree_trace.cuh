@@ -51,7 +51,8 @@ __host__ __device__ SlopeProp slope_properties(const Ray& ray)
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
                                            const SlopeProp& slope,
-                                           const Node& node)
+                                           const float* node_top,
+                                           const float* node_bot)
 {
 
     float ox = ray.ox;
@@ -64,12 +65,12 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
 
     float l = ray.length;
 
-    float bx = node.bottom[0];
-    float by = node.bottom[1];
-    float bz = node.bottom[2];
-    float tx = node.top[0];
-    float ty = node.top[1];
-    float tz = node.top[2];
+    float bx = node_bot[0];
+    float by = node_bot[1];
+    float bz = node_bot[2];
+    float tx = node_top[0];
+    float ty = node_top[1];
+    float tz = node_top[2];
 
     float xbyy = slope.xbyy;
     float ybyx = slope.ybyx;
@@ -304,10 +305,12 @@ namespace gpu {
 // Trace through the field, but save only the number of hits for each ray.
 template <typename Float>
 __global__ void trace_hitcount(const Ray* rays,
-                               const int n_rays,
+                               const size_t n_rays,
                                unsigned int* hit_counts,
-                               const Node* nodes,
-                               const Leaf* leaves,
+                               const integer32* nodes_left,
+                               const integer32* nodes_right,
+                               const float* nodes_top,
+                               const float* nodes_bot,
                                size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
@@ -318,7 +321,7 @@ __global__ void trace_hitcount(const Ray* rays,
     unsigned int ray_hit_count;
     integer32 node_index;
     bool is_leaf;
-    // Unused.
+    // Unused in this kernel.
     float b, d;
     // N (31) levels inc. leaves => N-1 (30) key length.
     // One extra so the bottom of the stack can contain a marker that tells
@@ -350,12 +353,14 @@ __global__ void trace_hitcount(const Ray* rays,
             {
                 // If current node is hit, put its right child at the top of
                 // the stack and move to its left child.
-                if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
+                if (AABB_hit_eisemann(ray, slope,
+                                      &nodes_top[3*node_index],
+                                      &nodes_bot[3*node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = nodes[node_index].right;
+                    trace_stack[stack_index] = nodes_right[node_index];
 
-                    node_index = nodes[node_index].left;
+                    node_index = nodes_left[node_index];
 
                 }
                 // If it is not hit, move to the node at the top of the stack.
@@ -398,8 +403,10 @@ template <typename Float, typename Tout, typename Tin>
 __global__ void trace_property(const Ray* rays,
                                const size_t n_rays,
                                Tout* out_data,
-                               const Node* nodes,
-                               const Leaf* leaves,
+                               const integer32* nodes_left,
+                               const integer32* nodes_right,
+                               const float* nodes_top,
+                               const float* nodes_bot,
                                const size_t n_nodes,
                                const Float* xs,
                                const Float* ys,
@@ -434,12 +441,14 @@ __global__ void trace_property(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
+                if (AABB_hit_eisemann(ray, slope,
+                                      &nodes_top[3*node_index],
+                                      &nodes_bot[3*node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = nodes[node_index].right;
+                    trace_stack[stack_index] = nodes_right[node_index];
 
-                    node_index = nodes[node_index].left;
+                    node_index = nodes_left[node_index];
 
                 }
                 else
@@ -484,8 +493,10 @@ __global__ void trace(const Ray* rays,
                       Tout* out_data,
                       Float* hit_dists,
                       const uinteger32* hit_offsets,
-                      const Node* nodes,
-                      const Leaf* leaves,
+                      const integer32* nodes_left,
+                      const integer32* nodes_right,
+                      const float* nodes_top,
+                      const float* nodes_bot,
                       const size_t n_nodes,
                       const Float* xs,
                       const Float* ys,
@@ -518,12 +529,14 @@ __global__ void trace(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                if (AABB_hit_eisemann(ray, slope, nodes[node_index]))
+                if (AABB_hit_eisemann(ray, slope,
+                                      &nodes_top[3*node_index],
+                                      &nodes_bot[3*node_index]))
                 {
                     stack_index++;
-                    trace_stack[stack_index] = nodes[node_index].right;
+                    trace_stack[stack_index] = nodes_right[node_index];
 
-                    node_index = nodes[node_index].left;
+                    node_index = nodes_left[node_index];
 
                 }
                 else

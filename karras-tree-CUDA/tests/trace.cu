@@ -107,8 +107,8 @@ int main(int argc, char* argv[])
     d_indices.shrink_to_fit();
 
     // Build the tree hierarchy from the keys.
-    thrust::device_vector<grace::Node> d_nodes(N-1);
-    thrust::device_vector<grace::Leaf> d_leaves(N);
+    grace::Nodes d_nodes(N-1);
+    grace::Leaves d_leaves(N);
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     // Keys no longer needed.
     d_keys.clear();
@@ -175,9 +175,11 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_rays.data()),
         d_rays.size(),
         thrust::raw_pointer_cast(d_hit_counts.data()),
-        thrust::raw_pointer_cast(d_nodes.data()),
-        thrust::raw_pointer_cast(d_leaves.data()),
-        d_nodes.size(),
+        thrust::raw_pointer_cast(d_nodes.left.data()),
+        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.top.data()),
+        thrust::raw_pointer_cast(d_nodes.bot.data()),
+        d_nodes.left.size(),
         thrust::raw_pointer_cast(d_x_centres.data()),
         thrust::raw_pointer_cast(d_y_centres.data()),
         thrust::raw_pointer_cast(d_z_centres.data()),
