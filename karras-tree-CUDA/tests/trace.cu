@@ -15,7 +15,6 @@
 
 int main(int argc, char* argv[])
 {
-    typedef grace::Vector3<float> Vector3f;
 
     unsigned int N = 1000000;
     unsigned int N_rays = 100000;
@@ -41,70 +40,21 @@ int main(int argc, char* argv[])
 {
 
     // Generate N random positions and radii, i.e. 4N random floats in [0,1).
-    thrust::device_vector<float> d_x_centres(N);
-    thrust::device_vector<float> d_y_centres(N);
-    thrust::device_vector<float> d_z_centres(N);
-    thrust::device_vector<float> d_radii(N);
+    thrust::device_vector<float4> d_spheres_xyzr(N);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
-                      d_x_centres.begin(),
-                      random_float_functor(0u) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_y_centres.begin(),
-                      random_float_functor(1u) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_z_centres.begin(),
-                      random_float_functor(2u) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_radii.begin(),
-                      random_float_functor(0.0f, 0.1f) );
+                      d_spheres_xyzr.begin(),
+                      grace::random_float4_functor(0.1f) );
 
     // Set the centre-containing AABBs.
-    Vector3f bottom(0., 0., 0.);
-    Vector3f top(1., 1., 1.);
+    float4 bot = make_float4(0.f, 0.f, 0.f, 0.f);
+    float4 top = make_float4(1.f, 1.f, 1.f, 0.f);
 
     // Sort the positions by their keys and save the sorted keys.
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
-                       d_keys,
-                       bottom, top);
+    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
 
-    thrust::device_vector<int> d_indices(N);
-    thrust::device_vector<float> d_tmp(N);
-    thrust::sequence(d_indices.begin(), d_indices.end());
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_x_centres.begin(),
-                   d_tmp.begin());
-    d_x_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_y_centres.begin(),
-                   d_tmp.begin());
-    d_y_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_z_centres.begin(),
-                   d_tmp.begin());
-    d_z_centres = d_tmp;
-
-    thrust::gather(d_indices.begin(),
-                   d_indices.end(),
-                   d_radii.begin(),
-                   d_tmp.begin());
-    d_radii = d_tmp;
-    // Clear temporary storage.
-    d_tmp.clear();
-    d_tmp.shrink_to_fit();
-    d_indices.clear();
-    d_indices.shrink_to_fit();
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     // Build the tree hierarchy from the keys.
     grace::Nodes d_nodes(N-1);
@@ -113,8 +63,7 @@ int main(int argc, char* argv[])
     // Keys no longer needed.
     d_keys.clear();
     d_keys.shrink_to_fit();
-    grace::find_AABBs(d_nodes, d_leaves,
-                      d_x_centres, d_y_centres, d_z_centres, d_radii);
+    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
     // Generate the rays (emitted from box centre (.5, .5, .5) of length 2).
     thrust::host_vector<grace::Ray> h_rays(N_rays);
@@ -125,15 +74,15 @@ int main(int argc, char* argv[])
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dxs.begin(),
-                      random_float_functor(0u, -1.0f, 1.0f) );
+                      grace::random_float_functor(0u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dys.begin(),
-                      random_float_functor(1u, -1.0f, 1.0f) );
+                      grace::random_float_functor(1u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dzs.begin(),
-                      random_float_functor(2u, -1.0f, 1.0f) );
+                      grace::random_float_functor(2u, -1.0f, 1.0f) );
     for (int i=0; i<N_rays; i++) {
         float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
                            h_dys[i]*h_dys[i] +
@@ -179,10 +128,7 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_nodes.right.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         d_nodes.left.size(),
-        thrust::raw_pointer_cast(d_x_centres.data()),
-        thrust::raw_pointer_cast(d_y_centres.data()),
-        thrust::raw_pointer_cast(d_z_centres.data()),
-        thrust::raw_pointer_cast(d_radii.data()));
+        thrust::raw_pointer_cast(d_spheres_xyzr.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);
@@ -214,14 +160,12 @@ int main(int argc, char* argv[])
         outfile.width(11);
         outfile.fill('0');
 
-        thrust::host_vector<float> h_x_centres = d_x_centres;
-        thrust::host_vector<float> h_y_centres = d_y_centres;
-        thrust::host_vector<float> h_z_centres = d_z_centres;
-        thrust::host_vector<float> h_radii = d_radii;
+        thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
         outfile.open("indata/spheredata.txt");
         for (int i=0; i<N; i++) {
-            outfile << h_x_centres[i] << " " << h_y_centres[i] << " "
-                    << h_z_centres[i] << " " << h_radii[i] << std::endl;
+            outfile << h_spheres_xyzr[i].x << " " << h_spheres_xyzr[i].y << " "
+                    << h_spheres_xyzr[i].z << " " << h_spheres_xyzr[i].w
+                    << std::endl;
         }
         outfile.close();
 

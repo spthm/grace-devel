@@ -251,19 +251,16 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
     return false;
 }
 
-template <typename Float>
+template <typename Float4, typename Float>
 __host__ __device__ bool sphere_hit(const Ray& ray,
-                                    const Float x,
-                                    const Float y,
-                                    const Float z,
-                                    const Float radius,
+                                    const Float4& xyzr,
                                     Float& b,
                                     Float& dot_p)
 {
     // Ray origin -> sphere centre.
-    float px = x - ray.ox;
-    float py = y - ray.oy;
-    float pz = z - ray.oz;
+    float px = xyzr.x - ray.ox;
+    float py = xyzr.y - ray.oy;
+    float pz = xyzr.z - ray.oz;
 
     // Normalized ray direction.
     float rx = ray.dx;
@@ -279,17 +276,17 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     float bz = pz - dot_p*rz;
     b = sqrtf(bx*bx + by*by +bz*bz);
 
-    if (b >= radius)
+    if (b >= xyzr.w)
         return false;
 
     // If dot_p < 0, to hit the ray origin must be inside the sphere.
     // This is not possible if the distance along the ray (backwards from its
     // origin) to the point of closest approach is > the sphere radius.
-    if (dot_p < -radius)
+    if (dot_p < -xyzr.w)
         return false;
 
     // The ray terminates before piercing the sphere.
-    if (dot_p > ray.length + radius)
+    if (dot_p > ray.length + xyzr.w)
         return false;
 
     // Otherwise, assume we have a hit.  This counts the following partial
@@ -302,7 +299,7 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
 namespace gpu {
 
 // Trace through the field, but save only the number of hits for each ray.
-template <typename Float>
+template <typename Float4>
 __global__ void trace_hitcount(const Ray* rays,
                                const size_t n_rays,
                                unsigned int* hit_counts,
@@ -310,10 +307,7 @@ __global__ void trace_hitcount(const Ray* rays,
                                const integer32* nodes_right,
                                const Box* nodes_AABB,
                                size_t n_nodes,
-                               const Float* xs,
-                               const Float* ys,
-                               const Float* zs,
-                               const Float* radii)
+                               const Float4* xyzrs)
 {
     int ray_index, stack_index;
     unsigned int ray_hit_count;
@@ -373,12 +367,7 @@ __global__ void trace_hitcount(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                if (sphere_hit(ray,
-                               xs[node_index-n_nodes],
-                               ys[node_index-n_nodes],
-                               zs[node_index-n_nodes],
-                               radii[node_index-n_nodes],
-                               b, d))
+                if (sphere_hit(ray, xyzrs[node_index-n_nodes], b, d))
                 {
                     ray_hit_count++;
                 }
@@ -396,7 +385,7 @@ __global__ void trace_hitcount(const Ray* rays,
 }
 
 // Trace through the field and accummulate some property for each intersection.
-template <typename Float, typename Tout, typename Tin>
+template <typename Tout, typename Float4, typename Tin, typename Float>
 __global__ void trace_property(const Ray* rays,
                                const size_t n_rays,
                                Tout* out_data,
@@ -404,10 +393,7 @@ __global__ void trace_property(const Ray* rays,
                                const integer32* nodes_right,
                                const Box* nodes_AABB,
                                const size_t n_nodes,
-                               const Float* xs,
-                               const Float* ys,
-                               const Float* zs,
-                               const Float* radii,
+                               const Float4* xyzrs,
                                const Tin* p_data,
                                const Float* b_integrals)
 {
@@ -415,7 +401,9 @@ __global__ void trace_property(const Ray* rays,
     integer32 node_index;
     bool is_leaf;
     // Impact parameter and distance to intersection.
-    float b, d, r, ir;
+    float b, d;
+    // Sphere radius and 1/radius.
+    float r, ir;
     // Property to trace and accumulate.
     Tout out;
     int trace_stack[31];
@@ -457,13 +445,9 @@ __global__ void trace_property(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                r = radii[node_index-n_nodes];
-                if (sphere_hit(ray,
-                               xs[node_index-n_nodes],
-                               ys[node_index-n_nodes],
-                               zs[node_index-n_nodes],
-                               r, b, d))
+                if (sphere_hit(ray, xyzrs[node_index-n_nodes], b, d))
                 {
+                    r = xyzrs[node_index-n_nodes].w;
                     ir = 1.f / r;
                     b_index = 50 * b * ir;
                     Float kernel_fac = b_integrals[b_index] * ir*ir;
@@ -482,7 +466,7 @@ __global__ void trace_property(const Ray* rays,
 }
 
 // Trace through the field and save information for each intersection.
-template <typename Float, typename Tout, typename Tin>
+template <typename Tout, typename Float, typename Float4, typename Tin>
 __global__ void trace(const Ray* rays,
                       const size_t n_rays,
                       Tout* out_data,
@@ -492,10 +476,7 @@ __global__ void trace(const Ray* rays,
                       const integer32* nodes_right,
                       const Box* nodes_AABB,
                       const size_t n_nodes,
-                      const Float* xs,
-                      const Float* ys,
-                      const Float* zs,
-                      const Float* radii,
+                      const Float4* xyzrs,
                       const Tin* p_data,
                       const Float* b_integrals)
 {
@@ -503,7 +484,8 @@ __global__ void trace(const Ray* rays,
     unsigned int out_index;
     integer32 node_index;
     bool is_leaf;
-    float b, d, r, ir;
+    float b, d;
+    float r, ir;
     int trace_stack[31];
     trace_stack[0] = 0;
 
@@ -543,13 +525,9 @@ __global__ void trace(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                r = radii[node_index-n_nodes];
-                if (sphere_hit(ray,
-                               xs[node_index-n_nodes],
-                               ys[node_index-n_nodes],
-                               zs[node_index-n_nodes],
-                               r, b, d))
+                if (sphere_hit(ray, xyzrs[node_index-n_nodes], b, d))
                 {
+                    r = xyzrs[node_index-n_nodes].w;
                     ir = 1.f / r;
                     b_index = 50 * b * ir;
                     Float kernel_fac = b_integrals[b_index] * ir*ir;
