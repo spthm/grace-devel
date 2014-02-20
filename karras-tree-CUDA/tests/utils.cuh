@@ -217,7 +217,7 @@ void min_max_z(Float* min_z,
     typedef typename thrust::device_vector<Float4>::iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_y());
+                                     float4_compare_z());
     *min_z = ((float4) *min_max.first).z;
     *max_z = ((float4) *min_max.second).z;
 }
@@ -230,7 +230,7 @@ void min_max_w(Float* min_w,
     typedef typename thrust::device_vector<Float4>::iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_y());
+                                     float4_compare_w());
     *min_w = ((float4) *min_max.first).w;
     *max_w = ((float4) *min_max.second).w;
 }
