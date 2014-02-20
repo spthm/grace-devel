@@ -102,16 +102,13 @@ int main(int argc, char* argv[]) {
 
     // Set the AABBs.
     float min_x, max_x;
-    grace::min_max_x<float4,float>(&min_x, &max_x, d_spheres_xyzr);
+    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
 
     float min_y, max_y;
     grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
 
     float min_z, max_z;
     grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
-
-    float min_h, max_h;
-    grace::min_max_w(&min_h, &max_h, d_spheres_xyzr);
 
     float4 bot = make_float4(min_x, min_y, min_z, 0.f);
     float4 top = make_float4(max_x, max_y, max_z, 0.f);
