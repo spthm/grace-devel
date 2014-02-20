@@ -14,7 +14,6 @@
 
 int main(int argc, char* argv[]) {
 
-    typedef grace::Vector3<float> Vector3f;
     cudaDeviceProp deviceProp;
     std::ofstream outfile;
     std::ifstream infile;

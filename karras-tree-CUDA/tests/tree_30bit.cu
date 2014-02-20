@@ -17,7 +17,6 @@
 
 int main(int argc, char* argv[]) {
 
-    typedef grace::Vector3<float> Vector3f;
     std::ofstream outfile;
     thrust::host_vector<float> h_write_f;
     thrust::host_vector<float4> h_write_f4;
