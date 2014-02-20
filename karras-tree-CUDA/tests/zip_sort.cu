@@ -47,6 +47,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t start, stop;
     float elapsed_time;
     float total_time_vector3 = 0;
+    float total_time_float4 = 0;
     float total_time_zip = 0;
     float total_time_gather = 0;
 
@@ -87,11 +88,22 @@ int main(int argc, char* argv[]) {
 
     /* Copy centres into a host vector of Vector3s. */
 
-    thrust::host_vector<Vector3f> h_centres(N);
+    thrust::host_vector<Vector3f> h_centres3(N);
     for (int i=0; i<N; i++) {
-        h_centres[i].x = h_x_centres[i];
-        h_centres[i].y = h_y_centres[i];
-        h_centres[i].z = h_z_centres[i];
+        h_centres3[i].x = h_x_centres[i];
+        h_centres3[i].y = h_y_centres[i];
+        h_centres3[i].z = h_z_centres[i];
+    }
+
+
+    /* Copy centres into a host vector of float4s. */
+
+    thrust::host_vector<float4> h_centres4(N);
+    for (int i=0; i<N; i++) {
+        h_centres4[i].x = h_x_centres[i];
+        h_centres4[i].y = h_y_centres[i];
+        h_centres4[i].z = h_z_centres[i];
+        h_centres4[i].w = 0.0f;
     }
 
 
@@ -118,14 +130,14 @@ int main(int argc, char* argv[]) {
 
     /* Measure time for sorting the Vector3. */
 
-    thrust::device_vector<Vector3f> d_centres = h_centres;
+    thrust::device_vector<Vector3f> d_centres3 = h_centres3;
     std::cout << "Running Vector3 sort iterations..." << std::endl;
     for (int i=0; i<Niter; i++) {
         cudaEventCreate(&start);
         cudaEventCreate(&stop);
         cudaEventRecord(start, 0);
 
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres.begin());
+        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres3.begin());
 
         cudaEventRecord(stop, 0);
         cudaEventSynchronize(stop);
@@ -136,7 +148,32 @@ int main(int argc, char* argv[]) {
         cudaEventDestroy(start);
         cudaEventDestroy(stop);
 
-        d_centres = h_centres;
+        d_centres3 = h_centres3;
+        d_keys = h_keys;
+    }
+
+
+    /* Measure time for sorting the float4. */
+
+    thrust::device_vector<float4> d_centres4 = h_centres4;
+    std::cout << "Running float4 sort iterations..." << std::endl;
+    for (int i=0; i<Niter; i++) {
+        cudaEventCreate(&start);
+        cudaEventCreate(&stop);
+        cudaEventRecord(start, 0);
+
+        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres4.begin());
+
+        cudaEventRecord(stop, 0);
+        cudaEventSynchronize(stop);
+
+        cudaEventElapsedTime(&elapsed_time, start, stop);
+        total_time_float4 += elapsed_time;
+
+        cudaEventDestroy(start);
+        cudaEventDestroy(stop);
+
+        d_centres4 = h_centres4;
         d_keys = h_keys;
     }
 
@@ -222,6 +259,8 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Mean time taken for Vector3:            "
               << total_time_vector3 / (float) Niter << " ms." << std::endl;
+    std::cout << "Mean time taken for float4:             "
+              << total_time_float4 / (float) Niter << " ms." << std::endl;
     std::cout << "Mean time taken for zip iterator:       "
               << total_time_zip / (float) Niter << " ms." << std::endl;
     std::cout << "Mean time taken for indices and gather: "
