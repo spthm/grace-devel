@@ -120,7 +120,7 @@ int main(int argc, char* argv[]) {
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(N),
                           h_spheres_xyzr.begin(),
-                          random_float4_functor(0.1f, seed_factor) );
+                          grace::random_float4_functor(0.1f, seed_factor) );
 
         // Set the AABBs.
         float4 bottom = make_float4(0., 0., 0., 0.);
