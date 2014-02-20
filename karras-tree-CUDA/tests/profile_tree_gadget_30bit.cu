@@ -85,33 +85,33 @@ int main(int argc, char* argv[]) {
               << header.npart[1] << " dark matter particles." << std::endl;
 
     // Read in positions and smoothing lengths from Gadget-2 file.
-    thrust::host_vector<float4> h_xyzh(N);
+    thrust::host_vector<float4> h_spheres_xyzr(N);
     thrust::host_vector<float> h_masses(N);
     thrust::host_vector<float> h_rho(N);
 
     std::cout << "Reading in file..." << std::endl;
     infile.open(infile_name.c_str(), std::ios::binary);
-    grace::read_gadget_gas(infile, h_xyzh, h_masses, h_rho);
+    grace::read_gadget_gas(infile, h_spheres_xyzr, h_masses, h_rho);
     infile.close();
     // Masses unused.  Free space.
     h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
     // Copy to device;
-    thrust::device_vector<float4> d_xyzh = h_xyzh;
+    thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
 
     // Set the AABBs.
     float min_x, max_x;
-    grace::min_max_x<float4,float>(&min_x, &max_x, d_xyzh);
+    grace::min_max_x<float4,float>(&min_x, &max_x, d_spheres_xyzr);
 
     float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_xyzh);
+    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
 
     float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_xyzh);
+    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
 
     float min_h, max_h;
-    grace::min_max_w(&min_h, &max_h, d_xyzh);
+    grace::min_max_w(&min_h, &max_h, d_spheres_xyzr);
 
     float4 bot = make_float4(min_x, min_y, min_z, 0.f);
     float4 top = make_float4(max_x, max_y, max_z, 0.f);
@@ -131,12 +131,12 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
         // Copy pristine host-side data to GPU.
-        thrust::device_vector<float4> d_xyzh = h_xyzh;
+        thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
         // Generate the Morton keys for each position.
         thrust::device_vector<grace::uinteger32> d_keys(N);
         cudaEventRecord(part_start);
-        grace::morton_keys(d_xyzh, d_keys, bot, top);
+        grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -144,7 +144,8 @@ int main(int argc, char* argv[]) {
 
         // Sort the positions by their keys and save the sorted keys.
         cudaEventRecord(part_start);
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_xyzh.begin());
+        thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                            d_spheres_xyzr.begin());
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -163,7 +164,7 @@ int main(int argc, char* argv[]) {
 
         // Find the AABBs.
         cudaEventRecord(part_start);
-        grace::find_AABBs(d_nodes, d_leaves, d_xyzh);
+        grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
