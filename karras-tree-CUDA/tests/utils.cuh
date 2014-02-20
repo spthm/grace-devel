@@ -141,7 +141,7 @@ public:
         xyzw.x = uniform(rng);
         xyzw.y = uniform(rng);
         xyzw.z = uniform(rng);
-        xyzw.w = w_scale*uniform(rng);
+        xyzw.w = w_scale*xyzw.x;
 
         return xyzw;
     }
