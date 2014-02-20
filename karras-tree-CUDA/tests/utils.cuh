@@ -1,10 +1,17 @@
 #include <fstream>
 
+#include <thrust/device_ptr.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
+#include <thrust/extrema.h>
+#include <thrust/pair.h>
+
 
 #define CUDA_HANDLE_ERR(code) { cudaErrorCheck((code), __FILE__, __LINE__); }
+
+namespace grace
+{
 
 inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=true) {
   if (code != cudaSuccess) {
@@ -138,6 +145,95 @@ public:
     }
 };
 
+struct float4_compare_x
+{
+      template<typename Float4>
+      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      {
+          return a.x < b.x;
+      }
+};
+
+struct float4_compare_y
+{
+      template<typename Float4>
+      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      {
+          return a.y < b.y;
+      }
+};
+
+struct float4_compare_z
+{
+      template<typename Float4>
+      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      {
+          return a.z < b.z;
+      }
+};
+
+struct float4_compare_w
+{
+      template<typename Float4>
+      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      {
+          return a.w < b.w;
+      }
+};
+
+template <typename Float4, typename Float>
+void min_max_x(Float* min_x,
+               Float* max_x,
+               thrust::device_vector<Float4>& d_data)
+{
+    typedef typename thrust::device_vector<Float4>::iterator iter;
+    thrust::pair<iter, iter> min_max;
+    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
+                                     float4_compare_x());
+    *min_x = ((float4) *min_max.first).x;
+    *max_x = ((float4) *min_max.second).x;
+}
+
+template <typename Float4, typename Float>
+void min_max_y(Float* min_y,
+               Float* max_y,
+               thrust::device_vector<Float4>& d_data)
+{
+    typedef typename thrust::device_vector<Float4>::iterator iter;
+    thrust::pair<iter, iter> min_max;
+    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
+                                     float4_compare_y());
+    *min_y = ((float4) *min_max.first).y;
+    *max_y = ((float4) *min_max.second).y;
+}
+
+template <typename Float4, typename Float>
+void min_max_z(Float* min_z,
+               Float* max_z,
+               thrust::device_vector<Float4>& d_data)
+{
+    typedef typename thrust::device_vector<Float4>::iterator iter;
+    thrust::pair<iter, iter> min_max;
+    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
+                                     float4_compare_y());
+    *min_z = ((float4) *min_max.first).z;
+    *max_z = ((float4) *min_max.second).z;
+}
+
+template <typename Float4, typename Float>
+void min_max_w(Float* min_w,
+               Float* max_w,
+               thrust::device_vector<Float4>& d_data)
+{
+    typedef typename thrust::device_vector<Float4>::iterator iter;
+    thrust::pair<iter, iter> min_max;
+    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
+                                     float4_compare_y());
+    *min_w = ((float4) *min_max.first).w;
+    *max_w = ((float4) *min_max.second).w;
+}
+
+
 inline void skip_spacer(std::ifstream& file) {
     int dummy;
     file.read((char*)&dummy, sizeof(int));
@@ -173,10 +269,7 @@ gadget_header read_gadget_header(std::ifstream& file) {
 }
 
 void read_gadget_gas(std::ifstream& file,
-                     thrust::host_vector<float>& x,
-                     thrust::host_vector<float>& y,
-                     thrust::host_vector<float>& z,
-                     thrust::host_vector<float>& h,
+                     thrust::host_vector<float4>& xyzh,
                      thrust::host_vector<float>& m,
                      thrust::host_vector<float>& rho)
 {
@@ -192,8 +285,7 @@ void read_gadget_gas(std::ifstream& file,
 
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
-    x.resize(N_gas); y.resize(N_gas); z.resize(N_gas);
-    h.resize(N_gas); m.resize(N_gas); rho.resize(N_gas);
+    xyzh.resize(N_gas); m.resize(N_gas); rho.resize(N_gas);
 
     N_withmasses = 0;
     skip_spacer(file);
@@ -204,9 +296,9 @@ void read_gadget_gas(std::ifstream& file,
         for(int n=0; n<header.npart[i]; n++) {
             // Save gas particle data only.
             if (i == 0) {
-                file.read((char*)&x[n], sizeof(float));
-                file.read((char*)&y[n], sizeof(float));
-                file.read((char*)&z[n], sizeof(float));
+                file.read((char*)&xyzh[n].x, sizeof(float));
+                file.read((char*)&xyzh[n].y, sizeof(float));
+                file.read((char*)&xyzh[n].z, sizeof(float));
             }
             else {
                 file.read((char*)&f_dummy, sizeof(float));
@@ -274,11 +366,12 @@ void read_gadget_gas(std::ifstream& file,
         // Smoothing lengths.
         skip_spacer(file);
         for (int n=0; n<N_gas; n++) {
-            file.read((char*)&h[n], sizeof(float));
+            file.read((char*)&xyzh[n].w, sizeof(float));
         }
         skip_spacer(file);
     }
 
     return;
-
 }
+
+} // namespace grace

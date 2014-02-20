@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
     std::cout << std::endl;
 
     infile.open(infile_name.c_str(), std::ios::binary);
-    gadget_header header = read_gadget_header(infile);
+    grace::gadget_header header = grace::read_gadget_header(infile);
     infile.close();
 
 
@@ -85,51 +85,37 @@ int main(int argc, char* argv[]) {
     std::cout << "Gadget files contains " << N << " gas particles and "
               << header.npart[1] << " dark matter particles." << std::endl;
 
-    // Generate N random positions and radii, i.e. 4N random floats in [0,1).
-    thrust::host_vector<float> h_x_centres(N);
-    thrust::host_vector<float> h_y_centres(N);
-    thrust::host_vector<float> h_z_centres(N);
-    thrust::host_vector<float> h_radii(N);
+    // Read in positions and smoothing lengths from Gadget-2 file.
+    thrust::host_vector<float4> h_xyzh(N);
     thrust::host_vector<float> h_masses(N);
     thrust::host_vector<float> h_rho(N);
 
     std::cout << "Reading in file..." << std::endl;
     infile.open(infile_name.c_str(), std::ios::binary);
-    read_gadget_gas(infile, h_x_centres, h_y_centres, h_z_centres,
-                            h_radii, h_masses, h_rho);
+    grace::read_gadget_gas(infile, h_xyzh, h_masses, h_rho);
     infile.close();
     // Masses unused.  Free space.
     h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
+    // Copy to device;
+    thrust::device_vector<float4> d_xyzh = h_xyzh;
 
 
     // Set the AABBs.
-    float max_x = thrust::reduce(h_x_centres.begin(),
-                                 h_x_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float max_y = thrust::reduce(h_y_centres.begin(),
-                                 h_y_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float max_z = thrust::reduce(h_z_centres.begin(),
-                                 h_z_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float min_x = thrust::reduce(h_x_centres.begin(),
-                                 h_x_centres.end(),
-                                 max_x,
-                                 thrust::minimum<float>());
-    float min_y = thrust::reduce(h_y_centres.begin(),
-                                 h_y_centres.end(),
-                                 max_y,
-                                 thrust::minimum<float>());
-    float min_z = thrust::reduce(h_z_centres.begin(),
-                                 h_z_centres.end(),
-                                 max_z,
-                                 thrust::minimum<float>());
-    Vector3f bottom(min_x, min_y, min_z);
-    Vector3f top(max_x, max_y, max_z);
+    float min_x, max_x;
+    grace::min_max_x<float4,float>(&min_x, &max_x, d_xyzh);
+
+    float min_y, max_y;
+    grace::min_max_y(&min_y, &max_y, d_xyzh);
+
+    float min_z, max_z;
+    grace::min_max_z(&min_z, &max_z, d_xyzh);
+
+    float min_h, max_h;
+    grace::min_max_w(&min_h, &max_h, d_xyzh);
+
+    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
+    float4 top = make_float4(max_x, max_y, max_z, 0.f);
 
 
     /* Profile the tree constructed from random data. */
@@ -146,51 +132,20 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
         // Copy pristine host-side data to GPU.
-        thrust::device_vector<float> d_x_centres = h_x_centres;
-        thrust::device_vector<float> d_y_centres = h_y_centres;
-        thrust::device_vector<float> d_z_centres = h_z_centres;
-        thrust::device_vector<float> d_radii = h_radii;
+        thrust::device_vector<float4> d_xyzh = h_xyzh;
 
         // Generate the Morton keys for each position.
         thrust::device_vector<grace::uinteger32> d_keys(N);
         cudaEventRecord(part_start);
-        grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
-                           d_keys, bottom, top);
+        grace::morton_keys(d_xyzh, d_keys, bot, top);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         morton_tot += part_elapsed;
 
         // Sort the positions by their keys and save the sorted keys.
-        thrust::device_vector<int> d_indices(N);
-        thrust::device_vector<float> d_tmp(N);
         cudaEventRecord(part_start);
-        thrust::sequence(d_indices.begin(), d_indices.end());
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
-        thrust::gather(d_indices.begin(),
-                       d_indices.end(),
-                       d_x_centres.begin(),
-                       d_tmp.begin());
-        d_x_centres = d_tmp;
-
-        thrust::gather(d_indices.begin(),
-                       d_indices.end(),
-                       d_y_centres.begin(),
-                       d_tmp.begin());
-        d_y_centres = d_tmp;
-
-        thrust::gather(d_indices.begin(),
-                       d_indices.end(),
-                       d_z_centres.begin(),
-                       d_tmp.begin());
-        d_z_centres = d_tmp;
-
-        thrust::gather(d_indices.begin(),
-                       d_indices.end(),
-                       d_radii.begin(),
-                       d_tmp.begin());
-        d_radii = d_tmp;
+        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_xyzh.begin());
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -209,8 +164,7 @@ int main(int argc, char* argv[]) {
 
         // Find the AABBs.
         cudaEventRecord(part_start);
-        grace::find_AABBs(d_nodes, d_leaves,
-                          d_x_centres, d_y_centres, d_z_centres, d_radii);
+        grace::find_AABBs(d_nodes, d_leaves, d_xyzh);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
