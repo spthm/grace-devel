@@ -1,6 +1,5 @@
 #include <fstream>
 
-#include <thrust/device_ptr.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
@@ -105,27 +104,30 @@ public:
                               seed_factor(1u) {}
 
     explicit random_float4_functor(const float low_,
-                                  const float high_) :
+                                   const float high_) :
         uniform(low_, high_), w_scale(1.0f), seed_factor(1u) {}
 
+    explicit random_float4_functor(const float w_scale_) :
+        uniform(0.0f, 1.0f), w_scale(w_scale_), seed_factor(1u) {}
+
     explicit random_float4_functor(const float low_,
-                                  const float high_,
-                                  const float w_scale_) :
+                                   const float high_,
+                                   const float w_scale_) :
         uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
 
     explicit random_float4_functor(const float low_,
-                                  const float high_,
-                                  const unsigned int seed_factor_) :
+                                   const float high_,
+                                   const unsigned int seed_factor_) :
         uniform(low_, high_), w_scale(1.0f), seed_factor(seed_factor_) {}
 
     explicit random_float4_functor(const float w_scale_,
-                                  const unsigned int seed_factor_) :
+                                   const unsigned int seed_factor_) :
         uniform(0.0f, 1.0f), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
     explicit random_float4_functor(const float low_,
-                                  const float high_,
-                                  const float w_scale_,
-                                  const unsigned int seed_factor_) :
+                                   const float high_,
+                                   const float w_scale_,
+                                   const unsigned int seed_factor_) :
         uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
     __host__ __device__ float4 operator() (unsigned int n)
