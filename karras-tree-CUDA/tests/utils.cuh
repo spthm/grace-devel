@@ -7,7 +7,7 @@
 #include <thrust/pair.h>
 
 
-#define CUDA_HANDLE_ERR(code) { cudaErrorCheck((code), __FILE__, __LINE__); }
+#define CUDA_HANDLE_ERR(code) { grace::cudaErrorCheck((code), __FILE__, __LINE__); }
 
 namespace grace
 {
