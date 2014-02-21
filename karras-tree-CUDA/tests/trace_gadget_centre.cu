@@ -17,8 +17,6 @@
 
 int main(int argc, char* argv[])
 {
-    typedef grace::Vector3<float> Vector3f;
-
     unsigned int N_rays = 250000;
     if (argc > 1) {
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -31,91 +29,57 @@ int main(int argc, char* argv[])
 
     // Read in gas data from Gadget-2 file.
     // Arrays are resized in read_gadget_gas().
-    thrust::host_vector<float> h_x_centres(1);
-    thrust::host_vector<float> h_y_centres(1);
-    thrust::host_vector<float> h_z_centres(1);
-    thrust::host_vector<float> h_radii(1);
+    thrust::host_vector<float4> h_spheres_xyzr(1);
     thrust::host_vector<float> h_masses(1);
     thrust::host_vector<float> h_rho(1);
 
     file.open(fname.c_str(), std::ios::binary);
-    read_gadget_gas(file, h_x_centres, h_y_centres, h_z_centres,
-                          h_radii, h_masses, h_rho);
+    grace::read_gadget_gas(file, h_spheres_xyzr, h_masses, h_rho);
     file.close();
     // Masses unused.
     h_masses.clear(); h_masses.shrink_to_fit();
 
-    unsigned int N = h_x_centres.size();
+    unsigned int N = h_spheres_xyzr.size();
     std::cout << "Will trace " << N_rays << " rays through " << N
               << " particles..." << std::endl;
     std::cout << std::endl;
 
 // Device code.
 {
-    thrust::device_vector<float> d_x_centres = h_x_centres;
-    thrust::device_vector<float> d_y_centres = h_y_centres;
-    thrust::device_vector<float> d_z_centres = h_z_centres;
-    thrust::device_vector<float> d_radii = h_radii;
+    thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
 
     // Set the AABBs.
-    float max_x = thrust::reduce(h_x_centres.begin(),
-                                 h_x_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float max_y = thrust::reduce(h_y_centres.begin(),
-                                 h_y_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float max_z = thrust::reduce(h_z_centres.begin(),
-                                 h_z_centres.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float max_r = thrust::reduce(h_radii.begin(),
-                                 h_radii.end(),
-                                 -1.0f,
-                                 thrust::maximum<float>());
-    float min_x = thrust::reduce(h_x_centres.begin(),
-                                 h_x_centres.end(),
-                                 max_x,
-                                 thrust::minimum<float>());
-    float min_y = thrust::reduce(h_y_centres.begin(),
-                                 h_y_centres.end(),
-                                 max_y,
-                                 thrust::minimum<float>());
-    float min_z = thrust::reduce(h_z_centres.begin(),
-                                 h_z_centres.end(),
-                                 max_z,
-                                 thrust::minimum<float>());
-    Vector3f bottom(min_x, min_y, min_z);
-    Vector3f top(max_x, max_y, max_z);
+    float min_x, max_x;
+    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
+
+    float min_y, max_y;
+    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
+
+    float min_z, max_z;
+    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
+
+    float min_r, max_r;
+    grace::min_max_w(&min_r, &max_r, d_spheres_xyzr);
+
+    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
+    float4 top = make_float4(max_x, max_y, max_z, 0.f);
 
     // Generate morton keys based on particles' positions.
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres, d_keys,
-                       bottom, top);
+    thrust::device_vector<grace::uinteger32> d_keys_2(N);
+    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
+    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
 
-    // Sort all particle arrays by their keys.
+    // Sort particle positions and smoothing lengths by their keys.
+    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
+                        d_spheres_xyzr.begin());
+    d_keys_2.clear(); d_keys_2.shrink_to_fit();
+    // Sort other properties by the same keys.
     thrust::device_vector<int> d_indices(N);
     thrust::device_vector<float> d_sorted(N);
     thrust::sequence(d_indices.begin(), d_indices.end());
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_x_centres.begin(), d_sorted.begin());
-    d_x_centres = d_sorted;
-
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_y_centres.begin(), d_sorted.begin());
-    d_y_centres = d_sorted;
-
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_z_centres.begin(), d_sorted.begin());
-    d_z_centres = d_sorted;
-
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_radii.begin(), d_sorted.begin());
-    d_radii = d_sorted;
 
     thrust::gather(d_indices.begin(), d_indices.end(),
                    d_rho.begin(), d_sorted.begin());
@@ -131,8 +95,7 @@ int main(int argc, char* argv[])
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     // Keys no longer needed.
     d_keys.clear(); d_keys.shrink_to_fit();
-    grace::find_AABBs(d_nodes, d_leaves,
-                      d_x_centres, d_y_centres, d_z_centres, d_radii);
+    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
         // Generate the rays (emitted from box centre (.5, .5, .5) of length 2).
     thrust::host_vector<grace::Ray> h_rays(N_rays);
@@ -143,15 +106,15 @@ int main(int argc, char* argv[])
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dxs.begin(),
-                      random_float_functor(0u, -1.0f, 1.0f) );
+                      grace::random_float_functor(0u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dys.begin(),
-                      random_float_functor(1u, -1.0f, 1.0f) );
+                      grace::random_float_functor(1u, -1.0f, 1.0f) );
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dzs.begin(),
-                      random_float_functor(2u, -1.0f, 1.0f) );
+                      grace::random_float_functor(2u, -1.0f, 1.0f) );
     float x_centre = (max_x+min_x) / 2.;
     float y_centre = (max_y+min_y) / 2.;
     float z_centre = (max_z+min_z) / 2.;
@@ -206,10 +169,7 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_nodes.right.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         d_nodes.left.size(),
-        thrust::raw_pointer_cast(d_x_centres.data()),
-        thrust::raw_pointer_cast(d_y_centres.data()),
-        thrust::raw_pointer_cast(d_z_centres.data()),
-        thrust::raw_pointer_cast(d_radii.data()));
+        thrust::raw_pointer_cast(d_spheres_xyzr.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
     cudaEventRecord(stop);
@@ -242,10 +202,7 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_nodes.right.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         d_nodes.left.size(),
-        thrust::raw_pointer_cast(d_x_centres.data()),
-        thrust::raw_pointer_cast(d_y_centres.data()),
-        thrust::raw_pointer_cast(d_z_centres.data()),
-        thrust::raw_pointer_cast(d_radii.data()),
+        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
         thrust::raw_pointer_cast(d_rho.data()),
         thrust::raw_pointer_cast(d_b_integrals.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
@@ -285,10 +242,7 @@ int main(int argc, char* argv[])
     //     thrust::raw_pointer_cast(d_nodes.data()),
     //     thrust::raw_pointer_cast(d_leaves.data()),
     //     d_nodes.size(),
-    //     thrust::raw_pointer_cast(d_x_centres.data()),
-    //     thrust::raw_pointer_cast(d_y_centres.data()),
-    //     thrust::raw_pointer_cast(d_z_centres.data()),
-    //     thrust::raw_pointer_cast(d_radii.data()),
+    //     thrust::raw_pointer_cast(d_spheres_xyzr.data()),
     //     thrust::raw_pointer_cast(d_rho.data()),
     //     thrust::raw_pointer_cast(d_b_integrals.data()));
     // CUDA_HANDLE_ERR( cudaPeekAtLastError() );
