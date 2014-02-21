@@ -7,6 +7,10 @@
 
 namespace grace {
 
+//-----------------------------------------------------------------------------
+// Helper functions (host-compatible) for generating morton keys
+//-----------------------------------------------------------------------------
+
 // 30-bit keys.
 __host__ __device__ uinteger32 morton_key(const uinteger32 x,
                                           const uinteger32 y,
@@ -49,6 +53,10 @@ __host__ __device__ uinteger64 morton_key(const double x,
 
 namespace gpu {
 
+//-----------------------------------------------------------------------------
+// CUDA kernels for generating morton keys
+//-----------------------------------------------------------------------------
+
 template <typename UInteger, typename Float>
 __global__ void morton_keys_kernel(const Float* xs,
                                    const Float* ys,
@@ -90,6 +98,10 @@ __global__ void morton_keys_kernel(const Float4* xyzr,
 }
 
 } // namespace gpu
+
+//-----------------------------------------------------------------------------
+// C-like wrappers for morton key kernels
+//-----------------------------------------------------------------------------
 
 template <typename UInteger, typename Float>
 void morton_keys(const thrust::device_vector<Float>& d_xs,

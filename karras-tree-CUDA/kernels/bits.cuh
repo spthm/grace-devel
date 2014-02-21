@@ -10,6 +10,10 @@ namespace grace {
 
 namespace gpu {
 
+//-----------------------------------------------------------------------------
+// Functions (device only) for bitwise manipulation
+//-----------------------------------------------------------------------------
+
 // TODO: Rename this to e.g. bit_prefix_length
 // See below for CPU alternative.
 template <typename UInteger>
@@ -20,6 +24,10 @@ __device__ UInteger bit_prefix(const UInteger a, const UInteger b)
 }
 
 } // namespace gpu
+
+//-----------------------------------------------------------------------------
+// Functions (host-compatible) for bitwise manipulation
+//-----------------------------------------------------------------------------
 
 template <typename UInteger>
 __host__ __device__ uinteger32 space_by_two_10bit(const UInteger x)

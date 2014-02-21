@@ -12,7 +12,7 @@ namespace grace {
 namespace gpu {
 
 //-----------------------------------------------------------------------------
-// CUDA Kenerls
+// CUDA kernels for tree building
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
@@ -277,7 +277,7 @@ __device__ int common_prefix(const integer32 i,
 } // namespace gpu
 
 //-----------------------------------------------------------------------------
-// C-like wrappers
+// C-like wrappers for tree building
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>

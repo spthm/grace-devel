@@ -6,20 +6,26 @@
 #include <thrust/extrema.h>
 #include <thrust/pair.h>
 
-
-#define CUDA_HANDLE_ERR(code) { grace::cudaErrorCheck((code), __FILE__, __LINE__); }
+// Wrap around all calls to CUDA functions to handle errors.
+#define CUDA_HANDLE_ERR(code) {grace::cudaErrorCheck((code), __FILE__, __LINE__); }
 
 namespace grace
 {
 
-inline void cudaErrorCheck(cudaError_t code, char *file, int line, bool abort=true) {
-  if (code != cudaSuccess) {
-    fprintf(stderr,"CUDA Error!\nCode: %s\nFile: %s @ line %d\n", cudaGetErrorString(code), file, line);
+inline void cudaErrorCheck(cudaError_t code, char* file, int line, bool abort=true)
+{
+    if (code != cudaSuccess) {
+        fprintf(stderr,"CUDA Error!\nMsg:  %s\nFile: %s @ line %d\n",
+                cudaGetErrorString(code), file, line);
 
     if (abort)
-      exit(code);
-  }
+        exit(code);
+    }
 }
+
+//-----------------------------------------------------------------------------
+// Utilities for generating random floats
+//-----------------------------------------------------------------------------
 
 // See:
 // https://code.google.com/p/thrust/source/browse/examples/monte_carlo.cu
@@ -147,6 +153,10 @@ public:
     }
 };
 
+//-----------------------------------------------------------------------------
+// Utilities for comparing x, y, z or w components of float4-like types
+//-----------------------------------------------------------------------------
+
 struct float4_compare_x
 {
       template<typename Float4>
@@ -235,6 +245,9 @@ void min_max_w(Float* min_w,
     *max_w = ((float4) *min_max.second).w;
 }
 
+//-----------------------------------------------------------------------------
+// Utilities for reading in Gadget-2 (type 1) files
+//-----------------------------------------------------------------------------
 
 inline void skip_spacer(std::ifstream& file) {
     int dummy;
@@ -256,8 +269,8 @@ struct gadget_header
   // double Omega0;
   // double OmegaLambda;
   // double HubbleParam;
-  char fill [256 - 6*4 - 6*8];
   // char fill[256 - 6 * 4 - 6 * 8 - 2 * 8 - 2 * 4 - 6 * 4 - 2 * 4 - 4 * 8];   /* fills to 256 Bytes */
+  char fill [256 - 6*4 - 6*8];
 };
 
 gadget_header read_gadget_header(std::ifstream& file) {

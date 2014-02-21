@@ -6,7 +6,12 @@
 #include "../nodes.h"
 #include "../ray.h"
 
+
 namespace grace {
+
+//-----------------------------------------------------------------------------
+// Helper functions for tracing kernels
+//----------------------------------------------------------------------------
 
 float kernel_integral_table[51] = {
     1.90986019771937, 1.90563449910964, 1.89304415940934, 1.87230928086763,
@@ -296,6 +301,10 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     return true;
 }
 
+//-----------------------------------------------------------------------------
+// CUDA tracing kernels
+//-----------------------------------------------------------------------------
+
 namespace gpu {
 
 // Trace through the field, but save only the number of hits for each ray.
@@ -548,5 +557,9 @@ __global__ void trace(const Ray* rays,
 }
 
 } // namespace gpu
+
+//-----------------------------------------------------------------------------
+// C-like wrappers for tracing kernels
+//-----------------------------------------------------------------------------
 
 } // namespace grace
