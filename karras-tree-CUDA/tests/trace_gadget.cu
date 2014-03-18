@@ -119,23 +119,23 @@ int main(int argc, char* argv[])
         for (j=0, oy=min_y; j<N_rays_side; oy+=spacer_y, j++)
         {
             // All rays point in +ve z direction.
-            h_rays[i*N_rays_side +j].dx = 0.0f;
-            h_rays[i*N_rays_side +j].dy = 0.0f;
-            h_rays[i*N_rays_side +j].dz = 1.0f;
+            h_rays[i*N_rays_side + j].dx = 0.0f;
+            h_rays[i*N_rays_side + j].dy = 0.0f;
+            h_rays[i*N_rays_side + j].dz = 1.0f;
 
-            h_rays[i*N_rays_side +j].ox = ox;
-            h_rays[i*N_rays_side +j].oy = oy;
-            h_rays[i*N_rays_side +j].oz = min_z - max_r;
+            h_rays[i*N_rays_side + j].ox = ox;
+            h_rays[i*N_rays_side + j].oy = oy;
+            h_rays[i*N_rays_side + j].oz = min_z - max_r;
 
-            h_rays[i*N_rays_side +j].length = span_z;
-            h_rays[i*N_rays_side +j].dclass = 7;
+            h_rays[i*N_rays_side + j].length = span_z;
+            h_rays[i*N_rays_side + j].dclass = 7;
+
+            // Since all rays are PPP, base key on origin instead.
+            // morton_key(float, float, float) requires floats in (0, 1).
+            h_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
+                                                          (oy-min_y)/span_y,
+                                                          0.0f);
         }
-
-        // Since all rays are PPP, base key on origin instead.
-        // morton_key(float, float, float) requires floats in (0, 1).
-        h_keys[i] = grace::morton_key((ox-min_x)/span_x,
-                                      (oy-min_y)/span_y,
-                                      0.0f);
     }
 
     // Sort rays by Morton key and trace for per-ray hit couynts.
@@ -353,7 +353,7 @@ int main(int argc, char* argv[])
     bmpinfoheader[10] = (unsigned char)(h>>16);
     bmpinfoheader[11] = (unsigned char)(h>>24);
 
-    f = fopen("img.bmp","wb");
+    f = fopen("density.bmp","wb");
     fwrite(bmpfileheader,1,14,f);
     fwrite(bmpinfoheader,1,40,f);
     for(i=0; i<h; i++)
