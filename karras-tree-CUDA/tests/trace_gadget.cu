@@ -39,13 +39,14 @@ int main(int argc, char* argv[])
     file.open(fname.c_str(), std::ios::binary);
     grace::read_gadget_gas(file, h_spheres_xyzr, h_masses, h_rho);
     file.close();
-    // Masses unused.
-    h_masses.clear(); h_masses.shrink_to_fit();
 
     size_t N = h_spheres_xyzr.size();
     std::cout << "Will trace " << N_rays << " rays through " << N
               << " particles..." << std::endl;
     std::cout << std::endl;
+
+    // Masses unused.
+    h_masses.clear(); h_masses.shrink_to_fit();
 
 // Device code.
 {
