@@ -12,8 +12,8 @@ namespace grace {
 //-----------------------------------------------------------------------------
 // Helper functions for tracing kernels
 //----------------------------------------------------------------------------
-
-float kernel_integral_table[51] = {
+#define N_TABLE 51
+float kernel_integral_table[N_TABLE] = {
     1.90986019771937, 1.90563449910964, 1.89304415940934, 1.87230928086763,
     1.84374947679902, 1.80776276033034, 1.76481079856299, 1.71540816859939,
     1.66011373131439, 1.59952322363667, 1.53426266082279, 1.46498233888091,
@@ -458,8 +458,21 @@ __global__ void trace_property(const Ray* rays,
                 {
                     r = xyzrs[node_index-n_nodes].w;
                     ir = 1.f / r;
-                    b_index = 50 * b * ir;
-                    Float kernel_fac = b_integrals[b_index] * ir*ir;
+                    // Normalize impact parameter, then scale by size of lookup
+                    // table and interpolate.
+                    b = (N_TABLE-1) * (b * ir);
+                    // Floor(b).
+                    b_index = (int) b;
+                    if (b_index > (N_TABLE-1)) {
+                        b = 1.f;
+                        b_index = N_TABLE-2;
+                    }
+                    Float kernel_fac = (  b_integrals[b_index+1]
+                                        - b_integrals[b_index]
+                                       ) * (b - b_index)
+                                       + b_integrals[b_index];
+                    // Re-scale integral (since we used a normalized b).
+                    kernel_fac *= (ir*ir);
                     out += (Tout) (kernel_fac * p_data[node_index-n_nodes]);
                 }
                 node_index = trace_stack[stack_index];
@@ -536,10 +549,17 @@ __global__ void trace(const Ray* rays,
             {
                 if (sphere_hit(ray, xyzrs[node_index-n_nodes], b, d))
                 {
-                    r = xyzrs[node_index-n_nodes].w;
-                    ir = 1.f / r;
-                    b_index = 50 * b * ir;
-                    Float kernel_fac = b_integrals[b_index] * ir*ir;
+                    b = (N_TABLE-1) * (b * ir);
+                    b_index = (int) b;
+                    if (b_index > (N_TABLE-1)) {
+                        b = 1.f;
+                        b_index = N_TABLE-2;
+                    }
+                    Float kernel_fac = (  b_integrals[b_index+1]
+                                        - b_integrals[b_index]
+                                       ) * (b - b_index)
+                                       + b_integrals[b_index];
+                    kernel_fac *= (ir*ir);
                     out_data[out_index] = (Tout) (kernel_fac *
                                                   p_data[node_index-n_nodes]);
                     hit_dists[out_index] = d;
