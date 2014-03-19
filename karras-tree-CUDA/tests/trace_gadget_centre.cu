@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
 
-    // Set the AABBs.
+    // Set the tree AABB.
     float min_x, max_x;
     grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
 

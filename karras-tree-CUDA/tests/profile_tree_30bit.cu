@@ -121,7 +121,7 @@ int main(int argc, char* argv[]) {
                           h_spheres_xyzr.begin(),
                           grace::random_float4_functor(0.1f, seed_factor) );
 
-        // Set the AABBs.
+        // Set the tree AABB.
         float4 bottom = make_float4(0., 0., 0., 0.);
         float4 top = make_float4(1., 1., 1., 0.);
 
