@@ -157,10 +157,7 @@ int main(int argc, char* argv[]) {
     grace::H_Nodes h_nodes(N-1);
     grace::H_Leaves h_leaves(N);
 
-    h_nodes.left = d_nodes.left;
-    h_nodes.right = d_nodes.right;
-    h_nodes.parent = d_nodes.parent;
-    h_nodes.end = d_nodes.end;
+    h_nodes.lrpe = d_nodes.lrpe;
     h_nodes.level = d_nodes.level;
     h_nodes.AABB = d_nodes.AABB;
 
@@ -172,28 +169,26 @@ int main(int argc, char* argv[]) {
         for (unsigned int i=0; i<N-1; i++) {
             outfile << "i:               " << i << std::endl;
             outfile << "level:           " << h_nodes.level[i] << std::endl;
+            int4 node = h_nodes.lrpe[i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.
-            if (h_nodes.left[i] > N-2) {
+            if (node.x > N-2) {
                 outfile << "left leaf flag:  True" << std::endl;
-                outfile << "left:            " << h_nodes.left[i] - (N-1)
-                        << std::endl;
+                outfile << "left:            " << node.x - (N-1) << std::endl;
             }
             else {
                 outfile << "left leaf flag:  False" << std::endl;
-                outfile << "left:            " << h_nodes.left[i] << std::endl;
+                outfile << "left:            " << node.x << std::endl;
             }
-            if (h_nodes.right[i]> N-2) {
+            if (node.y > N-2) {
                 outfile << "right leaf flag:  True" << std::endl;
-                outfile << "right:            " << h_nodes.right[i] - (N-1)
-                        << std::endl;
+                outfile << "right:            " << node.y - (N-1) << std::endl;
             }
             else {
                 outfile << "right leaf flag:  False" << std::endl;
-                outfile << "right:            " << h_nodes.right[i]
-                        << std::endl;
+                outfile << "right:            " << node.y << std::endl;
             }
-            outfile << "parent:          " << h_nodes.parent[i] << std::endl;
+            outfile << "parent:          " << node.z << std::endl;
             outfile << "AABB_bottom:     " << h_nodes.AABB[i].bx << ", "
                                            << h_nodes.AABB[i].by << ", "
                                            << h_nodes.AABB[i].bz
