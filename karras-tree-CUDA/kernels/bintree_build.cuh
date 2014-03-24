@@ -126,7 +126,12 @@ __global__ void find_AABBs_kernel(const int4* nodes,
     unsigned int* flags;
     bool first_arrival, in_block;
 
+    // Use shared memory for the N-accessed flags when all children of a node
+    // have been processed in the same block.
+    // Shared memory must be manually initialized!
     __shared__ unsigned int sm_flags[AABB_THREADS_PER_BLOCK];
+    sm_flags[threadIdx.x] = 0;
+    __syncthreads();
     block_lower = blockIdx.x * AABB_THREADS_PER_BLOCK;
     block_upper = block_lower + AABB_THREADS_PER_BLOCK - 1;
 
