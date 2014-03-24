@@ -312,15 +312,14 @@ template <typename Float4>
 __global__ void trace_hitcount(const Ray* rays,
                                const size_t n_rays,
                                unsigned int* hit_counts,
-                               const integer32* nodes_left,
-                               const integer32* nodes_right,
+                               const int4* nodes,
                                const Box* nodes_AABB,
                                size_t n_nodes,
                                const Float4* xyzrs)
 {
-    int ray_index, stack_index;
+    int node_index, ray_index, stack_index;
     unsigned int ray_hit_count;
-    integer32 node_index;
+    int4 node;
     bool is_leaf;
     // Unused in this kernel.
     float b, d;
@@ -357,10 +356,11 @@ __global__ void trace_hitcount(const Ray* rays,
                 if (AABB_hit_eisemann(ray, slope,
                                       nodes_AABB[node_index]))
                 {
+                    node = nodes[node_index];
                     stack_index++;
-                    trace_stack[stack_index] = nodes_right[node_index];
+                    trace_stack[stack_index] = node.y;
 
-                    node_index = nodes_left[node_index];
+                    node_index = node.x;
 
                 }
                 // If it is not hit, move to the node at the top of the stack.
@@ -398,16 +398,15 @@ template <typename Tout, typename Float4, typename Tin, typename Float>
 __global__ void trace_property(const Ray* rays,
                                const size_t n_rays,
                                Tout* out_data,
-                               const integer32* nodes_left,
-                               const integer32* nodes_right,
+                               const int4* nodes,
                                const Box* nodes_AABB,
                                const size_t n_nodes,
                                const Float4* xyzrs,
                                const Tin* p_data,
                                const Float* b_integrals)
 {
-    int ray_index, stack_index, b_index;
-    integer32 node_index;
+    int node_index, ray_index, stack_index, b_index;
+    int4 node;
     bool is_leaf;
     // Impact parameter and distance to intersection.
     float b, d;
@@ -437,10 +436,11 @@ __global__ void trace_property(const Ray* rays,
                 if (AABB_hit_eisemann(ray, slope,
                                       nodes_AABB[node_index]))
                 {
+                    node = nodes[node_index];
                     stack_index++;
-                    trace_stack[stack_index] = nodes_right[node_index];
+                    trace_stack[stack_index] = node.y;
 
-                    node_index = nodes_left[node_index];
+                    node_index = node.x;
 
                 }
                 else
@@ -494,17 +494,16 @@ __global__ void trace(const Ray* rays,
                       Tout* out_data,
                       Float* hit_dists,
                       const uinteger32* hit_offsets,
-                      const integer32* nodes_left,
-                      const integer32* nodes_right,
+                      const int4* nodes,
                       const Box* nodes_AABB,
                       const size_t n_nodes,
                       const Float4* xyzrs,
                       const Tin* p_data,
                       const Float* b_integrals)
 {
-    int ray_index, stack_index, b_index;
+    int node_index, ray_index, stack_index, b_index;
     unsigned int out_index;
-    integer32 node_index;
+    int4 node;
     bool is_leaf;
     float b, d;
     float r, ir;
@@ -530,10 +529,11 @@ __global__ void trace(const Ray* rays,
                 if (AABB_hit_eisemann(ray, slope,
                                       nodes_AABB[node_index]))
                 {
+                    node = nodes[node_index];
                     stack_index++;
-                    trace_stack[stack_index] = nodes_right[node_index];
+                    trace_stack[stack_index] = node.y;
 
-                    node_index = nodes_left[node_index];
+                    node_index = node.x;
 
                 }
                 else
@@ -549,6 +549,8 @@ __global__ void trace(const Ray* rays,
             {
                 if (sphere_hit(ray, xyzrs[node_index-n_nodes], b, d))
                 {
+                    r = xyzrs[node_index-n_nodes].w;
+                    ir = 1.f / r;
                     b = (N_TABLE-1) * (b * ir);
                     b_index = (int) b;
                     if (b_index > (N_TABLE-1)) {
