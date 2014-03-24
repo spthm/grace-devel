@@ -167,10 +167,9 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_rays.data()),
         d_rays.size(),
         thrust::raw_pointer_cast(d_hit_counts.data()),
-        thrust::raw_pointer_cast(d_nodes.left.data()),
-        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.lrpe.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.left.size(),
+        d_nodes.lrpe.size(),
         thrust::raw_pointer_cast(d_spheres_xyzr.data()));
     CUDA_HANDLE_ERR( cudaPeekAtLastError() );
     CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
@@ -200,10 +199,9 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_rays.data()),
         d_rays.size(),
         thrust::raw_pointer_cast(d_traced_rho.data()),
-        thrust::raw_pointer_cast(d_nodes.left.data()),
-        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.lrpe.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.left.size(),
+        d_nodes.lrpe.size(),
         thrust::raw_pointer_cast(d_spheres_xyzr.data()),
         thrust::raw_pointer_cast(d_rho.data()),
         thrust::raw_pointer_cast(d_b_integrals.data()));
@@ -241,9 +239,9 @@ int main(int argc, char* argv[])
     //     thrust::raw_pointer_cast(d_trace_output.data()),
     //     thrust::raw_pointer_cast(d_trace_distances.data()),
     //     thrust::raw_pointer_cast(d_hit_counts.data()),
-    //     thrust::raw_pointer_cast(d_nodes.data()),
-    //     thrust::raw_pointer_cast(d_leaves.data()),
-    //     d_nodes.size(),
+    //     thrust::raw_pointer_cast(d_nodes.lrpe.data()),
+    //     thrust::raw_pointer_cast(d_nodes.AABB.data()),
+    //     d_nodes.lrpe.size(),
     //     thrust::raw_pointer_cast(d_spheres_xyzr.data()),
     //     thrust::raw_pointer_cast(d_rho.data()),
     //     thrust::raw_pointer_cast(d_b_integrals.data()));

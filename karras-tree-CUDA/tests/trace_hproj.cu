@@ -130,10 +130,9 @@ int main(int argc, char* argv[])
         thrust::raw_pointer_cast(d_rays.data()),
         d_rays.size(),
         thrust::raw_pointer_cast(d_traced_mass.data()),
-        thrust::raw_pointer_cast(d_nodes.left.data()),
-        thrust::raw_pointer_cast(d_nodes.right.data()),
+        thrust::raw_pointer_cast(d_nodes.lrpe.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.left.size(),
+        d_nodes.lrpe.size(),
         thrust::raw_pointer_cast(d_spheres_xyzr.data()),
         thrust::raw_pointer_cast(d_pmasses.data()),
         thrust::raw_pointer_cast(d_b_integrals.data()));
