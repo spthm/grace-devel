@@ -225,13 +225,13 @@ int main(int argc, char* argv[]) {
         {
             unsigned int i_right = i_left + 1;
 
-            h_nodes.lrpe[i_left].x = i_left - 1 + N-1; // Left.
-            h_nodes.lrpe[i_left].y = i_left + N-1; // Right.
-            h_nodes.lrpe[i_left].w = i_left - 1; // End.
+            h_nodes.hierarchy[i_left].x = i_left - 1 + N-1; // Left.
+            h_nodes.hierarchy[i_left].y = i_left + N-1; // Right.
+            h_nodes.hierarchy[i_left].w = i_left - 1; // End.
 
-            h_nodes.lrpe[i_right].x = i_right + N-1;
-            h_nodes.lrpe[i_right].y = i_right + 1 +N-1;
-            h_nodes.lrpe[i_right].w = i_right + 1;
+            h_nodes.hierarchy[i_right].x = i_right + N-1;
+            h_nodes.hierarchy[i_right].y = i_right + 1 +N-1;
+            h_nodes.hierarchy[i_right].w = i_right + 1;
 
             h_leaves.parent[i_left-1] = h_leaves.parent[i_left] = i_left;
             h_leaves.parent[i_right] = h_leaves.parent[i_right+1] = i_right;
@@ -247,25 +247,25 @@ int main(int argc, char* argv[]) {
                 unsigned int i_left_split = (2*i_left - (1u<<height)) / 2;
                 unsigned int i_right_split = i_left_split + (1u<<height);
 
-                h_nodes.lrpe[i_left].x = i_left_split;
-                h_nodes.lrpe[i_left].y = i_left_split + 1;
-                h_nodes.lrpe[i_left].w = i_left - (1u<<height) + 1;
+                h_nodes.hierarchy[i_left].x = i_left_split;
+                h_nodes.hierarchy[i_left].y = i_left_split + 1;
+                h_nodes.hierarchy[i_left].w = i_left - (1u<<height) + 1;
 
-                h_nodes.lrpe[i_right].x = i_right_split;
-                h_nodes.lrpe[i_right].y = i_right_split + 1;
-                h_nodes.lrpe[i_right].w = i_right + (1u<<height) - 1;
+                h_nodes.hierarchy[i_right].x = i_right_split;
+                h_nodes.hierarchy[i_right].y = i_right_split + 1;
+                h_nodes.hierarchy[i_right].w = i_right + (1u<<height) - 1;
 
-                h_nodes.lrpe[i_left_split].z = h_nodes.lrpe[i_left_split+1].z
+                h_nodes.hierarchy[i_left_split].z = h_nodes.hierarchy[i_left_split+1].z
                                              = i_left;
-                h_nodes.lrpe[i_right_split].z = h_nodes.lrpe[i_right_split+1].z
+                h_nodes.hierarchy[i_right_split].z = h_nodes.hierarchy[i_right_split+1].z
                                               = i_right;
             }
         }
         // Set up root node and link children to it.
-        h_nodes.lrpe[0].x = N/2 - 1;
-        h_nodes.lrpe[0].y = N/2;
-        h_nodes.lrpe[N/2 - 1].z = h_nodes.lrpe[N/2].z = 0;
-        h_nodes.lrpe[0].w = N - 1;
+        h_nodes.hierarchy[0].x = N/2 - 1;
+        h_nodes.hierarchy[0].y = N/2;
+        h_nodes.hierarchy[N/2 - 1].z = h_nodes.hierarchy[N/2].z = 0;
+        h_nodes.hierarchy[0].w = N - 1;
 
 
         /* Profile the fully-balanced tree. */
@@ -278,7 +278,7 @@ int main(int argc, char* argv[]) {
         {
             // NB: Levels and AABBs do not need copying since we don't
             // build them on the host.
-            d_nodes.lrpe = h_nodes.lrpe;
+            d_nodes.hierarchy = h_nodes.hierarchy;
             thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
             // Find the AABBs.

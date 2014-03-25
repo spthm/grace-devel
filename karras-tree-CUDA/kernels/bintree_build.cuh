@@ -290,7 +290,7 @@ void build_nodes(Nodes& d_nodes, Leaves& d_leaves,
     // TODO: Error if n_keys <= 1.
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_nodes.lrpe.data()),
+        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.level.data()),
         thrust::raw_pointer_cast(d_leaves.parent.data()),
         thrust::raw_pointer_cast(d_keys.data()),
@@ -310,7 +310,7 @@ void find_AABBs(Nodes& d_nodes, Leaves& d_leaves,
                                         / AABB_THREADS_PER_BLOCK));
 
     gpu::find_AABBs_kernel<float, Float4><<<blocks,AABB_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_nodes.lrpe.data()),
+        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         thrust::raw_pointer_cast(d_leaves.parent.data()),
         thrust::raw_pointer_cast(d_leaves.AABB.data()),

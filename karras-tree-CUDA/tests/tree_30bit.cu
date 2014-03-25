@@ -157,7 +157,7 @@ int main(int argc, char* argv[]) {
     grace::H_Nodes h_nodes(N-1);
     grace::H_Leaves h_leaves(N);
 
-    h_nodes.lrpe = d_nodes.lrpe;
+    h_nodes.hierarchy = d_nodes.hierarchy;
     h_nodes.level = d_nodes.level;
     h_nodes.AABB = d_nodes.AABB;
 
@@ -169,7 +169,7 @@ int main(int argc, char* argv[]) {
         for (unsigned int i=0; i<N-1; i++) {
             outfile << "i:               " << i << std::endl;
             outfile << "level:           " << h_nodes.level[i] << std::endl;
-            int4 node = h_nodes.lrpe[i];
+            int4 node = h_nodes.hierarchy[i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.
             if (node.x > N-2) {

@@ -21,14 +21,14 @@ public:
     // may return 0 for out-of-range results, rather than -1.
     //
     // Left, right, parent and end indices.
-    thrust::device_vector<int4> lrpe;
+    thrust::device_vector<int4> hierarchy;
     // Equal to the common prefix of the keys which this node spans.
     // Currently used only when verifying correct construction.
     thrust::device_vector<unsigned int> level;
 
     thrust::device_vector<Box> AABB;
 
-    Nodes(unsigned int N_nodes) : lrpe(N_nodes), level(N_nodes),
+    Nodes(unsigned int N_nodes) : hierarchy(N_nodes), level(N_nodes),
                                   AABB(N_nodes) {}
 };
 
@@ -45,11 +45,11 @@ public:
 class H_Nodes
 {
 public:
-    thrust::host_vector<int4> lrpe;
+    thrust::host_vector<int4> hierarchy;
     thrust::host_vector<unsigned int> level;
     thrust::host_vector<Box> AABB;
 
-    H_Nodes(unsigned int N_nodes) : lrpe(N_nodes), level(N_nodes),
+    H_Nodes(unsigned int N_nodes) : hierarchy(N_nodes), level(N_nodes),
                                     AABB(N_nodes) {}
 };
 
