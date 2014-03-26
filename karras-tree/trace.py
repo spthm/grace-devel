@@ -222,23 +222,29 @@ class Ray(object):
         bx = px - dot_p*rx
         by = py - dot_p*ry
         bz = pz - dot_p*rz
-        b = np.sqrt(bx*bx + by*by +bz*bz)
+        b2 = bx*bx + by*by +bz*bz
 
-        if (b >= radius):
+        if (b2 >= radius*radius):
             return False
 
-        # If dot_p < 0, to hit the ray origin must be inside the sphere.
-        # This is not possible if the distance along the ray (backwards from its
-        # origin) to the point of closest approach is > the sphere radius.
-        if (dot_p < -radius):
+        # If dot_p < 0, the ray origin must be inside the sphere if the two are
+        # to intersect. We simply treat this as a miss. Note that if the ray
+        # origin is within the sphere but dot_p > 0 it is treated as a hit.
+        # To capture all ray-origin in sphere conditions:
+        # dot_p < 0 AND |p| > r
+        if (dot_p < 0):
             return False
 
-        # The ray terminates before piercing the sphere.
-        if (dot_p > self.length + radius):
+        # For dot_p > length, the ray terminus must be inside the sphre if the
+        # two are to intersect. We simply treat this as a miss. Note that if
+        # the ray terminates in the sphere but dot_p < ray length, it is
+        # treated as a hit. To caputre all ray-terminus in sphere conditions:
+        # dot_p > ray length AND |ray end - sphere centre| > r
+        if (dot_p > self.length):
             return False
 
         # Otherwise, assume we have a hit.  This counts the following partial
         # intersections as hits:
-        #     i) Ray starts (anywhere) inside sphere.
-        #    ii) Ray ends (anywhere) inside sphere.
+        #     i) Ray starts inside sphere, before point of closest approach
+        #    ii) Ray ends inside sphere, beyond point of closest approach
         return True

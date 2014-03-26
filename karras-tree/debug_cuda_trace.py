@@ -49,5 +49,5 @@ for i, n_py_hits in enumerate(hit_counts):
         print
 
 if not error:
-    print "All hits match!"
+    print "All hits match! (Total " + str(int(sum(hit_counts))) + ")"
     print
