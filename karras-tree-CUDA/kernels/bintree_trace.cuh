@@ -284,20 +284,20 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     if (b >= xyzr.w)
         return false;
 
-    // If dot_p < 0, to hit the ray origin must be inside the sphere.
-    // This is not possible if the distance along the ray (backwards from its
-    // origin) to the point of closest approach is > the sphere radius.
-    if (dot_p < -xyzr.w)
+    // If dot_p < 0, the ray origin must be inside the sphere for an
+    // intersection. We treat this edge-case as a miss.
+    if (dot_p < 0)
         return false;
 
-    // The ray terminates before piercing the sphere.
-    if (dot_p > ray.length + xyzr.w)
+    // If dot_p > ray length, the ray terminus must be inside the sphere for
+    // an intersection. We treat this edge-case as a miss.
+    if (dot_p > ray.length)
         return false;
 
     // Otherwise, assume we have a hit.  This counts the following partial
     // intersections as hits:
-    //     i) Ray starts (anywhere) inside sphere.
-    //    ii) Ray ends (anywhere) inside sphere.
+    //     i) Ray starts inside sphere, before point of closest approach.
+    //    ii) Ray ends inside sphere, beyond point of closest approach.
     return true;
 }
 
