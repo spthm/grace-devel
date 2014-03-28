@@ -286,12 +286,12 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
 
     // If dot_p < 0, the ray origin must be inside the sphere for an
     // intersection. We treat this edge-case as a miss.
-    if (dot_p < 0)
+    if (dot_p < 0.0f)
         return false;
 
     // If dot_p > ray length, the ray terminus must be inside the sphere for
     // an intersection. We treat this edge-case as a miss.
-    if (dot_p > ray.length)
+    if (dot_p >= ray.length)
         return false;
 
     // Otherwise, assume we have a hit.  This counts the following partial
