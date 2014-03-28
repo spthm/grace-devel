@@ -14,13 +14,14 @@ struct Box
 class Nodes
 {
 public:
-    // A 32-bit int allows for up to 2,147,483,647 > 1024^3.
-    // Since we likely can't fit more than 1024^3 particles on the GPU
-    // anyway, int32 should be sufficient for the indices.
-    // Could use uint32 and set the root node to 1.  Then common_prefix
+    // A 32-bit int allows for up to indices up to +2,147,483,647 > 1024^3.
+    // Since we likely can't fit more than 1024^3 particles on the GPU, int
+    // - which is 32-bit on relevant platforms - should be sufficient for the
+    // indices.
+    // We could use uint and set the root node to 1.  Then common_prefix_length
     // may return 0 for out-of-range results, rather than -1.
     //
-    // Left, right, parent and end indices.
+    // int4.x .y .z .w are left, right, parent and end indices, respectively.
     thrust::device_vector<int4> hierarchy;
     // Equal to the common prefix of the keys which this node spans.
     // Currently used only when verifying correct construction.

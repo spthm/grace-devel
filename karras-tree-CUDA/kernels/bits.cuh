@@ -14,10 +14,9 @@ namespace gpu {
 // Functions (device only) for bitwise manipulation
 //-----------------------------------------------------------------------------
 
-// TODO: Rename this to e.g. bit_prefix_length
 // See below for CPU alternative.
 template <typename UInteger>
-__device__ UInteger bit_prefix(const UInteger a, const UInteger b)
+__device__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
 {
     // The conditional return should be optimized away at compile time.
     return (CHAR_BIT * sizeof(UInteger)) > 32 ? __clzll(a^b) : __clz(a^b);
@@ -56,7 +55,8 @@ __host__ __device__ uinteger64 space_by_two_21bit(const UInteger x)
 }
 
 template <typename UInteger>
-__host__ __device__ UInteger bit_prefix(const UInteger a, const UInteger b)
+__host__ __device__ UInteger bit_prefix_length(const UInteger a,
+                                               const UInteger b)
 {
     unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
     UInteger x_or = a ^ b;
