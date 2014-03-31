@@ -61,6 +61,8 @@ int main(int argc, char* argv[]) {
             std::cout << "Will save key, node and leaf data." << std::endl;
     }
 
+{ // Device code.
+
 
     /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
 
@@ -217,4 +219,9 @@ int main(int argc, char* argv[]) {
             outfile << std::endl;
         }
     }
+} // End device code.
+
+    // Exit cleanly to ensure a full profiler trace.
+    cudaDeviceReset();
+    return 0;
 }

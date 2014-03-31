@@ -253,4 +253,8 @@ int main(int argc, char* argv[]) {
         std::cout << aabb_tot << " ms." << std::endl;
         std::cout << std::endl << std::endl;
     }
+
+    // Exit cleanly to ensure a full profiler trace.
+    cudaDeviceReset();
+    return 0;
 }

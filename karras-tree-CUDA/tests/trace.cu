@@ -6,30 +6,29 @@
 #include <thrust/sort.h>
 
 #include "utils.cuh"
-#include "../types.h"
 #include "../nodes.h"
 #include "../ray.h"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
 
-int main(int argc, char* argv[])
-{
+int main(int argc, char* argv[]) {
+
+    /* Initialize run parameters. */
 
     unsigned int N = 1000000;
     unsigned int N_rays = 100000;
-    // Do we save the input and output data?
     bool save_data = false;
 
-    if (argc > 3) {
-        if (strcmp("save", argv[3]) == 0)
-            save_data = true;
+    if (argc > 1) {
+        N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
         N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
-    if (argc > 1) {
-        N = (unsigned int) std::strtol(argv[1], NULL, 10);
+    if (argc > 3) {
+        if (strcmp("save", argv[3]) == 0)
+            save_data = true;
     }
 
     std::cout << "Generating " << N << " random points and " << N_rays
@@ -37,7 +36,8 @@ int main(int argc, char* argv[])
     if (save_data)
         std::cout << "Will save sphere, ray and hit data." << std::endl;
     std::cout << std::endl;
-{
+
+{ // Begin device code.
 
     // Generate N random positions and radii, i.e. 4N random floats in [0,1).
     thrust::device_vector<float4> d_spheres_xyzr(N);
@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     float4 top = make_float4(1.f, 1.f, 1.f, 0.f);
 
     // Sort the positions by their keys and save the sorted keys.
-    thrust::device_vector<grace::uinteger32> d_keys(N);
+    thrust::device_vector<unsigned int> d_keys(N);
     grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
@@ -70,7 +70,7 @@ int main(int argc, char* argv[])
     thrust::host_vector<float> h_dxs(N_rays);
     thrust::host_vector<float> h_dys(N_rays);
     thrust::host_vector<float> h_dzs(N_rays);
-    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
+    thrust::host_vector<unsigned int> h_keys(N_rays);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N_rays),
                       h_dxs.begin(),
@@ -185,8 +185,9 @@ int main(int argc, char* argv[])
         outfile.close();
     }
 
-}
-    // Exit cleanly to ensure full profiler trace.
+} // End device code.
+
+    // Exit cleanly to ensure a full profiler trace.
     cudaDeviceReset();
     return 0;
 }
