@@ -55,7 +55,7 @@ int main(int argc, char* argv[]) {
         start = min(28, max(5, start));
     }
     if (argc > 6) {
-        seed_factor = (unsigned int) std::strtol(argv[5], NULL, 10);
+        seed_factor = (unsigned int) std::strtol(argv[6], NULL, 10);
     }
 
     // Converts file number to a string.
