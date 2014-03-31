@@ -15,88 +15,61 @@
 int main(int argc, char* argv[]) {
 
     cudaDeviceProp deviceProp;
-    std::ofstream outfile;
     std::ifstream infile;
-    std::string infile_name, outfile_name;
-    std::ostringstream converter;
+    std::string infile_name;
 
-    outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(5);
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+    std::cout.precision(3);
 
 
     /* Initialize run parameters. */
 
-    unsigned int file_num = 1;
     unsigned int device_ID = 0;
     unsigned int N_iter = 100;
     infile_name = "Data_025";
 
     if (argc > 1) {
-        file_num = (unsigned int) std::strtol(argv[1], NULL, 10);
-
+        device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        device_ID = (unsigned int) std::strtol(argv[2], NULL, 10);
-    }
-    if (argc > 3) {
-        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+        N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
 
+    /* Output run parameters and device properties to console. */
 
-    // Converts file number to a string.
-    converter << file_num;
-    outfile_name = ("profile_tree_gadget_" + converter.str() + ".log");
+    cudaGetDeviceProperties(&deviceProp, device_ID);
+    cudaSetDevice(device_ID);
 
-    std::cout << "Will profile (on device " << device_ID << " with " << N_iter
-              << " iterations) a tree from Gadget file " << infile_name
-              << std::endl;
-    std::cout << std::endl;
-    std::cout << "Saving results to " << outfile_name << std::endl;
-    std::cout << std::endl;
+    std::cout << "Device " << device_ID
+                    << ":                   " << deviceProp.name << std::endl;
+    std::cout << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
+            << std::endl;
+    std::cout << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
+            << std::endl;
+    std::cout << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
+            << std::endl;
+    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "Iterations per tree:        " << N_iter << std::endl;
+    std::cout << "Gadget data file name:      " << infile_name << std::endl;
+    std::cout << std::endl << std::endl;
+
+
+    /* Read in Gadget data. */
 
     infile.open(infile_name.c_str(), std::ios::binary);
     grace::gadget_header header = grace::read_gadget_header(infile);
     infile.close();
 
-
-    /* Write run parameters to file. */
-
-    cudaGetDeviceProperties(&deviceProp, device_ID);
-    cudaSetDevice(device_ID);
-    // Wipe the file, if it exists.
-    outfile.open(outfile_name.c_str(), std::ofstream::trunc);
-    outfile << "Device " << device_ID
-                    << ":                   " << deviceProp.name << std::endl;
-    outfile << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
-            << std::endl;
-    outfile << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
-            << std::endl;
-    outfile << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
-            << std::endl;
-    outfile << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
-    outfile << "Iterations per tree:        " << N_iter << std::endl;
-    outfile << "Gadget data file name:      " << infile_name << std::endl;
-    outfile << std::endl << std::endl;
-    outfile.close();
-
-
-    std::cout << "Profiling tree from Gadget data."<< std::endl;
-    unsigned int N = header.npart[0];
-    std::cout << "Gadget files contains " << N << " gas particles and "
-              << header.npart[1] << " dark matter particles." << std::endl;
-
-
-    /* Read in Gadget data. */
+    size_t N = header.npart[0];
 
     thrust::host_vector<float4> h_spheres_xyzr(N);
     thrust::host_vector<float> h_masses(N);
     thrust::host_vector<float> h_rho(N);
 
-    std::cout << "Reading in file..." << std::endl;
     infile.open(infile_name.c_str(), std::ios::binary);
     grace::read_gadget_gas(infile, h_spheres_xyzr, h_masses, h_rho);
     infile.close();
-    // Masses unused.  Free space.
+    // Masses and densities unused.  Free space.
     h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
 
@@ -171,26 +144,23 @@ int main(int argc, char* argv[]) {
         all_tot += part_elapsed;
     }
 
-    outfile.open(outfile_name.c_str(),
-                 std::ofstream::out | std::ofstream::app);
-    outfile << "Will generate:" << std::endl;
-    outfile << "    i)  A tree from " << N << " SPH particles." << std::endl;
-    outfile << std::endl;
-    outfile << "Time for Morton key generation:    ";
-    outfile.width(8);
-    outfile << morton_tot/N_iter << " ms." << std::endl;
-    outfile << "Time for sort-by-key:              ";
-    outfile.width(8);
-    outfile << sort_tot/N_iter << " ms." << std::endl;
-    outfile << "Time for hierarchy generation:     ";
-    outfile.width(8);
-    outfile << tree_tot/N_iter << " ms." << std::endl;
-    outfile << "Time for calculating AABBs:        ";
-    outfile.width(8);
-    outfile << aabb_tot/N_iter << " ms." << std::endl;
-    outfile << "Time for total (inc. memory ops): ";
-    outfile.width(8);
-    outfile << all_tot/N_iter << " ms." << std::endl;
-    outfile << std::endl << std::endl;
-    outfile.close();
+    std::cout << "Will generate:" << std::endl;
+    std::cout << "    i)  A tree from " << N << " SPH particles." << std::endl;
+    std::cout << std::endl;
+    std::cout << "Time for Morton key generation:    ";
+    std::cout.width(7);
+    std::cout << morton_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for sort-by-key:              ";
+    std::cout.width(7);
+    std::cout << sort_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for hierarchy generation:     ";
+    std::cout.width(7);
+    std::cout << tree_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for calculating AABBs:        ";
+    std::cout.width(7);
+    std::cout << aabb_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for total (inc. memory ops):  ";
+    std::cout.width(7);
+    std::cout << all_tot/N_iter << " ms." << std::endl;
+    std::cout << std::endl << std::endl;
 }
