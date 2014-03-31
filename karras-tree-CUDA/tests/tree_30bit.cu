@@ -10,7 +10,6 @@
 #include <thrust/sort.h>
 
 #include "utils.cuh"
-#include "../types.h"
 #include "../nodes.h"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
@@ -28,34 +27,39 @@ int main(int argc, char* argv[]) {
     outfile.fill('0');
 
 
-    /* Generate N random positions, i.e. 3*N random floats in [0,1) */
+    /* Initialize run parameters. */
 
     unsigned int N = 100000;
     bool save_in = false;
     bool save_out = false;
     unsigned int seed_factor = 1u;
-    if (argc > 3) {
-        seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
-    }
-    if (argc > 2) {
-        if (strcmp("in", argv[2]) == 0) {
-            save_in = true;
-            std::cout << "Will save random floating point data." << std::endl;
-        }
-        else if (strcmp("out", argv[2]) == 0) {
-            save_out = true;
-            std::cout << "Will save key, node and leaf data." << std::endl;
-        }
-        else if (strcmp("inout", argv[2]) == 0) {
-            save_in = true;
-            save_out = true;
-            std::cout << "Will save all data." << std::endl;
-        }
-    }
+
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
+    if (argc > 2) {
+        if (strcmp("in", argv[2]) == 0)
+            save_in = true;
+        else if (strcmp("out", argv[2]) == 0)
+            save_out = true;
+        else if (strcmp("inout", argv[2]) == 0)
+            save_in = save_out = true;
+    }
+    if (argc > 3) {
+        seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
+
     std::cout << "Will generate " << N << " random points." << std::endl;
+    if (save_in == save_out) {
+        if (save_in)
+            std::cout << "Will save all data." << std::endl;
+    }
+    else {
+        if (save_in)
+            std::cout << "Will save random floating point data." << std::endl;
+        else
+            std::cout << "Will save key, node and leaf data." << std::endl;
+    }
 
 
     /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
@@ -65,7 +69,7 @@ int main(int argc, char* argv[]) {
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_spheres_xyzr.begin(),
-                      grace::random_float4_functor(0.1f, seed_factor) );
+                      grace::random_float4_functor(0.1f, seed_factor));
 
 
     /* Save randomly generated data if requested. */
@@ -98,7 +102,7 @@ int main(int argc, char* argv[]) {
     }
 
 
-    /* Generate the Morton key of each position and save them, unsorted. */
+    /* Generate the Morton key of each (unsorted) sphere and save it. */
 
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
@@ -123,7 +127,7 @@ int main(int argc, char* argv[]) {
     }
 
 
-    /* Sort the position vectors by their keys and save sorted keys. */
+    /* Sort the spheres by their keys and save the sorted keys. */
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 

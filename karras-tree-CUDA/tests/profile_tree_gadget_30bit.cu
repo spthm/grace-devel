@@ -26,23 +26,24 @@ int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
-    unsigned int N_iter = 100;
     unsigned int file_num = 1;
     unsigned int device_ID = 0;
+    unsigned int N_iter = 100;
     infile_name = "Data_025";
-    if (argc > 3) {
-        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
-    }
-    if (argc > 2) {
-        device_ID = (unsigned int) std::strtol(argv[2], NULL, 10);
-    }
+
     if (argc > 1) {
         file_num = (unsigned int) std::strtol(argv[1], NULL, 10);
 
     }
+    if (argc > 2) {
+        device_ID = (unsigned int) std::strtol(argv[2], NULL, 10);
+    }
+    if (argc > 3) {
+        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
 
 
-    // Convert file number to a string.
+    // Converts file number to a string.
     converter << file_num;
     outfile_name = ("profile_tree_gadget_" + converter.str() + ".log");
 
@@ -84,7 +85,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Gadget files contains " << N << " gas particles and "
               << header.npart[1] << " dark matter particles." << std::endl;
 
-    // Read in positions and smoothing lengths from Gadget-2 file.
+
+    /* Read in Gadget data. */
+
     thrust::host_vector<float4> h_spheres_xyzr(N);
     thrust::host_vector<float> h_masses(N);
     thrust::host_vector<float> h_rho(N);
@@ -96,11 +99,10 @@ int main(int argc, char* argv[]) {
     // Masses unused.  Free space.
     h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
-    // Copy to device;
+
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
-
-    // Set the tree AABB.
+    // Set the tree-build AABB (contains all sphere centres).
     float min_x, max_x;
     grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
 
@@ -114,7 +116,7 @@ int main(int argc, char* argv[]) {
     float4 top = make_float4(max_x, max_y, max_z, 0.f);
 
 
-    /* Profile the tree constructed from random data. */
+    /* Profile the tree constructed from Gadget data. */
 
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
@@ -130,7 +132,6 @@ int main(int argc, char* argv[]) {
         // Copy pristine host-side data to GPU.
         thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
-        // Generate the Morton keys for each position.
         thrust::device_vector<grace::uinteger32> d_keys(N);
         cudaEventRecord(part_start);
         grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
@@ -139,7 +140,6 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         morton_tot += part_elapsed;
 
-        // Sort the positions by their keys and save the sorted keys.
         cudaEventRecord(part_start);
         thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                             d_spheres_xyzr.begin());
@@ -148,8 +148,6 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         sort_tot += part_elapsed;
 
-
-        // Build the tree hierarchy from the keys.
         grace::Nodes d_nodes(N-1);
         grace::Leaves d_leaves(N);
         cudaEventRecord(part_start);
@@ -159,7 +157,6 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         tree_tot += part_elapsed;
 
-        // Find the AABBs.
         cudaEventRecord(part_start);
         grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
         cudaEventRecord(part_stop);
