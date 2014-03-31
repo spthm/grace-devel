@@ -23,8 +23,6 @@ int main(int argc, char* argv[]) {
 
     outfile.setf(std::ios::fixed, std::ios::floatfield);
     outfile.precision(9);
-    outfile.width(11);
-    outfile.fill('0');
 
 
     /* Initialize run parameters. */
