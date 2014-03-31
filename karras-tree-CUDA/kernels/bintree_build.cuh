@@ -2,7 +2,7 @@
 
 #include <thrust/device_vector.h>
 
-#include "../types.h"
+#include "../kernel_config.h"
 #include "../nodes.h"
 #include "bits.cuh"
 #include "morton.cuh"
@@ -12,7 +12,34 @@ namespace grace {
 namespace gpu {
 
 //-----------------------------------------------------------------------------
-// CUDA kernels for tree building
+// Helper functions for tree build kernels.
+//-----------------------------------------------------------------------------
+
+// __device__ and in namespace gpu so we use the __device__ bit_prefix_length()
+template <typename UInteger>
+__device__ int common_prefix_length(const int i,
+                                    const int j,
+                                    const UInteger* keys,
+                                    const size_t n_keys)
+{
+    // Should be optimized away by the compiler.
+    const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
+
+    if (j < 0 || j >= n_keys || i < 0 || i >= n_keys) {
+        return -1;
+    }
+    UInteger key_i = keys[i];
+    UInteger key_j = keys[j];
+
+    int prefix_length = bit_prefix_length(key_i, key_j);
+    if (prefix_length == n_bits) {
+        prefix_length += bit_prefix_length((uinteger32)i, (uinteger32)j);
+    }
+    return prefix_length;
+}
+
+//-----------------------------------------------------------------------------
+// CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
@@ -27,7 +54,7 @@ __global__ void build_nodes_kernel(int4* nodes,
     unsigned int node_prefix;
     unsigned int span_max, l, bit;
 
-    // Index of this node.
+    // Index of the current node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (index < (n_keys-1) && index >= 0)
@@ -241,32 +268,10 @@ __global__ void find_AABBs_kernel(const int4* nodes,
     return;
 }
 
-template <typename UInteger>
-__device__ int common_prefix_length(const int i,
-                                    const int j,
-                                    const UInteger* keys,
-                                    const size_t n_keys)
-{
-    // Should be optimized away by the compiler.
-    const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
-
-    if (j < 0 || j >= n_keys || i < 0 || i >= n_keys) {
-        return -1;
-    }
-    UInteger key_i = keys[i];
-    UInteger key_j = keys[j];
-
-    int prefix_length = bit_prefix_length(key_i, key_j);
-    if (prefix_length == n_bits) {
-        prefix_length += bit_prefix_length((uinteger32)i, (uinteger32)j);
-    }
-    return prefix_length;
-}
-
 } // namespace gpu
 
 //-----------------------------------------------------------------------------
-// C-like wrappers for tree building
+// C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
@@ -279,7 +284,7 @@ void build_nodes(Nodes& d_nodes,
     int blocks = min(MAX_BLOCKS, (int) ((n_keys + BUILD_THREADS_PER_BLOCK-1)
                                         / BUILD_THREADS_PER_BLOCK));
 
-    // TODO: Error if n_keys <= 1. OR n_keys > MAX_INT.
+    // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
@@ -294,10 +299,9 @@ void find_AABBs(Nodes& d_nodes,
                 Leaves& d_leaves,
                 const thrust::device_vector<Float4>& d_spheres)
 {
-    thrust::device_vector<unsigned int> d_AABB_flags;
-
     size_t n_leaves = d_leaves.parent.size();
-    d_AABB_flags.resize(n_leaves-1);
+
+    thrust::device_vector<unsigned int> d_AABB_flags(n_leaves-1);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
                                         / AABB_THREADS_PER_BLOCK));

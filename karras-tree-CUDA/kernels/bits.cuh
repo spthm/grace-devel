@@ -55,8 +55,7 @@ __host__ __device__ uinteger64 space_by_two_21bit(const UInteger x)
 }
 
 template <typename UInteger>
-__host__ __device__ UInteger bit_prefix_length(const UInteger a,
-                                               const UInteger b)
+__host__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
 {
     unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
     UInteger x_or = a ^ b;
