@@ -1,7 +1,5 @@
 #pragma once
 
-#include "types.h"
-
 namespace grace {
 
 struct Ray
@@ -12,7 +10,7 @@ struct Ray
     int dclass;
 };
 
-struct SlopeProp
+struct RaySlope
 {
     float xbyy, ybyx, ybyz, zbyy, xbyz, zbyx;
     float c_xy, c_xz, c_yx, c_yz, c_zx, c_zy;
