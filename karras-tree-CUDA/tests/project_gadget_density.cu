@@ -21,10 +21,11 @@ int main(int argc, char* argv[] {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 250000;
-    if (argc > 1) {
+
+    if (argc > 1)
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
-    }
-    float N_rays_side = floor(pow(N_rays, 0.500001));
+
+    unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
 
 
     /* Read in Gadget file. */
@@ -51,8 +52,10 @@ int main(int argc, char* argv[] {
     // Masses unused.
     h_masses.clear(); h_masses.shrink_to_fit();
 
-// Device code.
-{
+
+{ // Device code.
+
+
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
@@ -87,12 +90,12 @@ int main(int argc, char* argv[] {
 
     thrust::device_vector<int> d_indices(N);
     thrust::device_vector<float> d_sorted(N);
+
     thrust::sequence(d_indices.begin(), d_indices.end());
-
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-
     thrust::gather(d_indices.begin(), d_indices.end(),
                    d_rho.begin(), d_sorted.begin());
+
     d_rho = d_sorted;
 
     // Working arrays no longer needed.
@@ -109,9 +112,9 @@ int main(int argc, char* argv[] {
     d_keys.clear(); d_keys.shrink_to_fit();
 
 
-    /* Generate the rays, all emitted in +z direction and covering all data. */
+    /* Generate the rays, all emitted in +z direction from a box side. */
 
-    // Rays emitted from box side (X, Y, min_z-max_r) and of length
+    // Rays emitted from box side (x, y, min_z - max_r) and of length
     // (max_z + max_r) - (min_z - max_r).  For simplicity, the ray (ox, oy)
     // limits are determined only by the particle min(x, y) / max(x, y) limits
     // and smoothing lengths are ignored.  This ensures that rays at the edge
@@ -119,8 +122,8 @@ int main(int argc, char* argv[] {
     float span_x = max_x - min_x;
     float span_y = max_y - min_y;
     float span_z = 2*max_r + max_z - min_z;
-    float spacer_x = span_x / N_rays_side;
-    float spacer_y = span_y / N_rays_side;
+    float spacer_x = span_x / (N_rays_side-1);
+    float spacer_y = span_y / (N_rays_side-1);
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
     thrust::host_vector<unsigned int> h_keys(N_rays);
@@ -131,7 +134,6 @@ int main(int argc, char* argv[] {
     {
         for (j=0, oy=min_y; j<N_rays_side; oy+=spacer_y, j++)
         {
-            // All rays point in +ve z direction.
             h_rays[i*N_rays_side + j].dx = 0.0f;
             h_rays[i*N_rays_side + j].dy = 0.0f;
             h_rays[i*N_rays_side + j].dz = 1.0f;
@@ -154,10 +156,14 @@ int main(int argc, char* argv[] {
 
     /* Trace and accumulate density through the similation data. */
 
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
+    thrust::device_vector<grace::Ray> d_rays = h_rays;
+
     thrust::device_vector<float> d_traced_rho(N_rays);
     thrust::device_vector<float> d_b_integrals(grace::kernel_integral_table,
                                                grace::kernel_integral_table+51);
-    grace::gpu::trace_property<<<28, TRACE_THREADS_PER_BLOCK>>>(
+
+    grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         d_rays.size(),
         thrust::raw_pointer_cast(d_traced_rho.data()),

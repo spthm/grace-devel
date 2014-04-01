@@ -40,8 +40,6 @@ int main(int argc, char* argv[]) {
         N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
 
-    unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
-
 
     /* Read in Gadget file. */
 
@@ -105,8 +103,8 @@ int main(int argc, char* argv[]) {
 
     // One set of keys for sorting spheres, one for sorting an arbitrary
     // number of other properties.
-    thrust::device_vector<unsigned int> d_keys(N);
-    thrust::device_vector<unsigned int> d_keys_2(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys_2(N);
 
     grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
     thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
@@ -139,57 +137,85 @@ int main(int argc, char* argv[]) {
     d_keys.clear(); d_keys.shrink_to_fit();
 
 
-    /* Generate the rays, all emitted in +z direction from a box side. */
-
-    // Rays emitted from box side (x, y, min_z - max_r) and of length
-    // (max_z + max_r) - (min_z - max_r).  For simplicity, the ray (ox, oy)
-    // limits are determined only by the particle min(x, y) / max(x, y) limits
-    // and smoothing lengths are ignored.  This ensures that rays at the edge
-    // will hit something!
-    float span_x = max_x - min_x;
-    float span_y = max_y - min_y;
-    float span_z = 2*max_r + max_z - min_z;
-    float spacer_x = span_x / (N_rays_side-1);
-    float spacer_y = span_y / (N_rays_side-1);
+    /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
+     * sufficient length to be terminated outwith the box.
+     */
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<unsigned int> h_keys(N_rays);
+    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
 
-    int i, j;
-    float ox, oy;
-    for (i=0, ox=min_x; i<N_rays_side; ox+=spacer_x, i++)
-    {
-        for (j=0, oy=min_y; j<N_rays_side; oy+=spacer_y, j++)
-        {
-            // All rays point in +ve z direction.
-            h_rays[i*N_rays_side + j].dx = 0.0f;
-            h_rays[i*N_rays_side + j].dy = 0.0f;
-            h_rays[i*N_rays_side + j].dz = 1.0f;
+    thrust::host_vector<float> h_dxs(N_rays);
+    thrust::host_vector<float> h_dys(N_rays);
+    thrust::host_vector<float> h_dzs(N_rays);
 
-            h_rays[i*N_rays_side + j].ox = ox;
-            h_rays[i*N_rays_side + j].oy = oy;
-            h_rays[i*N_rays_side + j].oz = min_z - max_r;
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N_rays),
+                      h_dxs.begin(),
+                      grace::random_float_functor(0u, -1.0f, 1.0f) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N_rays),
+                      h_dys.begin(),
+                      grace::random_float_functor(1u, -1.0f, 1.0f) );
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N_rays),
+                      h_dzs.begin(),
+                      grace::random_float_functor(2u, -1.0f, 1.0f) );
 
-            h_rays[i*N_rays_side + j].length = span_z;
-            h_rays[i*N_rays_side + j].dclass = 7;
+    float x_centre = (max_x+min_x) / 2.;
+    float y_centre = (max_y+min_y) / 2.;
+    float z_centre = (max_z+min_z) / 2.;
 
-            // Since all rays are PPP, base key on origin instead.
-            // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
-                                                          (oy-min_y)/span_y,
-                                                          0.0f);
-        }
+    float length = sqrt((max_x-min_x)*(max_x-min_x) +
+                        (max_y-min_y)*(max_y-min_y) +
+                        (max_z-min_z)*(max_z-min_z));
+
+    for (int i=0; i<N_rays; i++) {
+        float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
+                           h_dys[i]*h_dys[i] +
+                           h_dzs[i]*h_dzs[i]);
+
+        h_rays[i].dx = h_dxs[i] / N_dir;
+        h_rays[i].dy = h_dys[i] / N_dir;
+        h_rays[i].dz = h_dzs[i] / N_dir;
+
+        h_rays[i].ox = x_centre;
+        h_rays[i].oy = y_centre;
+        h_rays[i].oz = z_centre;
+
+        h_rays[i].length = length;
+
+        h_rays[i].dclass = 0;
+        if (h_dxs[i] >= 0)
+            h_rays[i].dclass += 1;
+        if (h_dys[i] >= 0)
+            h_rays[i].dclass += 2;
+        if (h_dzs[i] >= 0)
+            h_rays[i].dclass += 4;
+
+        // Floats must be in (0, 1) for morton_key().
+        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
+                                      (h_rays[i].dy+1)/2.f,
+                                      (h_rays[i].dz+1)/2.f);
     }
+    h_dxs.clear();
+    h_dxs.shrink_to_fit();
+    h_dys.clear();
+    h_dys.shrink_to_fit();
+    h_dzs.clear();
+    h_dxs.shrink_to_fit();
 
 
     /* Profile the tracing performance by tracing rays through the simulation
-     * data and accumulating density.  Repeat N_iter times.
+     * data and counting hits, accumulating density and saving column densities
+     * and distances to each intersected particle.  Repeat N_iter times.
      */
 
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
-    double sort_tot, trace_tot, all_tot;
+    double sort_ray_tot, sort_dists_tot;
+    double trace_rho_tot, trace_full_tot
+    double all_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -226,7 +252,75 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        trace_tot += elapsed;
+        trace_rho_tot += elapsed;
+
+        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
+
+
+        /* Full trace. */
+
+        cudaEventRecord(part_start);
+
+        grace::gpu::trace_hitcounts_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_rays.data()),
+            d_rays.size(),
+            thrust::raw_pointer_cast(d_hit_offsets.data()),
+            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
+            thrust::raw_pointer_cast(d_nodes.AABB.data()),
+            d_nodes.hierarchy.size(),
+            thrust::raw_pointer_cast(d_spheres_xyzr.data()));
+
+        // Allocate output array based on per-ray hit counts, and calculate
+        // individual ray offsets into this array.
+        int last_ray_hits = d_hit_offsets[N_rays-1];
+        thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
+                               d_hit_offsets.begin());
+
+        thrust::device_vector<float> d_trace_out(d_hit_counts[N_rays-1]+
+                                                last_ray_hits);
+        thrust::device_vector<float> d_trace_dists(d_trace_output.size());
+
+        grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_rays.data()),
+            d_rays.size(),
+            thrust::raw_pointer_cast(d_trace_out.data()),
+            thrust::raw_pointer_cast(d_trace_dists.data()),
+            thrust::raw_pointer_cast(d_hit_offsets.data()),
+            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
+            thrust::raw_pointer_cast(d_nodes.AABB.data()),
+            d_nodes.hierarchy.size(),
+            thrust::raw_pointer_cast(d_spheres_xyzr.data()),
+            thrust::raw_pointer_cast(d_rho.data()),
+            thrust::raw_pointer_cast(d_b_integrals.data()));
+
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&elapsed, part_start, part_stop);
+        trace_full_tot += elapsed;
+
+        /* End of full trace. */
+
+
+        thrust::host_vector<int> h_hit_offsets = d_hit_offsets;
+
+        for (int ray_i=0; ray_i<N_rays; ray_i++) {
+            int ray_start = h_hit_offsets[ray_i];
+            int ray_end;
+
+            if (ray_i == N_rays-1)
+                r_end = h_hit_offsets[i] + last_ray_hits - 1;
+            else
+                r_end = h_hit_offsets[i+1] - 1;
+
+            cudaEventRecord(part_start);
+            thrust::sort_by_key(d_trace_dists.begin()+r_start,
+                                d_trace_dists.begin()+r_end,
+                                d_trace_outp.begin()+r_start);
+            cudaEventRecord(part_stop);
+            cudaEventSynchronize(part_stop);
+            cudaEventElapsedTime(&elapsed, part_start, part_stop);
+            sort_dists_tot += elapsed;
+        }
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -240,14 +334,21 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Time for cummulative density tracing: ";
     std::cout.width(8);
-    std::cout << trace_tot / N_iter << " ms" << std::endl;
+    std::cout << trace_rho_tot / N_iter << " ms" << std::endl;
+
+    std::cout << "Time for full tracing: ";
+    std::cout.width(8);
+    std::cout << trace_full_tot / N_iter << " ms" << std::endl;
+
+    std::cout << "Time for ray hits sort-by-distance:   "
+    std::cout.with(8);
+    std::cout << sort_dists_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for total (inc. memory ops):     ";
     std::cout.width(8);
     std::cout << all_tot / N_iter << " ms" << std::endl;
 
     std::cout << std::endl;
-
 
 } // End device code.
 
