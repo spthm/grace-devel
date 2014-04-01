@@ -106,10 +106,11 @@ int main(int argc, char* argv[]) {
 
         for (int i=0; i<N_iter; i++) {
             cudaEventRecord(tot_start);
-            // Copy pristine host-side data to GPU.
+
             thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
             thrust::device_vector<grace::uinteger32> d_keys(N);
+
             cudaEventRecord(part_start);
             grace::morton_keys(d_spheres_xyzr, d_keys, bottom, top);
             cudaEventRecord(part_stop);
@@ -127,6 +128,7 @@ int main(int argc, char* argv[]) {
 
             grace::Nodes d_nodes(N-1);
             grace::Leaves d_leaves(N);
+
             cudaEventRecord(part_start);
             grace::build_nodes(d_nodes, d_leaves, d_keys);
             cudaEventRecord(part_stop);
@@ -153,19 +155,25 @@ int main(int argc, char* argv[]) {
         std::cout << "    i)  A tree from " << N << " random points." << std::endl;
         std::cout << "    ii) A fully-balanced tree with " << levels
                 << " levels and " << N << " leaves." << std::endl;
+
         std::cout << std::endl;
+
         std::cout << "Time for Morton key generation:   ";
         std::cout.width(7);
         std::cout << morton_tot/N_iter << " ms." << std::endl;
+
         std::cout << "Time for sort-by-key:             ";
         std::cout.width(7);
         std::cout << sort_tot/N_iter << " ms." << std::endl;
+
         std::cout << "Time for hierarchy generation:    ";
         std::cout.width(7);
         std::cout << tree_tot/N_iter << " ms." << std::endl;
+
         std::cout << "Time for calculating AABBs:       ";
         std::cout.width(7);
         std::cout << aabb_tot/N_iter << " ms." << std::endl;
+
         std::cout << "Time for total (inc. memory ops): ";
         std::cout.width(7);
         std::cout << all_tot/N_iter << " ms." << std::endl;
@@ -251,7 +259,7 @@ int main(int argc, char* argv[]) {
         std::cout << "Time for balanced tree AABBs:     ";
         std::cout.width(7);
         std::cout << aabb_tot << " ms." << std::endl;
-        std::cout << std::endl << std::endl;
+        std::cout << std::endl;
     }
 
     // Exit cleanly to ensure a full profiler trace.

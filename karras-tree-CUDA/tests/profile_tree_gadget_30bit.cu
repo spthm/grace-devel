@@ -102,7 +102,6 @@ int main(int argc, char* argv[]) {
 
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
-        // Copy pristine host-side data to GPU.
         thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
         thrust::device_vector<grace::uinteger32> d_keys(N);
@@ -137,7 +136,6 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         aabb_tot += part_elapsed;
 
-        // Record the total time spent in the loop.
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
         cudaEventElapsedTime(&part_elapsed, tot_start, tot_stop);
