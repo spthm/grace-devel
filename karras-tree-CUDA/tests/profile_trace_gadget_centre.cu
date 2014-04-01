@@ -214,7 +214,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
     double sort_ray_tot, sort_dists_tot;
-    double trace_rho_tot, trace_full_tot
+    double trace_rho_tot, trace_full_tot;
     double all_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
@@ -232,11 +232,12 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        sort_tot += elapsed;
+        sort_ray_tot += elapsed;
 
         thrust::device_vector<float> d_traced_rho(N_rays);
-        thrust::device_vector<float> d_b_integrals(grace::kernel_integral_table,
-                                                   grace::kernel_integral_table+51);
+        grace::KernelIntegrals<float> lookup;
+        thrust::device_vector<float> d_b_integrals(&lookup.table[0],
+                                                   &lookup.table[50]);
 
         cudaEventRecord(part_start);
         grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
@@ -276,14 +277,14 @@ int main(int argc, char* argv[]) {
         thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
                                d_hit_offsets.begin());
 
-        thrust::device_vector<float> d_trace_out(d_hit_counts[N_rays-1]+
+        thrust::device_vector<float> d_trace_output(d_hit_offsets[N_rays-1]+
                                                 last_ray_hits);
         thrust::device_vector<float> d_trace_dists(d_trace_output.size());
 
         grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_rays.data()),
             d_rays.size(),
-            thrust::raw_pointer_cast(d_trace_out.data()),
+            thrust::raw_pointer_cast(d_trace_output.data()),
             thrust::raw_pointer_cast(d_trace_dists.data()),
             thrust::raw_pointer_cast(d_hit_offsets.data()),
             thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
@@ -308,14 +309,14 @@ int main(int argc, char* argv[]) {
             int ray_end;
 
             if (ray_i == N_rays-1)
-                r_end = h_hit_offsets[i] + last_ray_hits - 1;
+                ray_end = h_hit_offsets[i] + last_ray_hits - 1;
             else
-                r_end = h_hit_offsets[i+1] - 1;
+                ray_end = h_hit_offsets[i+1] - 1;
 
             cudaEventRecord(part_start);
-            thrust::sort_by_key(d_trace_dists.begin()+r_start,
-                                d_trace_dists.begin()+r_end,
-                                d_trace_outp.begin()+r_start);
+            thrust::sort_by_key(d_trace_dists.begin() + ray_start,
+                                d_trace_dists.begin() + ray_end,
+                                d_trace_output.begin() + ray_start);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -330,7 +331,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Time for ray sort-by-key:             ";
     std::cout.width(8);
-    std::cout << sort_tot / N_iter << " ms" << std::endl;
+    std::cout << sort_ray_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for cummulative density tracing: ";
     std::cout.width(8);
@@ -340,8 +341,8 @@ int main(int argc, char* argv[]) {
     std::cout.width(8);
     std::cout << trace_full_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for ray hits sort-by-distance:   "
-    std::cout.with(8);
+    std::cout << "Time for ray hits sort-by-distance:   ";
+    std::cout.width(8);
     std::cout << sort_dists_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for total (inc. memory ops):     ";

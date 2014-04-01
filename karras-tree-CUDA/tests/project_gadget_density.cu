@@ -16,7 +16,7 @@
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
 
-int main(int argc, char* argv[] {
+int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
@@ -160,8 +160,9 @@ int main(int argc, char* argv[] {
     thrust::device_vector<grace::Ray> d_rays = h_rays;
 
     thrust::device_vector<float> d_traced_rho(N_rays);
-    thrust::device_vector<float> d_b_integrals(grace::kernel_integral_table,
-                                               grace::kernel_integral_table+51);
+    grace::KernelIntegrals<float> lookup;
+    thrust::device_vector<float> d_b_integrals(&lookup.table[0],
+                                               &lookup.table[50]);
 
     grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),

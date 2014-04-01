@@ -209,8 +209,9 @@ int main(int argc, char* argv[]) {
         sort_tot += elapsed;
 
         thrust::device_vector<float> d_traced_rho(N_rays);
-        thrust::device_vector<float> d_b_integrals(grace::kernel_integral_table,
-                                                   grace::kernel_integral_table+51);
+        grace::KernelIntegrals<float> lookup;
+        thrust::device_vector<float> d_b_integrals(&lookup.table[0],
+                                                   &lookup.table[50]);
 
         cudaEventRecord(part_start);
         grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
