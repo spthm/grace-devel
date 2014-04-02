@@ -45,7 +45,7 @@ int main(int argc, char* argv[]) {
     // Set both (pseudo)masses equal to .5, so the total sum is one.
     thrust::host_vector<float> h_pmasses(N);
     for (int i=0; i<N; i++) {
-        h_pmasses[i] = 1.0f;
+        h_pmasses[i] = 0.5f;
     }
 
     std::cout << "Will trace " << N_rays << " rays through " << N

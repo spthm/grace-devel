@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 250000;
-    unsigned int N_iter = 100;
+    unsigned int N_iter = 10;
 
     if (argc > 1) {
         device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "TRACE_THREADS_PER_BLOCK:   " << TRACE_THREADS_PER_BLOCK
+    std::cout << "TRACE_THREADS_PER_BLOCK:    " << TRACE_THREADS_PER_BLOCK
             << std::endl;
     std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
     std::cout << "Gadget data file:           " << fname << std::endl;
