@@ -352,10 +352,10 @@ int main(int argc, char* argv[]) {
 
             size_t avail, total;
             cuMemGetInfo(&avail, &total);
-            std::cout << "Free memory:  " << avail / (1024.*1024.*1024)
-                      << " GB. " << std::endl;
+            std::cout << "Free memory:  " << avail / (1024.*1024.*1024.)
+                      << " GB" << std::endl;
             std::cout << "Total memory: " << total / (1024.*1024.*1024.)
-                      << " GB." << std::endl;
+                      << " GB" << std::endl;
             std::cout << std::endl;
         }
     }
