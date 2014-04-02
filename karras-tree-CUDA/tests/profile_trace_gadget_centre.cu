@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 250000;
-    unsigned int N_iter = 100;
+    unsigned int N_iter = 10;
 
     if (argc > 1) {
         device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "TRACE_THREADS_PER_BLOCK:   " << TRACE_THREADS_PER_BLOCK
+    std::cout << "TRACE_THREADS_PER_BLOCK:    " << TRACE_THREADS_PER_BLOCK
             << std::endl;
     std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
     std::cout << "Gadget data file:           " << fname << std::endl;
@@ -133,8 +133,13 @@ int main(int argc, char* argv[]) {
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
-    // Keys no longer needed.
-    d_keys.clear(); d_keys.shrink_to_fit();
+    // // Keys no longer needed.
+    // d_keys.clear(); d_keys.shrink_to_fit();
+    // // Levels unused.
+    // d_nodes.level.clear(); d_nodes.level.shrink_to_fit();
+    // // Leaves unused.
+    // d_leaves.parent.clear(); d_leaves.parent.shrink_to_fit();
+    // d_leaves.AABB.clear(); d_leaves.AABB.shrink_to_fit();
 
 
     /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
@@ -206,7 +211,7 @@ int main(int argc, char* argv[]) {
 
 
     /* Profile the tracing performance by tracing rays through the simulation
-     * data and counting hits, accumulating density and saving column densities
+     * data and i) accumulating density and ii) saving column densities
      * and distances to each intersected particle.  Repeat N_iter times.
      */
 
@@ -233,6 +238,8 @@ int main(int argc, char* argv[]) {
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         sort_ray_tot += elapsed;
+
+        // d_keys.clear(); d_keys.shrink_to_fit();
 
         thrust::device_vector<float> d_traced_rho(N_rays);
         grace::KernelIntegrals<float> lookup;
@@ -277,14 +284,13 @@ int main(int argc, char* argv[]) {
         thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
                                d_hit_offsets.begin());
 
-        thrust::device_vector<float> d_trace_output(d_hit_offsets[N_rays-1]+
-                                                last_ray_hits);
-        thrust::device_vector<float> d_trace_dists(d_trace_output.size());
+        d_traced_rho.resize(d_hit_offsets[N_rays-1] + last_ray_hits);
+        thrust::device_vector<float> d_trace_dists(d_traced_rho.size());
 
         grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_rays.data()),
             d_rays.size(),
-            thrust::raw_pointer_cast(d_trace_output.data()),
+            thrust::raw_pointer_cast(d_traced_rho.data()),
             thrust::raw_pointer_cast(d_trace_dists.data()),
             thrust::raw_pointer_cast(d_hit_offsets.data()),
             thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
@@ -309,14 +315,14 @@ int main(int argc, char* argv[]) {
             int ray_end;
 
             if (ray_i == N_rays-1)
-                ray_end = h_hit_offsets[i] + last_ray_hits - 1;
+                ray_end = h_hit_offsets[ray_i] + last_ray_hits - 1;
             else
-                ray_end = h_hit_offsets[i+1] - 1;
+                ray_end = h_hit_offsets[ray_i+1] - 1;
 
             cudaEventRecord(part_start);
             thrust::sort_by_key(d_trace_dists.begin() + ray_start,
                                 d_trace_dists.begin() + ray_end,
-                                d_trace_output.begin() + ray_start);
+                                d_traced_rho.begin() + ray_start);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -327,6 +333,31 @@ int main(int argc, char* argv[]) {
         cudaEventSynchronize(tot_stop);
         cudaEventElapsedTime(&elapsed, tot_start, tot_stop);
         all_tot += elapsed;
+
+        if (i == 0) {
+            float total_bytes = 0.0;
+            total_bytes += d_rays.size() * sizeof(grace::Ray);
+            total_bytes += d_traced_rho.size() * sizeof(float);
+            total_bytes += d_trace_dists.size() * sizeof(float);
+            total_bytes += d_hit_offsets.size() * sizeof(unsigned int);
+            total_bytes += d_nodes.hierarchy.size() * sizeof(int4);
+            total_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
+            total_bytes += d_spheres_xyzr.size() * sizeof(float);
+            total_bytes += d_rho.size() * sizeof(float);
+            total_bytes += d_b_integrals.size() * sizeof(float);
+
+            std::cout << "Total memory for full trace kernel: "
+                      << total_bytes / (1024.*1024.*1024.) << " GB."
+                      << std::endl;
+
+            size_t avail, total;
+            cuMemGetInfo(&avail, &total);
+            std::cout << "Free memory:  " << avail / (1024.*1024.*1024)
+                      << " GB. " << std::endl;
+            std::cout << "Total memory: " << total / (1024.*1024.*1024.)
+                      << " GB." << std::endl;
+            std::cout << std::endl;
+        }
     }
 
     std::cout << "Time for ray sort-by-key:             ";
@@ -337,7 +368,7 @@ int main(int argc, char* argv[]) {
     std::cout.width(8);
     std::cout << trace_rho_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for full tracing: ";
+    std::cout << "Time for full tracing:                ";
     std::cout.width(8);
     std::cout << trace_full_tot / N_iter << " ms" << std::endl;
 
