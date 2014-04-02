@@ -347,7 +347,7 @@ int main(int argc, char* argv[]) {
             total_bytes += d_b_integrals.size() * sizeof(float);
 
             std::cout << "Total memory for full trace kernel: "
-                      << total_bytes / (1024.*1024.*1024.) << " GB."
+                      << total_bytes / (1024.*1024.*1024.) << " GB"
                       << std::endl;
 
             size_t avail, total;
