@@ -135,9 +135,6 @@ int main(int argc, char* argv[]) {
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
-    // Keys no longer needed.
-    d_keys.clear(); d_keys.shrink_to_fit();
-
 
     /* Generate the rays, all emitted in +z direction from a box side. */
 
@@ -153,7 +150,7 @@ int main(int argc, char* argv[]) {
     float spacer_y = span_y / (N_rays_side-1);
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<unsigned int> h_keys(N_rays);
+    thrust::host_vector<unsigned int> h_ray_keys(N_rays);
 
     int i, j;
     float ox, oy;
@@ -175,7 +172,7 @@ int main(int argc, char* argv[]) {
 
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
+            h_ray_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
                                                           (oy-min_y)/span_y,
                                                           0.0f);
         }
@@ -199,10 +196,10 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(tot_start);
 
         thrust::device_vector<grace::Ray> d_rays = h_rays;
-        thrust::device_vector<unsigned int> d_keys = h_keys;
+        thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
 
         cudaEventRecord(part_start);
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
+        thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(), d_rays.begin());
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -233,22 +230,41 @@ int main(int argc, char* argv[]) {
         cudaEventSynchronize(tot_stop);
         cudaEventElapsedTime(&elapsed, tot_start, tot_stop);
         all_tot += elapsed;
+
+        // Must be done in-loop for cuMemGetInfo to return relevant results.
+        if (i == 0) {
+            float trace_bytes = 0.0;
+            float unused_bytes = 0.0;
+            trace_bytes += d_rays.size() * sizeof(grace::Ray);
+            trace_bytes += d_traced_rho.size() * sizeof(float);
+            trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
+            trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
+            trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
+            trace_bytes += d_rho.size() * sizeof(float);
+            trace_bytes += d_b_integrals.size() * sizeof(float);
+
+            unused_bytes += d_keys.size() * sizeof(unsigned int);
+            unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
+            unused_bytes += d_leaves.parent.size() * sizeof(int);
+            unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
+            unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
+
+            std::cout << "Total memory for property trace kernel:        "
+                      << trace_bytes / (1024.*1024.*1024.) << " GiB"
+                      << std::endl;
+            std::cout << "Allocated memory not used in trace kernel: "
+                      << unused_bytes / (1024.*1024.*1024.) << " GiB"
+                      << std::endl;
+
+            size_t avail, total;
+            cuMemGetInfo(&avail, &total);
+            std::cout << "Free memory:  " << avail / (1024.*1024.*1024.)
+                      << " GiB" << std::endl;
+            std::cout << "Total memory: " << total / (1024.*1024.*1024.)
+                      << " GiB" << std::endl;
+            std::cout << std::endl;
+        }
     }
-
-    std::cout << "Time for ray sort-by-key:             ";
-    std::cout.width(8);
-    std::cout << sort_tot / N_iter << " ms" << std::endl;
-
-    std::cout << "Time for cummulative density tracing: ";
-    std::cout.width(8);
-    std::cout << trace_tot / N_iter << " ms" << std::endl;
-
-    std::cout << "Time for total (inc. memory ops):     ";
-    std::cout.width(8);
-    std::cout << all_tot / N_iter << " ms" << std::endl;
-
-    std::cout << std::endl;
-
 
 } // End device code.
 

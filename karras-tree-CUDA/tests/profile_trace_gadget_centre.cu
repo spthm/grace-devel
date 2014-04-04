@@ -133,21 +133,13 @@ int main(int argc, char* argv[]) {
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
-    // // Keys no longer needed.
-    // d_keys.clear(); d_keys.shrink_to_fit();
-    // // Levels unused.
-    // d_nodes.level.clear(); d_nodes.level.shrink_to_fit();
-    // // Leaves unused.
-    // d_leaves.parent.clear(); d_leaves.parent.shrink_to_fit();
-    // d_leaves.AABB.clear(); d_leaves.AABB.shrink_to_fit();
-
 
     /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
-     * sufficient length to be terminated outwith the box.
+     * sufficient length to be terminated outside the box.
      */
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<grace::uinteger32> h_keys(N_rays);
+    thrust::host_vector<grace::uinteger32> h_ray_keys(N_rays);
 
     thrust::host_vector<float> h_dxs(N_rays);
     thrust::host_vector<float> h_dys(N_rays);
@@ -198,7 +190,7 @@ int main(int argc, char* argv[]) {
             h_rays[i].dclass += 4;
 
         // Floats must be in (0, 1) for morton_key().
-        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
+        h_ray_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
                                       (h_rays[i].dy+1)/2.f,
                                       (h_rays[i].dz+1)/2.f);
     }
@@ -230,16 +222,15 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(tot_start);
 
         thrust::device_vector<grace::Ray> d_rays = h_rays;
-        thrust::device_vector<unsigned int> d_keys = h_keys;
+        thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
 
         cudaEventRecord(part_start);
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
+        thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
+                            d_rays.begin());
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         sort_ray_tot += elapsed;
-
-        // d_keys.clear(); d_keys.shrink_to_fit();
 
         thrust::device_vector<float> d_traced_rho(N_rays);
         grace::KernelIntegrals<float> lookup;
@@ -280,12 +271,13 @@ int main(int argc, char* argv[]) {
 
         // Allocate output array based on per-ray hit counts, and calculate
         // individual ray offsets into this array.
-        int last_ray_hits = d_hit_offsets[N_rays-1];
+        unsigned int last_ray_hits = d_hit_offsets[N_rays-1];
         thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
                                d_hit_offsets.begin());
+        unsigned int total_hits = d_hit_offsets[N_rays-1] + last_ray_hits;
 
-        d_traced_rho.resize(d_hit_offsets[N_rays-1] + last_ray_hits);
-        thrust::device_vector<float> d_trace_dists(d_traced_rho.size());
+        d_traced_rho.resize(total_hits);
+        thrust::device_vector<float> d_trace_dists(total_hits);
 
         grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_rays.data()),
@@ -334,28 +326,39 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, tot_start, tot_stop);
         all_tot += elapsed;
 
+        // Must be done in-loop for cuMemGetInfo to return relevant results.
         if (i == 0) {
-            float total_bytes = 0.0;
-            total_bytes += d_rays.size() * sizeof(grace::Ray);
-            total_bytes += d_traced_rho.size() * sizeof(float);
-            total_bytes += d_trace_dists.size() * sizeof(float);
-            total_bytes += d_hit_offsets.size() * sizeof(unsigned int);
-            total_bytes += d_nodes.hierarchy.size() * sizeof(int4);
-            total_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
-            total_bytes += d_spheres_xyzr.size() * sizeof(float);
-            total_bytes += d_rho.size() * sizeof(float);
-            total_bytes += d_b_integrals.size() * sizeof(float);
+            float trace_bytes = 0.0;
+            float unused_bytes = 0.0;
+            trace_bytes += d_rays.size() * sizeof(grace::Ray);
+            trace_bytes += d_traced_rho.size() * sizeof(float);
+            trace_bytes += d_trace_dists.size() * sizeof(float);
+            trace_bytes += d_hit_offsets.size() * sizeof(unsigned int);
+            trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
+            trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
+            trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
+            trace_bytes += d_rho.size() * sizeof(float);
+            trace_bytes += d_b_integrals.size() * sizeof(float);
 
-            std::cout << "Total memory for full trace kernel: "
-                      << total_bytes / (1024.*1024.*1024.) << " GB"
+            unused_bytes += d_keys.size() * sizeof(unsigned int);
+            unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
+            unused_bytes += d_leaves.parent.size() * sizeof(int);
+            unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
+            unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
+
+            std::cout << "Total memory for full trace kernel:        "
+                      << trace_bytes / (1024.*1024.*1024.) << " GiB"
+                      << std::endl;
+            std::cout << "Allocated memory not used in trace kernel: "
+                      << unused_bytes / (1024.*1024.*1024.) << " GiB"
                       << std::endl;
 
             size_t avail, total;
             cuMemGetInfo(&avail, &total);
             std::cout << "Free memory:  " << avail / (1024.*1024.*1024.)
-                      << " GB" << std::endl;
+                      << " GiB" << std::endl;
             std::cout << "Total memory: " << total / (1024.*1024.*1024.)
-                      << " GB" << std::endl;
+                      << " GiB" << std::endl;
             std::cout << std::endl;
         }
     }
