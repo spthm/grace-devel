@@ -249,7 +249,7 @@ int main(int argc, char* argv[]) {
             unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 
-            std::cout << "Total memory for property trace kernel:        "
+            std::cout << "Total memory for property trace kernel:    "
                       << trace_bytes / (1024.*1024.*1024.) << " GiB"
                       << std::endl;
             std::cout << "Allocated memory not used in trace kernel: "
