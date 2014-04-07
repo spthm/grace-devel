@@ -2,6 +2,7 @@
 
 #include <thrust/device_vector.h>
 
+#include "../kernel_config.h"
 #include "../types.h"
 #include "bits.cuh"
 
