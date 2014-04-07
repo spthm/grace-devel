@@ -160,7 +160,7 @@ public:
 struct float4_compare_x
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
       {
           return a.x < b.x;
       }
@@ -169,7 +169,7 @@ struct float4_compare_x
 struct float4_compare_y
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
       {
           return a.y < b.y;
       }
@@ -178,7 +178,7 @@ struct float4_compare_y
 struct float4_compare_z
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
       {
           return a.z < b.z;
       }
@@ -187,7 +187,7 @@ struct float4_compare_z
 struct float4_compare_w
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(Float4 a, Float4 b)
+      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
       {
           return a.w < b.w;
       }
