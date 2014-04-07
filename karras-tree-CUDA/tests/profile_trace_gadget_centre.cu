@@ -2,9 +2,12 @@
 #include <sstream>
 #include <fstream>
 
+#include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/copy.h>
+#include <thrust/iterator/constant_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/scatter.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
@@ -210,7 +213,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
-    double sort_ray_tot, sort_dists_tot;
+    double sort_ray_tot, sort_rho_dists_tot;
     double trace_rho_tot, trace_full_tot;
     double all_tot;
     cudaEventCreate(&part_start);
@@ -300,26 +303,33 @@ int main(int argc, char* argv[]) {
         /* End of full trace. */
 
 
-        thrust::host_vector<int> h_hit_offsets = d_hit_offsets;
+        thrust::device_vector<unsigned int> d_ray_segments(d_hit_offsets.size());
+        thrust::constant_iterator<unsigned int> first(1);
+        thrust::constant_iterator<unsigned int> last = first + d_hit_offsets.size();
 
-        for (int ray_i=0; ray_i<N_rays; ray_i++) {
-            int ray_start = h_hit_offsets[ray_i];
-            int ray_end;
+        cudaEventRecord(part_start);
+        thrust::scatter(first, last,
+                        d_hit_offsets.begin(),
+                        d_ray_segments.begin());
+        thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
+                               d_ray_segments.begin());
 
-            if (ray_i == N_rays-1)
-                ray_end = h_hit_offsets[ray_i] + last_ray_hits - 1;
-            else
-                ray_end = h_hit_offsets[ray_i+1] - 1;
-
-            cudaEventRecord(part_start);
-            thrust::sort_by_key(d_trace_dists.begin() + ray_start,
-                                d_trace_dists.begin() + ray_end,
-                                d_traced_rho.begin() + ray_start);
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&elapsed, part_start, part_stop);
-            sort_dists_tot += elapsed;
-        }
+        thrust::sort_by_key(d_trace_dists.begin(), d_trace_dists.end(),
+                            thrust::make_zip_iterator(
+                                thrust::make_tuple(d_traced_rho.begin(),
+                                                   d_ray_segments.begin())
+                            )
+        );
+        thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
+                                   thrust::make_zip_iterator(
+                                       thrust::make_tuple(d_trace_dists.begin(),
+                                                          d_traced_rho.begin())
+                                   )
+        );
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&elapsed, part_start, part_stop);
+        sort_rho_dists_tot += elapsed;
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -339,6 +349,8 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += d_b_integrals.size() * sizeof(float);
+            // Strictly speaking not used in kernel, but essential nonetheless.
+            trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
@@ -363,23 +375,23 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    std::cout << "Time for ray sort-by-key:             ";
+    std::cout << "Time for ray sort-by-key:               ";
     std::cout.width(8);
     std::cout << sort_ray_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for cummulative density tracing: ";
+    std::cout << "Time for cummulative density tracing:   ";
     std::cout.width(8);
     std::cout << trace_rho_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for full tracing:                ";
+    std::cout << "Time for full tracing:                  ";
     std::cout.width(8);
     std::cout << trace_full_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for ray hits sort-by-distance:   ";
+    std::cout << "Time for trace output sort-by-distance: ";
     std::cout.width(8);
-    std::cout << sort_dists_tot / N_iter << " ms" << std::endl;
+    std::cout << sort_rho_dists_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for total (inc. memory ops):     ";
+    std::cout << "Time for total (inc. memory ops):       ";
     std::cout.width(8);
     std::cout << all_tot / N_iter << " ms" << std::endl;
 
