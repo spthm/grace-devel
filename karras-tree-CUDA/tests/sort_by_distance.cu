@@ -179,7 +179,6 @@ int main(int argc, char* argv[]) {
     unsigned int last_ray_hits = d_hit_offsets[N_rays-1];
     thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
                            d_hit_offsets.begin());
-    std::cout << d_hit_offsets[N_rays-1] << std::endl;
     unsigned int total_hits = d_hit_offsets[N_rays-1] + last_ray_hits;
 
     std::cout << "Total hits:   " << total_hits << std::endl;
@@ -236,6 +235,7 @@ int main(int argc, char* argv[]) {
     for (int ray_i=0; ray_i<N_rays; ray_i++) {
         int start = h_hit_offsets[ray_i];
         int end = (ray_i < N_rays-1 ? h_hit_offsets[ray_i+1] : total_hits);
+
         float dist = h_trace_dists[start];
 
         for (int hit_i=start+1; hit_i<end; hit_i++) {
