@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 1000000;
-    unsigned int N_rays = 10000;
+    unsigned int N_rays = 25000;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -183,6 +183,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Total hits:   " << total_hits << std::endl;
     std::cout << "Mean per ray: " << ((float)total_hits) / N_rays << std::endl;
+    std::cout << std::endl;
 
     thrust::device_vector<float> d_traced_rho(total_hits);
     thrust::device_vector<float> d_trace_dists(total_hits);

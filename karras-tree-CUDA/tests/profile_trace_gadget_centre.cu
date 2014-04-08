@@ -30,8 +30,8 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int device_ID = 0;
-    unsigned int N_rays = 250000;
-    unsigned int N_iter = 10;
+    unsigned int N_rays = 145000;
+    unsigned int N_iter = 2;
 
     if (argc > 1) {
         device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
