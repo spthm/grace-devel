@@ -59,6 +59,9 @@ public:
     explicit random_float_functor(const unsigned int offset_) :
         offset(offset_), uniform(0.0f, 1.0f), seed_factor(1u) {}
 
+    explicit random_float_functor(const float scale_) :
+        offset(0u), uniform(0.0f, scale_), seed_factor(1u) {}
+
     explicit random_float_functor(const float low_,
                                   const float high_) :
         offset(0u), uniform(low_, high_), seed_factor(1u) {}
