@@ -137,8 +137,8 @@ int main(int argc, char* argv[]) {
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
-    /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
-     * sufficient length to be terminated outside the box.
+    /* Generate the rays, emitted emitted from box centre and of sufficient
+     * length to be terminated outside the box.
      */
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
@@ -194,8 +194,8 @@ int main(int argc, char* argv[]) {
 
         // Floats must be in (0, 1) for morton_key().
         h_ray_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                      (h_rays[i].dy+1)/2.f,
-                                      (h_rays[i].dz+1)/2.f);
+                                          (h_rays[i].dy+1)/2.f,
+                                          (h_rays[i].dz+1)/2.f);
     }
     h_dxs.clear();
     h_dxs.shrink_to_fit();
@@ -256,10 +256,10 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         trace_rho_tot += elapsed;
 
-        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
-
 
         /* Full trace. */
+
+        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
 
         cudaEventRecord(part_start);
 
@@ -303,7 +303,7 @@ int main(int argc, char* argv[]) {
         /* End of full trace. */
 
 
-        thrust::device_vector<unsigned int> d_ray_segments(d_hit_offsets.size());
+        thrust::device_vector<unsigned int> d_ray_segments(d_trace_dists.size());
         thrust::constant_iterator<unsigned int> first(1);
         thrust::constant_iterator<unsigned int> last = first + d_hit_offsets.size();
 
