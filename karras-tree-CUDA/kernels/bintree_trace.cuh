@@ -626,6 +626,8 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_lookup.data()));
 }
 
+// TODO: Allow the user to supply correctly-sized hit-distance and output
+// arrays to this function, handling any memory issues therein themselves.
 template <typename Tout, typename Float4, typename Tin, typename Float>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
@@ -637,19 +639,26 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_nodes.hierarchy.size();
 
-    // TODO: Allow the user to supply correctly-sized hit-distance and output
-    // arrays to this function, handling any memory issues therein themselves.
     thrust::device_vector<unsigned int> d_hit_offsets(n_rays);
+
     trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres);
-    int last_ray_hits = d_hit_offsets[n_rays-1];
+    unsigned int last_ray_hits = d_hit_offsets[n_rays-1];
+
+    // hits = [3, 0, 4, 1]
+    // exclusive_scan:
+    //    => offsets = [0, 3, 3, 7]
+    // total_hits = hits[3] + offsets[3] = 7 + 1 = 8
     thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
                            d_hit_offsets.begin());
+    unsigned int total_hits = d_hit_offsets[n_rays-1] + last_ray_hits;
 
-    d_out_data.resize(d_hit_offsets[n_rays-1] + last_ray_hits);
-    d_hit_distances.resize(d_out_data.size());
+    d_out_data.resize(total_hits);
+    d_hit_distances.resize(total_hits);
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
+    // Or initialize it as static, above, for both float and double.
+    // Also then copy it into device memory?
     const KernelIntegrals<Float> lookup;
     thrust::device_vector<Float> d_lookup(&lookup.table[0],
                                           &lookup.table[N_table-1]);
@@ -657,7 +666,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
-    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -669,6 +678,34 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+
+    thrust::device_vector<unsigned int> d_ray_segments(total_hits);
+    thrust::constant_iterator<unsigned int> first(1);
+    thrust::constant_iterator<unsigned int> last = first + n_rays;
+
+    // offsets = [0, 3, 3, 7]
+    // scatter:
+    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
+    // inclusive_scan:
+    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
+    thrust::scatter(first, last,
+                    d_hit_offsets.begin(),
+                    d_ray_segments.begin());
+    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
+                           d_ray_segments.begin());
+
+    thrust::sort_by_key(d_hit_distances.begin(), d_hit_distances.end(),
+                        thrust::make_zip_iterator(
+                            thrust::make_tuple(d_out_data.begin(),
+                                               d_ray_segments.begin())
+                        )
+    );
+    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
+                               thrust::make_zip_iterator(
+                                   thrust::make_tuple(d_hit_distances.begin(),
+                                                      d_out_data.begin())
+                               )
+    );
 }
 
 } // namespace grace
