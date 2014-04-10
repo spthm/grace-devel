@@ -149,9 +149,7 @@ int main(int argc, char* argv[]) {
     h_dxs.shrink_to_fit();
 
 
-    /* Perform a full trace and verify the intersection data has been correctly
-     * sorted by intersection distance.
-     */
+    /* Perform a full trace. */
 
     thrust::device_vector<grace::Ray> d_rays = h_rays;
     thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
@@ -159,77 +157,21 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
                         d_rays.begin());
 
-    grace::KernelIntegrals<float> lookup;
-    thrust::device_vector<float> d_b_integrals(&lookup.table[0],
-                                               &lookup.table[50]);
+    thrust::device_vector<float> d_traced_rho;
+    thrust::device_vector<float> d_trace_dists;
 
-    thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
+    grace::trace(d_rays, d_traced_rho, d_trace_dists,
+                 d_nodes, d_spheres_xyzr, d_rho);
 
-    grace::gpu::trace_hitcounts_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_rays.data()),
-        d_rays.size(),
-        thrust::raw_pointer_cast(d_hit_offsets.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.hierarchy.size(),
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()));
-
-    // Allocate output array based on per-ray hit counts, and calculate
-    // individual ray offsets into this array.
-    unsigned int last_ray_hits = d_hit_offsets[N_rays-1];
-    thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
-                           d_hit_offsets.begin());
-    unsigned int total_hits = d_hit_offsets[N_rays-1] + last_ray_hits;
-
+    unsigned int total_hits = d_traced_rho.size();
     std::cout << "Total hits:   " << total_hits << std::endl;
     std::cout << "Mean per ray: " << ((float)total_hits) / N_rays << std::endl;
     std::cout << std::endl;
 
-    thrust::device_vector<float> d_traced_rho(total_hits);
-    thrust::device_vector<float> d_trace_dists(total_hits);
+    /* Verify the intersection data has been correctly sorted by intersection
+     * distance.
+     */
 
-    grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_rays.data()),
-        d_rays.size(),
-        thrust::raw_pointer_cast(d_traced_rho.data()),
-        thrust::raw_pointer_cast(d_trace_dists.data()),
-        thrust::raw_pointer_cast(d_hit_offsets.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.hierarchy.size(),
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-        thrust::raw_pointer_cast(d_rho.data()),
-        thrust::raw_pointer_cast(d_b_integrals.data()));
-
-
-    /* Sort and verify. */
-
-
-    thrust::device_vector<unsigned int> d_ray_segments(d_trace_dists.size());
-    thrust::constant_iterator<unsigned int> first(1);
-    thrust::constant_iterator<unsigned int> last = first + d_hit_offsets.size();
-
-    thrust::scatter(first, last,
-                    d_hit_offsets.begin(),
-                    d_ray_segments.begin());
-
-    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
-                           d_ray_segments.begin());
-
-    thrust::sort_by_key(d_trace_dists.begin(), d_trace_dists.end(),
-                        thrust::make_zip_iterator(
-                            thrust::make_tuple(d_traced_rho.begin(),
-                                               d_ray_segments.begin())
-                        )
-    );
-    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                               thrust::make_zip_iterator(
-                                   thrust::make_tuple(d_trace_dists.begin(),
-                                                      d_traced_rho.begin())
-                               )
-    );
-
-    thrust::host_vector<unsigned int> h_hit_offsets = d_hit_offsets;
     thrust::host_vector<float> h_trace_dists = d_trace_dists;
 
     bool success = true;

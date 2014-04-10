@@ -641,9 +641,13 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 
     thrust::device_vector<unsigned int> d_hit_offsets(n_rays);
 
+    // Here, d_hit_offsets is actually per-ray hit *counts*.
     trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres);
     unsigned int last_ray_hits = d_hit_offsets[n_rays-1];
 
+    // Allocate output array based on per-ray hit counts, and calculate
+    // individual ray offsets into this array:
+    //
     // hits = [3, 0, 4, 1]
     // exclusive_scan:
     //    => offsets = [0, 3, 3, 7]
