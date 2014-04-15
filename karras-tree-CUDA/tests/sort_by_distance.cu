@@ -168,11 +168,19 @@ int main(int argc, char* argv[]) {
     std::cout << "Mean per ray: " << ((float)total_hits) / N_rays << std::endl;
     std::cout << std::endl;
 
+
     /* Verify the intersection data has been correctly sorted by intersection
      * distance.
      */
 
     thrust::host_vector<float> h_trace_dists = d_trace_dists;
+    // We require the per-ray offsets into d_trace_dists/rho that grace::trace
+    // computes internally. Simply (wastefully) compute them again here.
+    thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
+    grace::trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres_xyzr);
+    thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
+                           d_hit_offsets.begin());
+    thrust::host_vector<unsigned int> h_hit_offsets = d_hit_offsets;
 
     bool success = true;
     for (int ray_i=0; ray_i<N_rays; ray_i++) {
