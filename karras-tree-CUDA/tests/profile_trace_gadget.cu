@@ -173,8 +173,8 @@ int main(int argc, char* argv[]) {
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
             h_ray_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
-                                                          (oy-min_y)/span_y,
-                                                          0.0f);
+                                                              (oy-min_y)/span_y,
+                                                              0.0f);
         }
     }
 
@@ -199,7 +199,8 @@ int main(int argc, char* argv[]) {
         thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
 
         cudaEventRecord(part_start);
-        thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(), d_rays.begin());
+        thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
+                            d_rays.begin());
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);

@@ -611,6 +611,8 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
+    // Or make it static and initalize it in e.g. a grace_init function, that
+    // could also determine kernel launch parameters.
     const KernelIntegrals<Float> lookup;
     thrust::device_vector<Float> d_lookup(&lookup.table[0],
                                           &lookup.table[N_table-1]);

@@ -164,18 +164,11 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_b_integrals(&lookup.table[0],
                                                &lookup.table[50]);
 
-    grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_rays.data()),
-        d_rays.size(),
-        thrust::raw_pointer_cast(d_traced_rho.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.hierarchy.size(),
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-        thrust::raw_pointer_cast(d_rho.data()),
-        thrust::raw_pointer_cast(d_b_integrals.data()));
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    grace::trace_propert(d_rays,
+                         d_traced_rho,
+                         d_nodes,
+                         d_spheres_xyzr,
+                         d_rho);
 
     float max_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
                                    0.0f, thrust::maximum<float>());
