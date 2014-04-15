@@ -6,7 +6,6 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "../types.h"
 #include "../kernels/morton.cuh"
 
 int main(int argc, char* argv[]) {
@@ -39,9 +38,12 @@ int main(int argc, char* argv[]) {
         h_y_random[i] = u01(rng);
         h_z_random[i] = u01(rng);
 
-        grace::uinteger64 ix = (grace::uinteger64) (h_x_random[i] * ((1u << 21) - 1));
-        grace::uinteger64 iy = (grace::uinteger64) (h_y_random[i] * ((1u << 21) - 1));
-        grace::uinteger64 iz = (grace::uinteger64) (h_z_random[i] * ((1u << 21) - 1));
+        grace::uinteger64 ix = (grace::uinteger64) (h_x_random[i]
+                                                    * ((1u << 21) - 1));
+        grace::uinteger64 iy = (grace::uinteger64) (h_y_random[i]
+                                                    * ((1u << 21) - 1));
+        grace::uinteger64 iz = (grace::uinteger64) (h_z_random[i]
+                                                    * ((1u << 21) - 1));
 
         h_morton[i] = grace::morton_key(ix, iy, iz);
     }
@@ -77,8 +79,10 @@ int main(int argc, char* argv[]) {
             std::cout << "             z: " << std::fixed << std::setw(6)
                       << std::setprecision(6) << std::setfill('0')
                       << h_z_random[i] << std::endl;
-            std::cout << "Host key:   " << (std::bitset<32>) h_morton[i] << std::endl;
-            std::cout << "Device key: " << (std::bitset<32>) h_d_morton_copy[i] << std::endl;
+            std::cout << "Host key:   " << (std::bitset<32>) h_morton[i]
+                      << std::endl;
+            std::cout << "Device key: " << (std::bitset<32>) h_d_morton_copy[i]
+                      << std::endl;
             err_count++;
         }
     }

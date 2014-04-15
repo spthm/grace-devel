@@ -1,7 +1,6 @@
 #include <iostream>
 #include <bitset>
 
-#include "../types.h"
 #include "../kernels/bintree_build.cuh"
 
 __global__ void common_prefix_kernel(grace::integer32* is,
@@ -12,7 +11,8 @@ __global__ void common_prefix_kernel(grace::integer32* is,
 {
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    prefix_lengths[tid] = grace::gpu::common_prefix(is[tid], js[tid], keys, n_keys);
+    prefix_lengths[tid] = grace::gpu::common_prefix_length(is[tid], js[tid],
+                                                           keys, n_keys);
 }
 
 int main(int argc, char* argv[]) {
@@ -100,10 +100,13 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<4; i++) {
         std::cout << "i: " << h_is[i] << std::endl;
         std::cout << "j: " << h_js[i] << std::endl;
-        std::cout << "keys[i]: " << (std::bitset<32>) h_keys[h_is[i]] << std::endl;
-        std::cout << "keys[j]: " << (std::bitset<32>) h_keys[h_js[i]] << std::endl;
+        std::cout << "keys[i]: " << (std::bitset<32>) h_keys[h_is[i]]
+                  << std::endl;
+        std::cout << "keys[j]: " << (std::bitset<32>) h_keys[h_js[i]]
+                  << std::endl;
         std::cout << "Actual prefix length: " << actuals[i] << std::endl;
-        std::cout << "Calculated prefix length: " << h_prefix_lengths[i] << std::endl;
+        std::cout << "Calculated prefix length: " << h_prefix_lengths[i]
+                  << std::endl;
         std::cout << std::endl;
     }
 
@@ -112,7 +115,8 @@ int main(int argc, char* argv[]) {
         std::cout << "i: " << h_is[i] << std::endl;
         std::cout << "j: " << h_js[i] << std::endl;
         std::cout << "Actual prefix length: " << actuals[i] << std::endl;
-        std::cout << "Calculated prefix length: " << h_prefix_lengths[i] << std::endl;
+        std::cout << "Calculated prefix length: " << h_prefix_lengths[i]
+                  << std::endl;
         std::cout << std::endl;
     }
 

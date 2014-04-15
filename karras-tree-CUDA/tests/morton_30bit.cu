@@ -1,7 +1,6 @@
 #include <iostream>
 #include <bitset>
 
-#include "../types.h"
 #include "../kernels/bits.cuh"
 #include "../kernels/morton.cuh"
 
@@ -41,24 +40,35 @@ int main(int argc, char* argv[]) {
 
     /* 30-bit keys and binary representation. */
 
-    grace::uinteger32 my_key = my_spaced_x | my_spaced_y << 1 | my_spaced_z << 2;
+    grace::uinteger32 my_key = my_spaced_x | my_spaced_y << 1 |
+                               my_spaced_z << 2;
     grace::uinteger32 my_key_2 = grace::morton_key(x, y, z);
 
     /* Print everything. */
 
-    std::cout << "30-bit Morton key results:\n" << std::endl;
+    std::cout << "30-bit Morton key results:" << std::endl << std::endl;
     std::cout << "x:                     " << (std::bitset<32>) x << std::endl;
-    std::cout << "Spaced x:              " << (std::bitset<32>) spaced_x << std::endl;
-    std::cout << "space_by_two_10bit(x): " << (std::bitset<32>) my_spaced_x << "\n" << std::endl;
-    std::cout << "y:                     " << (std::bitset<32>) y << std::endl;
-    std::cout << "Spaced y:              " << (std::bitset<32>) spaced_y << std::endl;
-    std::cout << "space_by_two_10bit(y): " << (std::bitset<32>) my_spaced_y << "\n" << std::endl;
+    std::cout << "Spaced x:              " << (std::bitset<32>) spaced_x
+              << std::endl;
+    std::cout << "space_by_two_10bit(x): " << (std::bitset<32>) my_spaced_x
+              << std::endl << std::endl;
+    std::cout << "y:                     " << (std::bitset<32>) y
+              << std::endl;
+    std::cout << "Spaced y:              " << (std::bitset<32>) spaced_y
+              << std::endl;
+    std::cout << "space_by_two_10bit(y): " << (std::bitset<32>) my_spaced_y
+              << std::endl << std::endl;
     std::cout << "z:                     " << (std::bitset<32>) z << std::endl;
-    std::cout << "Spaced z:              " << (std::bitset<32>) spaced_z << std::endl;
-    std::cout << "space_by_two_10bit(z): " << (std::bitset<32>) my_spaced_z << "\n" << std::endl;
-    std::cout << "Key:                   " << (std::bitset<32>) key << std::endl;
-    std::cout << "space_by_two_10bit:    " << (std::bitset<32>) my_key << std::endl;
-    std::cout << "morton_key_30bit:      " << (std::bitset<32>) my_key_2 << "\n\n" << std::endl;
+    std::cout << "Spaced z:              " << (std::bitset<32>) spaced_z
+              << std::endl;
+    std::cout << "space_by_two_10bit(z): " << (std::bitset<32>) my_spaced_z
+              << std::endl << std::endl;
+    std::cout << "Key:                   " << (std::bitset<32>) key
+              << std::endl;
+    std::cout << "space_by_two_10bit:    " << (std::bitset<32>) my_key
+              << std::endl;
+    std::cout << "morton_key_30bit:      " << (std::bitset<32>) my_key_2
+              << std::endl << std::endl;
 
     bool correct = true;
     if (my_spaced_x != spaced_x) {
@@ -74,7 +84,7 @@ int main(int argc, char* argv[]) {
         correct = false;
     }
     if (correct) {
-        std::cout << "\nAll correct!" << std::endl;
+        std::cout << std::endl << "All correct!" << std::endl;
     }
 
     return 0;

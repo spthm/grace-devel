@@ -5,7 +5,6 @@
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 
-#include "../types.h"
 #include "../kernels/bits.cuh"
 
 class bit_prefix_functor
@@ -15,7 +14,7 @@ public:
     __device__ grace::uinteger32 operator() (const grace::uinteger32& a,
                                              const grace::uinteger32& b) {
 
-        return grace::gpu::bit_prefix(a, b);
+        return grace::gpu::bit_prefix_length(a, b);
     }
 };
 
@@ -47,12 +46,14 @@ int main(int argc, char* argv[]) {
                       bit_prefix_functor());
     thrust::host_vector<grace::uinteger32> h_calculated = d_calculated;
 
-    std::cout << "Testing two edge cases (prefix length = 0, 32):\n" << std::endl;
+    std::cout << "Testing two edge cases (prefix length = 0, 32):\n"
+              << std::endl;
     for (int i=0; i<2; i++) {
         std::cout << "a: " << (std::bitset<32>) As[i] << std::endl;
         std::cout << "b: " << (std::bitset<32>) Bs[i] << std::endl;
         std::cout << "Actual prefix length:     " << actuals[i] << std::endl;
-        std::cout << "Calculated prefix length: " << h_calculated[i] << std::endl;
+        std::cout << "Calculated prefix length: " << h_calculated[i]
+                  << std::endl;
         std::cout << std::endl;
     }
 
@@ -94,21 +95,25 @@ int main(int argc, char* argv[]) {
 
     bool correct = true;
     for (int i=0; i<N; i++) {
-        grace::uinteger32 prefix_length = grace::bit_prefix(h_As[i], h_Bs[i]);
+        grace::uinteger32 prefix_length = grace::bit_prefix_length(h_As[i],
+                                                                   h_Bs[i]);
 
         if (prefix_length != h_calculated[i]) {
-            std::cout << "Device prefix length key != host prefix length!" << std::endl;
+            std::cout << "Device prefix length key != host prefix length!"
+                       << std::endl;
             std::cout << "a: " << (std::bitset<32>) h_As[i] << std::endl;
             std::cout << "b: " << (std::bitset<32>) h_Bs[i] << std::endl;
             std::cout << "Host prefix length: " << prefix_length << std::endl;
-            std::cout << "Device prefix length: " << h_calculated[i] << std::endl;
+            std::cout << "Device prefix length: " << h_calculated[i]
+                      << std::endl;
             std::cout << std::endl;
             correct = false;
         }
     }
 
     if (correct) {
-        std::cout << "All " << N << " GPU and host prefix lengths match!" << std::endl;
+        std::cout << "All " << N << " GPU and host prefix lengths match!"
+                  << std::endl;
     }
 
     return 0;
