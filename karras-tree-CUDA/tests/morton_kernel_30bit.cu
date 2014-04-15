@@ -6,7 +6,6 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "../types.h"
 #include "../kernels/morton.cuh"
 
 int main(int argc, char* argv[]) {
@@ -77,8 +76,10 @@ int main(int argc, char* argv[]) {
             std::cout << "             z: " << std::fixed << std::setw(6)
                       << std::setprecision(6) << std::setfill('0')
                       << h_z_random[i] << std::endl;
-            std::cout << "Host key:   " << (std::bitset<32>) h_morton[i] << std::endl;
-            std::cout << "Device key: " << (std::bitset<32>) h_d_morton_copy[i] << std::endl;
+            std::cout << "Host key:   " << (std::bitset<32>) h_morton[i]
+                      << std::endl;
+            std::cout << "Device key: " << (std::bitset<32>) h_d_morton_copy[i]
+                      << std::endl;
             err_count++;
         }
     }

@@ -1,7 +1,6 @@
 #include <iostream>
 #include <bitset>
 
-#include "../types.h"
 #include "../kernels/bits.cuh"
 #include "../kernels/morton.cuh"
 
@@ -41,25 +40,39 @@ int main(int argc, char* argv[]) {
 
     /* 30-bit keys and binary representation. */
 
-    grace::uinteger64 my_key_64 = my_spaced_x_64 | my_spaced_y_64 << 1 | my_spaced_z_64 << 2;
+    grace::uinteger64 my_key_64 = my_spaced_x_64 |
+                                  my_spaced_y_64 << 1 |
+                                  my_spaced_z_64 << 2;
     grace::uinteger64 my_key_2_64 = grace::morton_key(x_64, y_64, z_64);
 
 
     /* Print everything. */
 
-    std::cout << "63-bit Morton key results:\n" << std::endl;
-    std::cout << "x_64:                     " << (std::bitset<64>) x_64 << std::endl;
-    std::cout << "Spaced x_64:              " << (std::bitset<64>) spaced_x_64 << std::endl;
-    std::cout << "space_by_two_21bit(x_64): " << (std::bitset<64>) my_spaced_x_64 << "\n" << std::endl;
-    std::cout << "y_64:                     " << (std::bitset<64>) y_64 << std::endl;
-    std::cout << "Spaced y_64:              " << (std::bitset<64>) spaced_y_64 << std::endl;
-    std::cout << "space_by_two_21bit(y_64): " << (std::bitset<64>) my_spaced_y_64 << "\n" << std::endl;
-    std::cout << "z_64:                     " << (std::bitset<64>) z_64 << std::endl;
-    std::cout << "Spaced z_64:              " << (std::bitset<64>) spaced_z_64 << std::endl;
-    std::cout << "space_by_two_21bit(z_64): " << (std::bitset<64>) my_spaced_z_64 << "\n" << std::endl;
-    std::cout << "Key_64:                   " << (std::bitset<64>) key_64 << std::endl;
-    std::cout << "space_by_two_21bit:       " << (std::bitset<64>) my_key_64 << std::endl;
-    std::cout << "morton_key_63bit:         " << (std::bitset<64>) my_key_2_64 << "\n" << std::endl;
+    std::cout << "63-bit Morton key results:" << std::endl << std::endl;
+    std::cout << "x_64:                     " << (std::bitset<64>) x_64
+              << std::endl;
+    std::cout << "Spaced x_64:              " << (std::bitset<64>) spaced_x_64
+              << std::endl;
+    std::cout << "space_by_two_21bit(x_64): "
+              << (std::bitset<64>) my_spaced_x_64 << std::endl << std::endl;
+    std::cout << "y_64:                     " << (std::bitset<64>) y_64
+              << std::endl;
+    std::cout << "Spaced y_64:              " << (std::bitset<64>) spaced_y_64
+              << std::endl;
+    std::cout << "space_by_two_21bit(y_64): "
+              << (std::bitset<64>) my_spaced_y_64 << std::endl << std::endl;
+    std::cout << "z_64:                     " << (std::bitset<64>) z_64
+              << std::endl;
+    std::cout << "Spaced z_64:              " << (std::bitset<64>) spaced_z_64
+              << std::endl;
+    std::cout << "space_by_two_21bit(z_64): "
+              << (std::bitset<64>) my_spaced_z_64 << std::endl << std::endl;
+    std::cout << "Key_64:                   " << (std::bitset<64>) key_64
+              << std::endl;
+    std::cout << "space_by_two_21bit:       " << (std::bitset<64>) my_key_64
+              << std::endl;
+    std::cout << "morton_key_63bit:         " << (std::bitset<64>) my_key_2_64
+              << std::endl << std::endl;
 
     bool correct = true;
     if (my_spaced_x_64 != spaced_x_64) {

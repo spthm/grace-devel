@@ -1,6 +1,10 @@
 #pragma once
 
 #include <thrust/device_vector.h>
+#include <thrust/iterator/constant_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/scan.h>
+#include <thrust/sort.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -607,6 +611,8 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
+    // Or make it static and initalize it in e.g. a grace_init function, that
+    // could also determine kernel launch parameters.
     const KernelIntegrals<Float> lookup;
     thrust::device_vector<Float> d_lookup(&lookup.table[0],
                                           &lookup.table[N_table-1]);
@@ -641,9 +647,13 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 
     thrust::device_vector<unsigned int> d_hit_offsets(n_rays);
 
+    // Here, d_hit_offsets is actually per-ray hit *counts*.
     trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres);
     unsigned int last_ray_hits = d_hit_offsets[n_rays-1];
 
+    // Allocate output array based on per-ray hit counts, and calculate
+    // individual ray offsets into this array:
+    //
     // hits = [3, 0, 4, 1]
     // exclusive_scan:
     //    => offsets = [0, 3, 3, 7]

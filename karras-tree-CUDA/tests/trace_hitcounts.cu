@@ -134,16 +134,7 @@ int main(int argc, char* argv[]) {
     /* Trace for per-ray hit counts. */
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
-    grace::gpu::trace_hitcounts_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_rays.data()),
-        d_rays.size(),
-        thrust::raw_pointer_cast(d_hit_counts.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.hierarchy.size(),
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()));
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    grace::trace_hitcounts(d_rays, d_hit_counts, d_nodes, d_spheres_xyzr);
 
 
     /* Output simple hit-count statistics. */

@@ -132,27 +132,20 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
 
-    thrust::device_vector<float> d_traced_mass(N_rays);
+    thrust::device_vector<float> d_traced_pmass(N_rays);
     grace::KernelIntegrals<float> lookup;
     thrust::device_vector<float> d_b_integrals(&lookup.table[0],
                                                &lookup.table[50]);
 
-    grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_rays.data()),
-        d_rays.size(),
-        thrust::raw_pointer_cast(d_traced_mass.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        d_nodes.hierarchy.size(),
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-        thrust::raw_pointer_cast(d_pmasses.data()),
-        thrust::raw_pointer_cast(d_b_integrals.data()));
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    grace::trace_property(d_rays,
+                          d_traced_pmass,
+                          d_nodes,
+                          d_spheres_xyzr,
+                          d_pmasses);
 
     // ~ Integrate over x and y.
-    float integrated_total = thrust::reduce(d_traced_mass.begin(),
-                                            d_traced_mass.end(),
+    float integrated_total = thrust::reduce(d_traced_pmass.begin(),
+                                            d_traced_pmass.end(),
                                             0.0f,
                                             thrust::plus<float>());
     // Multiply by the pixel area to complete the x-y integration.
