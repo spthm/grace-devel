@@ -307,6 +307,43 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     return true;
 }
 
+template <typename Float, typename T>
+void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
+                      thrust::device_vector<T>& d_out_data,
+                      const thrust::device_vector<unsigned int>& d_hit_offsets)
+{
+    unsigned int total_hits = d_hit_distances.size();
+    unsigned int n_rays = d_hit_offsets.size();
+
+    thrust::device_vector<unsigned int> d_ray_segments(d_hit_distances.size());
+    thrust::constant_iterator<unsigned int> first(1);
+    thrust::constant_iterator<unsigned int> last = first + n_rays;
+
+    // offsets = [0, 3, 3, 7]
+    // scatter:
+    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
+    // inclusive_scan:
+    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
+    thrust::scatter(first, last,
+                    d_hit_offsets.begin(),
+                    d_ray_segments.begin());
+    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
+                           d_ray_segments.begin());
+
+    thrust::sort_by_key(d_hit_distances.begin(), d_hit_distances.end(),
+                        thrust::make_zip_iterator(
+                            thrust::make_tuple(d_out_data.begin(),
+                                               d_ray_segments.begin())
+                        )
+    );
+    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
+                               thrust::make_zip_iterator(
+                                   thrust::make_tuple(d_hit_distances.begin(),
+                                                      d_out_data.begin())
+                               )
+    );
+}
+
 namespace gpu {
 
 //-----------------------------------------------------------------------------
@@ -599,12 +636,12 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_spheres.data()));
 }
 
-template <typename Tout, typename Float4, typename Tin, typename Float>
+template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_property(const thrust::device_vector<Ray>& d_rays,
                     thrust::device_vector<Tout>& d_out_data,
                     const Nodes& d_nodes,
-                    const thrust::device_vector<Float4> d_spheres,
-                    const thrust::device_vector<Tin> d_in_data)
+                    const thrust::device_vector<Float4>& d_spheres,
+                    const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_nodes.hierarchy.size();
@@ -634,13 +671,13 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
 // arrays to this function, handling any memory issues therein themselves.
-template <typename Tout, typename Float4, typename Tin, typename Float>
+template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
            thrust::device_vector<Float>& d_hit_distances,
            const Nodes& d_nodes,
-           const thrust::device_vector<Float4> d_spheres,
-           const thrust::device_vector<Tin> d_in_data)
+           const thrust::device_vector<Float4>& d_spheres,
+           const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_nodes.hierarchy.size();
@@ -689,33 +726,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
-    thrust::device_vector<unsigned int> d_ray_segments(total_hits);
-    thrust::constant_iterator<unsigned int> first(1);
-    thrust::constant_iterator<unsigned int> last = first + n_rays;
-
-    // offsets = [0, 3, 3, 7]
-    // scatter:
-    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
-    // inclusive_scan:
-    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
-    thrust::scatter(first, last,
-                    d_hit_offsets.begin(),
-                    d_ray_segments.begin());
-    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
-                           d_ray_segments.begin());
-
-    thrust::sort_by_key(d_hit_distances.begin(), d_hit_distances.end(),
-                        thrust::make_zip_iterator(
-                            thrust::make_tuple(d_out_data.begin(),
-                                               d_ray_segments.begin())
-                        )
-    );
-    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                               thrust::make_zip_iterator(
-                                   thrust::make_tuple(d_hit_distances.begin(),
-                                                      d_out_data.begin())
-                               )
-    );
+    sort_by_distance(d_hit_distances, d_out_data, d_hit_offsets);
 }
 
 } // namespace grace
