@@ -191,11 +191,12 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             in_block = (min(node.w, index) >= block_lower &&
                         max(node.w, index) <= block_upper);
 
-            flags = sm_flags;
-            flag_index = index % AABB_THREADS_PER_BLOCK;
-            __threadfence_block();
-
-            if (!in_block) {
+            if (in_block) {
+                flags = sm_flags;
+                flag_index = index % AABB_THREADS_PER_BLOCK;
+                __threadfence_block();
+            }
+            else {
                 flags = g_flags;
                 flag_index = index;
                 __threadfence();
@@ -242,11 +243,12 @@ __global__ void find_AABBs_kernel(const int4* nodes,
                 in_block = (min(node.w, index) >= block_lower &&
                             max(node.w, index) <= block_upper);
 
-                flags = sm_flags;
-                flag_index = index % AABB_THREADS_PER_BLOCK;
-                __threadfence_block();
-
-                if (!in_block) {
+                if (in_block) {
+                    flags = sm_flags;
+                    flag_index = index % AABB_THREADS_PER_BLOCK;
+                    __threadfence_block();
+                }
+                else {
                     flags = g_flags;
                     flag_index = index;
                     __threadfence();
