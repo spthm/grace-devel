@@ -141,7 +141,6 @@ int main(int argc, char* argv[]) {
     {
         for (j=0, oy=min_y-max_r; j<N_rays_side; oy+=spacer_y, j++)
         {
-            // All rays point in +ve z direction.
             h_rays[i*N_rays_side +j].dx = 0.0f;
             h_rays[i*N_rays_side +j].dy = 0.0f;
             h_rays[i*N_rays_side +j].dz = 1.0f;
@@ -169,13 +168,13 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<float> d_traced_pmass(N_rays);
 
-    grace::trace_property(d_rays,
-                          d_traced_pmass,
-                          d_nodes,
-                          d_spheres_xyzr,
-                          d_pmasses);
+    grace::trace_property<float>(d_rays,
+                                 d_traced_pmass,
+                                 d_nodes,
+                                 d_spheres_xyzr,
+                                 d_pmasses);
 
-    // ~ Integrating over x and y.
+    // ~ Integrate over x and y.
     float integrated_total = thrust::reduce(d_traced_pmass.begin(),
                                             d_traced_pmass.end(),
                                             0.0f,
@@ -183,8 +182,8 @@ int main(int argc, char* argv[]) {
     // Multiply by the pixel area to complete the x-y integration.
     integrated_total *= (spacer_x * spacer_y);
 
-    std::cout << "Number of rays:         " << N_rays << std::endl;
-    std::cout << "Number of particles:    " << N << std::endl;
+    std::cout << "Number of rays:               " << N_rays << std::endl;
+    std::cout << "Number of particles:          " << N << std::endl;
     std::cout << "Volume integrated pseudomass: " << integrated_total
               << std::endl;
     std::cout << std::endl;

@@ -160,8 +160,8 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_traced_rho;
     thrust::device_vector<float> d_trace_dists;
 
-    grace::trace(d_rays, d_traced_rho, d_trace_dists,
-                 d_nodes, d_spheres_xyzr, d_rho);
+    grace::trace<float>(d_rays, d_traced_rho, d_trace_dists,
+                        d_nodes, d_spheres_xyzr, d_rho);
 
     unsigned int total_hits = d_traced_rho.size();
     std::cout << "Total hits:   " << total_hits << std::endl;

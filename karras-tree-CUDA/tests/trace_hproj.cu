@@ -133,15 +133,12 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<grace::Ray> d_rays = h_rays;
 
     thrust::device_vector<float> d_traced_pmass(N_rays);
-    grace::KernelIntegrals<float> lookup;
-    thrust::device_vector<float> d_b_integrals(&lookup.table[0],
-                                               &lookup.table[50]);
 
-    grace::trace_property(d_rays,
-                          d_traced_pmass,
-                          d_nodes,
-                          d_spheres_xyzr,
-                          d_pmasses);
+    grace::trace_property<float>(d_rays,
+                                 d_traced_pmass,
+                                 d_nodes,
+                                 d_spheres_xyzr,
+                                 d_pmasses);
 
     // ~ Integrate over x and y.
     float integrated_total = thrust::reduce(d_traced_pmass.begin(),
