@@ -207,21 +207,13 @@ int main(int argc, char* argv[]) {
         sort_tot += elapsed;
 
         thrust::device_vector<float> d_traced_rho(N_rays);
-        grace::KernelIntegrals<float> lookup;
-        thrust::device_vector<float> d_b_integrals(&lookup.table[0],
-                                                   &lookup.table[50]);
 
         cudaEventRecord(part_start);
-        grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_rays.data()),
-            d_rays.size(),
-            thrust::raw_pointer_cast(d_traced_rho.data()),
-            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-            thrust::raw_pointer_cast(d_nodes.AABB.data()),
-            d_nodes.hierarchy.size(),
-            thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-            thrust::raw_pointer_cast(d_rho.data()),
-            thrust::raw_pointer_cast(d_b_integrals.data()));
+        grace::trace_property<float>(d_rays,
+                                     d_traced_rho,
+                                     d_nodes,
+                                     d_spheres_xyzr,
+                                     d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -242,7 +234,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
-            trace_bytes += d_b_integrals.size() * sizeof(float);
+            trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);

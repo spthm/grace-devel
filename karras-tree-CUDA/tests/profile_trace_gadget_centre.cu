@@ -227,6 +227,8 @@ int main(int argc, char* argv[]) {
         thrust::device_vector<grace::Ray> d_rays = h_rays;
         thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
 
+        thrust::device_vector<float> d_traced_rho(N_rays);
+
         cudaEventRecord(part_start);
         thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
                             d_rays.begin());
@@ -235,22 +237,12 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         sort_ray_tot += elapsed;
 
-        thrust::device_vector<float> d_traced_rho(N_rays);
-        grace::KernelIntegrals<float> lookup;
-        thrust::device_vector<float> d_b_integrals(&lookup.table[0],
-                                                   &lookup.table[50]);
-
         cudaEventRecord(part_start);
-        grace::gpu::trace_property_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_rays.data()),
-            d_rays.size(),
-            thrust::raw_pointer_cast(d_traced_rho.data()),
-            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-            thrust::raw_pointer_cast(d_nodes.AABB.data()),
-            d_nodes.hierarchy.size(),
-            thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-            thrust::raw_pointer_cast(d_rho.data()),
-            thrust::raw_pointer_cast(d_b_integrals.data()));
+        grace::trace_property<float>(d_rays,
+                                     d_traced_rho,
+                                     d_nodes,
+                                     d_spheres_xyzr,
+                                     d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -259,42 +251,15 @@ int main(int argc, char* argv[]) {
 
         /* Full trace. */
 
-        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
+        thrust::device_vector<float> d_trace_dists;
 
         cudaEventRecord(part_start);
-
-        grace::gpu::trace_hitcounts_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_rays.data()),
-            d_rays.size(),
-            thrust::raw_pointer_cast(d_hit_offsets.data()),
-            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-            thrust::raw_pointer_cast(d_nodes.AABB.data()),
-            d_nodes.hierarchy.size(),
-            thrust::raw_pointer_cast(d_spheres_xyzr.data()));
-
-        // Allocate output array based on per-ray hit counts, and calculate
-        // individual ray offsets into this array.
-        unsigned int last_ray_hits = d_hit_offsets[N_rays-1];
-        thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
-                               d_hit_offsets.begin());
-        unsigned int total_hits = d_hit_offsets[N_rays-1] + last_ray_hits;
-
-        d_traced_rho.resize(total_hits);
-        thrust::device_vector<float> d_trace_dists(total_hits);
-
-        grace::gpu::trace_kernel<<<28, TRACE_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_rays.data()),
-            d_rays.size(),
-            thrust::raw_pointer_cast(d_traced_rho.data()),
-            thrust::raw_pointer_cast(d_trace_dists.data()),
-            thrust::raw_pointer_cast(d_hit_offsets.data()),
-            thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-            thrust::raw_pointer_cast(d_nodes.AABB.data()),
-            d_nodes.hierarchy.size(),
-            thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-            thrust::raw_pointer_cast(d_rho.data()),
-            thrust::raw_pointer_cast(d_b_integrals.data()));
-
+        grace::trace<float>(d_rays,
+                            d_traced_rho,
+                            d_trace_dists,
+                            d_nodes,
+                            d_spheres_xyzr,
+                            d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -302,34 +267,6 @@ int main(int argc, char* argv[]) {
 
         /* End of full trace. */
 
-
-        thrust::device_vector<unsigned int> d_ray_segments(d_trace_dists.size());
-        thrust::constant_iterator<unsigned int> first(1);
-        thrust::constant_iterator<unsigned int> last = first + d_hit_offsets.size();
-
-        cudaEventRecord(part_start);
-        thrust::scatter(first, last,
-                        d_hit_offsets.begin(),
-                        d_ray_segments.begin());
-        thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
-                               d_ray_segments.begin());
-
-        thrust::sort_by_key(d_trace_dists.begin(), d_trace_dists.end(),
-                            thrust::make_zip_iterator(
-                                thrust::make_tuple(d_traced_rho.begin(),
-                                                   d_ray_segments.begin())
-                            )
-        );
-        thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                                   thrust::make_zip_iterator(
-                                       thrust::make_tuple(d_trace_dists.begin(),
-                                                          d_traced_rho.begin())
-                                   )
-        );
-        cudaEventRecord(part_stop);
-        cudaEventSynchronize(part_stop);
-        cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        sort_rho_dists_tot += elapsed;
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -343,14 +280,15 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_traced_rho.size() * sizeof(float);
             trace_bytes += d_trace_dists.size() * sizeof(float);
-            trace_bytes += d_hit_offsets.size() * sizeof(unsigned int);
+            trace_bytes += d_rays.size() * sizeof(unsigned int); // Hit offsets
             trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
             trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
-            trace_bytes += d_b_integrals.size() * sizeof(float);
-            // Strictly speaking not used in kernel, but essential nonetheless.
-            trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
+            // Integral lookup.
+            trace_bytes += grace::N_table * sizeof(float);
+            // Ray segments, used in sort.
+            trace_bytes += d_trace_dists.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
@@ -373,6 +311,25 @@ int main(int argc, char* argv[]) {
                       << " GiB" << std::endl;
             std::cout << std::endl;
         }
+
+
+        /* Test sort outside the main timing loop, since it's done in trace. */
+
+        // We require the per-ray offsets into d_trace_dists/rho that
+        // grace::trace computes internally. Simply (wastefully) compute them
+        // again here.
+        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
+        grace::trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres_xyzr);
+        thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
+                               d_hit_offsets.begin());
+        thrust::host_vector<unsigned int> h_hit_offsets = d_hit_offsets;
+
+        cudaEventRecord(part_start);
+        grace::sort_by_distance(d_trace_dists, d_traced_rho, d_hit_offsets);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&elapsed, part_start, part_stop);
+        sort_rho_dists_tot += elapsed;
     }
 
     std::cout << "Time for ray sort-by-key:               ";
