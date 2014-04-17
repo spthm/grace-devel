@@ -4,10 +4,8 @@ namespace grace {
 
 struct Ray
 {
-    float dx, dy, dz;
-    float ox, oy, oz;
-    float length;
-    int dclass;
+    float4 dir; // dx, dy, dz, dclass (dclass is stored via __int_as_float!)
+    float4 orig; // ox, oy, oz, length
 };
 
 struct RaySlope
