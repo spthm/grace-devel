@@ -84,26 +84,26 @@ __global__ void morton_keys_kernel(const Float4* xyzr,
 
 template <typename UInteger, typename Float4>
 void morton_keys(thrust::device_vector<UInteger>& d_keys,
-                 const thrust::device_vector<Float4>& d_spheres)
+                 const thrust::device_vector<Float4>& d_points)
 {
     float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_spheres);
+    grace::min_max_x(&min_x, &max_x, d_points);
 
     float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_spheres);
+    grace::min_max_y(&min_y, &max_y, d_points);
 
     float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_spheres);
+    grace::min_max_z(&min_z, &max_z, d_points);
 
     float3 bot = make_float3(min_x, min_y, min_z);
     float3 top = make_float3(max_x, max_y, max_z);
 
-    morton_keys(d_keys, d_spheres, top, bot);
+    morton_keys(d_keys, d_points, top, bot);
 }
 
 template <typename UInteger, typename Float4>
 void morton_keys(thrust::device_vector<UInteger>& d_keys,
-                 const thrust::device_vector<Float4>& d_spheres,
+                 const thrust::device_vector<Float4>& d_points,
                  const float3 AABB_top,
                  const float3 AABB_bot)
 {
@@ -112,14 +112,14 @@ void morton_keys(thrust::device_vector<UInteger>& d_keys,
     float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
                                span / (AABB_top.y - AABB_bot.y),
                                span / (AABB_top.z - AABB_bot.z);
-    size_t n_keys = d_spheres.size();
+    size_t n_keys = d_points.size();
 
     int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
                                         / MORTON_THREADS_PER_BLOCK));
 
     d_keys.resize(n_keys);
     gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_spheres.data()),
+        thrust::raw_pointer_cast(d_points.data()),
         thrust::raw_pointer_cast(d_keys.data()),
         n_keys,
         scale);
