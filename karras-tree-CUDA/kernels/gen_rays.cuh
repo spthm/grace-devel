@@ -16,13 +16,12 @@ namespace gpu {
 __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
                           curandDirectionVectors32_t *const qrng_directions)
 {
-    unsigned int tid = threadIdx. + blockIdx.x * blockDim.x;
+    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Initialise the Q-RNG
     curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
     curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
     curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
-    }
 }
 
 /* N normally distributed values (mean 0, fixed variance) normalized
@@ -36,10 +35,10 @@ __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
  * See http://stats.stackexchange.com/questions/27450
  */
 template <typename Float4>
-__global__ void gen_uniform_rays(Ray* ray_dirs,
+__global__ void gen_uniform_rays(Ray* rays,
                                  const Float4 origin, // ox, oy, oz, length.
                                  curandStateSobol32_t *const qrng_states,
-                                 const unsigned int N_rays)
+                                 const size_t N_rays)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -50,8 +49,8 @@ __global__ void gen_uniform_rays(Ray* ray_dirs,
     float dx, dy, dz;
     Ray ray;
 
-    while (tid < N_rays) {
-
+    while (tid < N_rays)
+    {
         dx = curand_normal(&x_state);
         dy = curand_normal(&y_state);
         dz = curand_normal(&z_state);
@@ -78,6 +77,7 @@ __global__ void gen_uniform_rays(Ray* ray_dirs,
         rays[tid] = ray;
         tid += blockDim.x * gridDim.x;
     }
+}
 
 } // namespace gpu
 
@@ -86,9 +86,9 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                          const Float ox,
                          const Float oy,
                          const Float oz,
-                         const Float length,
-                         const unsigned int N_rays)
+                         const Float length)
 {
+    size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, ox, length);
 
     // Allocate space for Q-RNG states and the three direction vectors.
@@ -108,15 +108,15 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                3*sizeof(curandDirectionVectors32_t),
                cudaMemcpyHostToDevice);
 
-    gpu::init_QRNG(d_qrng_states, d_qrng_directions);
-    gpu::gen_uniform_rays(thrust::raw_pointer_cast(d_rays.data()),
-                          origin,
-                          d_qrng_states,
-                          N_rays);
+    gpu::init_QRNG<<<48, 512>>>(d_qrng_states, d_qrng_directions);
+    gpu::gen_uniform_rays<<<48, 512>>>(thrust::raw_pointer_cast(d_rays.data()),
+                                       origin,
+                                       d_qrng_states,
+                                       N_rays);
 
-    thrust::device_vector<unsigned int> d_keys(N_rays);
-    morton_keys(d_keys, d_ray_dirs);
-    grace::sort_by_key(d_keys, d_rays.dir, d_rays.orig);
+    // thrust::device_vector<unsigned int> d_keys(N_rays);
+    // morton_keys(d_keys, d_rays.dir);
+    // grace::sort_by_key(d_keys, d_rays.dir, d_rays.orig);
 
     cudaFree(d_qrng_states);
     cudaFree(d_qrng_directions);

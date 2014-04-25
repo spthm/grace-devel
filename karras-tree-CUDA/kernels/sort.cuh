@@ -1,6 +1,6 @@
 #pragma once
 
-#include <thrust/device_vector>
+#include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
 namespace grace {
