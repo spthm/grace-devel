@@ -1,4 +1,0 @@
-See http://www.math.niu.edu/~rusin/known-math/96/sph.rand
-
-The non-rejection methods are GOOD for GPUs since they only take one loop,
-not an indeterminate number.
