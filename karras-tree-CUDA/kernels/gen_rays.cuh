@@ -1,11 +1,11 @@
 #pragma once
 
-#include <cuda.h>
 #include <curand_kernel.h>
 
 #include <thrust/device_vector.h>
 
 #include "sort.cuh"
+#include "../kernel_config.h"
 #include "../ray.h"
 #include "../utils.cuh"
 
@@ -14,14 +14,17 @@ namespace grace {
 namespace gpu {
 
 __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
-                          curandDirectionVectors32_t *const qrng_directions)
+                          curandDirectionVectors32_t *const qrng_directions,
+                          const size_t N)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    // Initialise the Q-RNG
-    curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
-    curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
-    curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
+    if (tid < N) {
+        // Initialise the Q-RNG
+        curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
+        curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
+        curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
+    }
 }
 
 /* N normally distributed values (mean 0, fixed variance) normalized
@@ -108,18 +111,24 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                3*sizeof(curandDirectionVectors32_t),
                cudaMemcpyHostToDevice);
 
-    gpu::init_QRNG<<<48, 512>>>(d_qrng_states, d_qrng_directions);
-    gpu::gen_uniform_rays<<<48, 512>>>(thrust::raw_pointer_cast(d_rays.data()),
-                                       origin,
-                                       d_qrng_states,
-                                       N_rays);
+    int blocks = min(MAX_BLOCKS, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
+                                        / RAYS_THREADS_PER_BLOCK));
+
+    gpu::init_QRNG<<<blocks, RAYS_THREADS_PER_BLOCK>>>(d_qrng_states,
+                                                       d_qrng_directions,
+                                                       N_rays);
+    gpu::gen_uniform_rays<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        origin,
+        d_qrng_states,
+        N_rays);
+
+    cudaFree(d_qrng_states);
+    cudaFree(d_qrng_directions);
 
     // thrust::device_vector<unsigned int> d_keys(N_rays);
     // morton_keys(d_keys, d_rays.dir);
     // grace::sort_by_key(d_keys, d_rays.dir, d_rays.orig);
-
-    cudaFree(d_qrng_states);
-    cudaFree(d_qrng_directions);
 }
 
 // template <typename Float4>
