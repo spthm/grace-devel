@@ -4,6 +4,7 @@
 
 #include <thrust/device_vector.h>
 
+#include "morton.cuh"
 #include "sort.cuh"
 #include "../kernel_config.h"
 #include "../ray.h"
@@ -39,6 +40,7 @@ __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
  */
 template <typename Float4>
 __global__ void gen_uniform_rays(Ray* rays,
+                                 unsigned int* keys,
                                  const Float4 origin, // ox, oy, oz, length.
                                  curandStateSobol32_t *const qrng_states,
                                  const size_t N_rays)
@@ -51,6 +53,7 @@ __global__ void gen_uniform_rays(Ray* rays,
 
     float dx, dy, dz;
     Ray ray;
+    unsigned int key;
 
     while (tid < N_rays)
     {
@@ -63,6 +66,9 @@ __global__ void gen_uniform_rays(Ray* rays,
         ray.dx = dx * invR;
         ray.dy = dy * invR;
         ray.dz = dz * invR;
+        // morton_key requires floats in (0, 1).
+        keys[tid] = morton_key((ray.dx+1)/2., (ray.dy+1)/2., (ray.dz+1)/2.);
+
         ray.ox = origin.x;
         ray.oy = origin.y;
         ray.oz = origin.z;
@@ -117,8 +123,11 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
     gpu::init_QRNG<<<blocks, RAYS_THREADS_PER_BLOCK>>>(d_qrng_states,
                                                        d_qrng_directions,
                                                        N_rays);
+
+    thrust::device_vector<unsigned int> d_keys(N_rays);
     gpu::gen_uniform_rays<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
+        thrust::raw_pointer_cast(d_keys.data()),
         origin,
         d_qrng_states,
         N_rays);
@@ -126,9 +135,7 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
     cudaFree(d_qrng_states);
     cudaFree(d_qrng_directions);
 
-    // thrust::device_vector<unsigned int> d_keys(N_rays);
-    // morton_keys(d_keys, d_rays.dir);
-    // grace::sort_by_key(d_keys, d_rays.dir, d_rays.orig);
+    thrust::sort_by_key(d_keys, d_rays);
 }
 
 // template <typename Float4>
