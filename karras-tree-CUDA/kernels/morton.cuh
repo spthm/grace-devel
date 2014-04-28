@@ -58,13 +58,13 @@ namespace gpu {
 //-----------------------------------------------------------------------------
 
 template <typename UInteger, typename Float4>
-__global__ void morton_keys_kernel(const Float4* xyzr,
-                                   UInteger* keys,
-                                   const size_t n_keys,
+__global__ void morton_keys_kernel(UInteger* keys,
+                                   const Float4* xyzr,
+                                   const size_t n_points,
                                    const float3 scale)
 {
     uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
-    while (tid < n_keys) {
+    while (tid < n_points) {
         UInteger x = (UInteger) (scale.x * xyzr[tid].x);
         UInteger y = (UInteger) (scale.y * xyzr[tid].y);
         UInteger z = (UInteger) (scale.z * xyzr[tid].z);
@@ -111,17 +111,17 @@ void morton_keys(thrust::device_vector<UInteger>& d_keys,
                             ((1u << 21) - 1) : ((1u << 10) - 1);
     float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
                                span / (AABB_top.y - AABB_bot.y),
-                               span / (AABB_top.z - AABB_bot.z);
-    size_t n_keys = d_points.size();
+                               span / (AABB_top.z - AABB_bot.z));
+    size_t n_points = d_points.size();
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
+    int blocks = min(MAX_BLOCKS, (int) ((n_points + MORTON_THREADS_PER_BLOCK-1)
                                         / MORTON_THREADS_PER_BLOCK));
 
-    d_keys.resize(n_keys);
+    d_keys.resize(n_points);
     gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_points.data()),
         thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
+        thrust::raw_pointer_cast(d_points.data()),
+        n_points,
         scale);
 }
 
