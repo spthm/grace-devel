@@ -1,6 +1,7 @@
 // Due to a bug in thrust, this must appear before thrust/sort.h
 // The simplest solution is to put it here, despite already being included in
 // all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
 #include <cmath>

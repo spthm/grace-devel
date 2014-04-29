@@ -60,9 +60,9 @@ __global__ void gen_uniform_rays(Ray* rays,
 
         float invR = 1. / sqrt(dx*dx + dy*dy + dz*dz);
 
-        ray.dx = dx * invR;
-        ray.dy = dy * invR;
-        ray.dz = dz * invR;
+        ray.dx = dx*invR;
+        ray.dy = dy*invR;
+        ray.dz = dz*invR;
         // morton_key requires floats in (0, 1).
         keys[tid] = morton_key((ray.dx+1)/2., (ray.dy+1)/2., (ray.dz+1)/2.);
 
@@ -95,7 +95,7 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                          const Float length)
 {
     size_t N_rays = d_rays.size();
-    float4 origin = make_float4(ox, oy, ox, length);
+    float4 origin = make_float4(ox, oy, oz, length);
 
     // Allocate space for Q-RNG states and the three direction vectors.
     curandStateSobol32_t *d_qrng_states;
