@@ -1,3 +1,9 @@
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
+
 #include <cmath>
 #include <sstream>
 
@@ -11,6 +17,7 @@
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/gen_rays.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -76,60 +83,12 @@ int main(int argc, char* argv[]) {
 
     /* Generate the rays (emitted from box centre and of length 2). */
 
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<float> h_dxs(N_rays);
-    thrust::host_vector<float> h_dys(N_rays);
-    thrust::host_vector<float> h_dzs(N_rays);
-    thrust::host_vector<unsigned int> h_keys(N_rays);
+    float ox, oy, oz, length;
+    ox = oy = oz = 0.5f;
+    length = 2;
 
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dxs.begin(),
-                      grace::random_float_functor(0u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dys.begin(),
-                      grace::random_float_functor(1u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dzs.begin(),
-                      grace::random_float_functor(2u, -1.0f, 1.0f) );
-
-    for (int i=0; i<N_rays; i++) {
-        float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
-                           h_dys[i]*h_dys[i] +
-                           h_dzs[i]*h_dzs[i]);
-
-        h_rays[i].dx = h_dxs[i] / N_dir;
-        h_rays[i].dy = h_dys[i] / N_dir;
-        h_rays[i].dz = h_dzs[i] / N_dir;
-
-        h_rays[i].ox = h_rays[i].oy = h_rays[i].oz = 0.5f;
-
-        h_rays[i].length = 2;
-
-        h_rays[i].dclass = 0;
-        if (h_dxs[i] >= 0)
-            h_rays[i].dclass += 1;
-        if (h_dys[i] >= 0)
-            h_rays[i].dclass += 2;
-        if (h_dzs[i] >= 0)
-            h_rays[i].dclass += 4;
-
-        // Floats must be in (0, 1) for morton_key().
-        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                      (h_rays[i].dy+1)/2.f,
-                                      (h_rays[i].dz+1)/2.f);
-    }
-    h_dxs.clear();
-    h_dxs.shrink_to_fit();
-    h_dys.clear();
-    h_dys.shrink_to_fit();
-    h_dzs.clear();
-    h_dxs.shrink_to_fit();
-
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
-    thrust::device_vector<grace::Ray> d_rays = h_rays;
+    thrust::device_vector<grace::Ray> d_rays(N_rays);
+    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
 
 
     /* Trace for per-ray hit counts. */
@@ -160,6 +119,8 @@ int main(int argc, char* argv[]) {
     if (save_data)
     {
         thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
+        thrust::host_vector<grace::Ray> h_rays = d_rays;
+
         outfile.open("indata/spheredata.txt");
         for (int i=0; i<N; i++) {
             outfile << h_spheres_xyzr[i].x << " " << h_spheres_xyzr[i].y << " "
