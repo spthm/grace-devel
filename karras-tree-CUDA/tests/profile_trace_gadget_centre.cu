@@ -1,23 +1,27 @@
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+#include <curand_kernel.h>
+
 #include <cmath>
 #include <sstream>
 #include <fstream>
 
-#include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
-#include <thrust/scatter.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
-#include "utils.cuh"
-#include "../kernel_config.h"
-#include "../nodes.h"
 #include "../ray.h"
-#include "../kernels/morton.cuh"
+#include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/gen_rays.cuh"
+#include "../kernels/morton.cuh"
+#include "../kernels/sort.cuh"
+#include "../kernel_config.h"
+#include "../nodes.h"
+
 
 int main(int argc, char* argv[]) {
 
@@ -89,46 +93,12 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
 
-    float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
-
-    float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
-
-    float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
-
-    float min_r, max_r;
-    grace::min_max_w(&min_r, &max_r, d_spheres_xyzr);
-
-    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
-    float4 top = make_float4(max_x, max_y, max_z, 0.f);
-
     // One set of keys for sorting spheres, one for sorting an arbitrary
     // number of other properties.
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    thrust::device_vector<grace::uinteger32> d_keys_2(N);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
-    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
-
-    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
-                        d_spheres_xyzr.begin());
-    d_keys_2.clear(); d_keys_2.shrink_to_fit();
-
-    thrust::device_vector<int> d_indices(N);
-    thrust::device_vector<float> d_sorted(N);
-
-    thrust::sequence(d_indices.begin(), d_indices.end());
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_rho.begin(), d_sorted.begin());
-
-    d_rho = d_sorted;
-
-    // Working arrays no longer needed.
-    d_sorted.clear(); d_sorted.shrink_to_fit();
-    d_indices.clear(); d_indices.shrink_to_fit();
+    grace::morton_keys(d_keys, d_spheres_xyzr);
+    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
@@ -137,72 +107,17 @@ int main(int argc, char* argv[]) {
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
-    /* Generate the rays, emitted emitted from box centre and of sufficient
-     * length to be terminated outside the box.
+    /* Compute informatino needed for ray generation; rays are emitted from the
+     * box centre and of sufficient length to be terminated outside the box.
      */
 
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<grace::uinteger32> h_ray_keys(N_rays);
-
-    thrust::host_vector<float> h_dxs(N_rays);
-    thrust::host_vector<float> h_dys(N_rays);
-    thrust::host_vector<float> h_dzs(N_rays);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dxs.begin(),
-                      grace::random_float_functor(0u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dys.begin(),
-                      grace::random_float_functor(1u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dzs.begin(),
-                      grace::random_float_functor(2u, -1.0f, 1.0f) );
-
-    float x_centre = (max_x+min_x) / 2.;
-    float y_centre = (max_y+min_y) / 2.;
-    float z_centre = (max_z+min_z) / 2.;
-
-    float length = sqrt((max_x-min_x)*(max_x-min_x) +
-                        (max_y-min_y)*(max_y-min_y) +
-                        (max_z-min_z)*(max_z-min_z));
-
-    for (int i=0; i<N_rays; i++) {
-        float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
-                           h_dys[i]*h_dys[i] +
-                           h_dzs[i]*h_dzs[i]);
-
-        h_rays[i].dx = h_dxs[i] / N_dir;
-        h_rays[i].dy = h_dys[i] / N_dir;
-        h_rays[i].dz = h_dzs[i] / N_dir;
-
-        h_rays[i].ox = x_centre;
-        h_rays[i].oy = y_centre;
-        h_rays[i].oz = z_centre;
-
-        h_rays[i].length = length;
-
-        h_rays[i].dclass = 0;
-        if (h_dxs[i] >= 0)
-            h_rays[i].dclass += 1;
-        if (h_dys[i] >= 0)
-            h_rays[i].dclass += 2;
-        if (h_dzs[i] >= 0)
-            h_rays[i].dclass += 4;
-
-        // Floats must be in (0, 1) for morton_key().
-        h_ray_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                          (h_rays[i].dy+1)/2.f,
-                                          (h_rays[i].dz+1)/2.f);
-    }
-    h_dxs.clear();
-    h_dxs.shrink_to_fit();
-    h_dys.clear();
-    h_dys.shrink_to_fit();
-    h_dzs.clear();
-    h_dxs.shrink_to_fit();
+    // Assume x, y and z spatial extents are similar.
+    float min, max;
+    grace::min_max_x(&min, &max, d_spheres_xyzr);
+    float x_centre = (max + min) / 2.;
+    float y_centre = x_centre;
+    float z_centre = x_centre;
+    float length = 2 * (max - min) * sqrt(3);
 
 
     /* Profile the tracing performance by tracing rays through the simulation
@@ -213,7 +128,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
-    double sort_ray_tot, sort_rho_dists_tot;
+    double gen_ray_tot, sort_rho_dists_tot;
     double trace_rho_tot, trace_full_tot;
     double all_tot;
     cudaEventCreate(&part_start);
@@ -224,18 +139,16 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
 
-        thrust::device_vector<grace::Ray> d_rays = h_rays;
-        thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
-
+        thrust::device_vector<grace::Ray> d_rays(N_rays);
         thrust::device_vector<float> d_traced_rho(N_rays);
 
         cudaEventRecord(part_start);
-        thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
-                            d_rays.begin());
+        grace::uniform_random_rays(d_rays,
+                                   x_centre, y_centre, z_centre, length);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        sort_ray_tot += elapsed;
+        gen_ray_tot += elapsed;
 
         cudaEventRecord(part_start);
         grace::trace_property<float>(d_rays,
@@ -294,7 +207,8 @@ int main(int argc, char* argv[]) {
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
             unused_bytes += d_leaves.parent.size() * sizeof(int);
             unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
-            unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
+            // Ray keys, used when generating rays.
+            unused_bytes += d_rays.size() * sizeof(unsigned int);
 
             std::cout << "Total memory for full trace kernel:        "
                       << trace_bytes / (1024.*1024.*1024.) << " GiB"
@@ -332,9 +246,9 @@ int main(int argc, char* argv[]) {
         sort_rho_dists_tot += elapsed;
     }
 
-    std::cout << "Time for ray sort-by-key:               ";
+    std::cout << "Time for generating and sorting rays:   ";
     std::cout.width(8);
-    std::cout << sort_ray_tot / N_iter << " ms" << std::endl;
+    std::cout << gen_ray_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for cummulative density tracing:   ";
     std::cout.width(8);
@@ -344,9 +258,9 @@ int main(int argc, char* argv[]) {
     std::cout.width(8);
     std::cout << trace_full_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for trace output sort-by-distance: ";
+    std::cout << "(Time for sort-by-distance component:   ";
     std::cout.width(8);
-    std::cout << sort_rho_dists_tot / N_iter << " ms" << std::endl;
+    std::cout << sort_rho_dists_tot / N_iter << " ms)" << std::endl;
 
     std::cout << "Time for total (inc. memory ops):       ";
     std::cout.width(8);
