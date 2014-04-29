@@ -102,6 +102,60 @@ public:
     }
 };
 
+class random_double_functor
+{
+    const unsigned int offset;
+    thrust::uniform_real_distribution<double> uniform;
+    const unsigned int seed_factor;
+
+public:
+    random_double_functor() : offset(0u), seed_factor(1u),
+                             uniform(0.0, 1.0) {}
+
+    explicit random_double_functor(const unsigned int offset_) :
+        offset(offset_), uniform(0.0, 1.0), seed_factor(1u) {}
+
+    explicit random_double_functor(const double scale_) :
+        offset(0u), uniform(0.0, scale_), seed_factor(1u) {}
+
+    explicit random_double_functor(const double low_,
+                                   const double high_) :
+        offset(0u), uniform(low_, high_), seed_factor(1u) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const double low_,
+                                   const double high_) :
+        offset(offset_), uniform(low_, high_), seed_factor(1u) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const unsigned int seed_factor_) :
+        offset(offset_), uniform(0.0, 1.0), seed_factor(seed_factor_) {}
+
+    explicit random_double_functor(const double low_,
+                                   const double high_,
+                                   const unsigned int seed_factor_) :
+        offset(0u), uniform(low_, high_), seed_factor(seed_factor_) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const double low_,
+                                   const double high_,
+                                   const unsigned int seed_factor_) :
+        offset(offset_), uniform(low_, high_), seed_factor(seed_factor_) {}
+
+    __host__ __device__ double operator() (unsigned int n)
+    {
+        unsigned int seed = n;
+        for (unsigned int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
+        thrust::default_random_engine rng(seed);
+
+        rng.discard(offset);
+
+        return uniform(rng);
+    }
+};
+
 class random_float4_functor
 {
     float4 xyzw;
@@ -142,6 +196,62 @@ public:
         uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
     __host__ __device__ float4 operator() (unsigned int n)
+    {
+        seed = n;
+        for (unsigned int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
+        thrust::default_random_engine rng(seed);
+
+        xyzw.x = uniform(rng);
+        xyzw.y = uniform(rng);
+        xyzw.z = uniform(rng);
+        xyzw.w = w_scale*xyzw.x;
+
+        return xyzw;
+    }
+};
+
+class random_double4_functor
+{
+    double4 xyzw;
+    unsigned int seed;
+    thrust::uniform_real_distribution<double> uniform;
+    const double w_scale;
+    const unsigned int seed_factor;
+
+public:
+    random_double4_functor() : uniform(0.0, 1.0), w_scale(1.0),
+                              seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_) :
+        uniform(low_, high_), w_scale(1.0), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double w_scale_) :
+        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const double w_scale_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(1.0), seed_factor(seed_factor_) {}
+
+    explicit random_double4_functor(const double w_scale_,
+                                    const unsigned int seed_factor_) :
+        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const double w_scale_,
+                                    const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    __host__ __device__ double4 operator() (unsigned int n)
     {
         seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {

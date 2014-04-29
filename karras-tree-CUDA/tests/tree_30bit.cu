@@ -9,8 +9,8 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "utils.cuh"
 #include "../nodes.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 
@@ -106,10 +106,10 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
-    float4 bottom = make_float4(0., 0., 0., 0.);
-    float4 top = make_float4(1., 1., 1., 0.);
+    float3 top = make_float3(1., 1., 1.);
+    float3 bot = make_float3(0., 0., 0.);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bottom, top);
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
 
     if (save_out) {
         h_write_uint = d_keys;

@@ -5,10 +5,10 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "utils.cuh"
 #include "../nodes.h"
-#include "../kernels/morton.cuh"
+#include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
+#include "../kernels/morton.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -89,8 +89,8 @@ int main(int argc, char* argv[]) {
                           grace::random_float4_functor(0.1f, seed_factor));
 
         // Set the tree-build AABB (contains all sphere centres).
-        float4 bottom = make_float4(0., 0., 0., 0.);
-        float4 top = make_float4(1., 1., 1., 0.);
+        float3 top = make_float3(1., 1., 1.);
+        float3 bot = make_float3(0., 0., 0.);
 
 
         /* Build the tree from and time it for N_iter iterations. */
@@ -112,7 +112,7 @@ int main(int argc, char* argv[]) {
             thrust::device_vector<grace::uinteger32> d_keys(N);
 
             cudaEventRecord(part_start);
-            grace::morton_keys(d_spheres_xyzr, d_keys, bottom, top);
+            grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

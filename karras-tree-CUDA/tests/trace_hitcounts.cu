@@ -5,9 +5,9 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "utils.cuh"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
@@ -57,18 +57,19 @@ int main(int argc, char* argv[]) {
     /* Build the tree from the random data. */
 
     thrust::device_vector<unsigned int> d_keys(N);
-    float4 bot = make_float4(0.f, 0.f, 0.f, 0.f);
-    float4 top = make_float4(1.f, 1.f, 1.f, 0.f);
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
+    float3 top = make_float3(1.f, 1.f, 1.f);
+    float3 bot = make_float3(0.f, 0.f, 0.f);
 
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
+
     grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
-    // Keys no longer needed.  Free space.
+    // Keys no longer needed.
     d_keys.clear();
     d_keys.shrink_to_fit();
 

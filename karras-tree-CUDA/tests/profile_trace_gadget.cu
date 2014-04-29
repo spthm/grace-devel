@@ -4,15 +4,15 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/scan.h>
 
-#include "utils.cuh"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/sort.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -85,9 +85,6 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
-
-    // One set of keys for sorting spheres, one for sorting an arbitrary
-    // number of other properties.
     thrust::device_vector<unsigned int> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);

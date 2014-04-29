@@ -5,12 +5,12 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
+#include "../nodes.h"
+#include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/bintree_trace.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernel_config.h"
-#include "../nodes.h"
-#include "../ray.h"
-#include "utils.cuh"
 
 __host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
                                           const grace::Box& AABB)

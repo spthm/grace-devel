@@ -9,9 +9,10 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/sort.h>
 #include <thrust/scan.h>
 
+#include "../kernel_config.h"
+#include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
@@ -19,8 +20,6 @@
 #include "../kernels/gen_rays.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/sort.cuh"
-#include "../kernel_config.h"
-#include "../nodes.h"
 
 
 int main(int argc, char* argv[]) {
@@ -92,9 +91,6 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
-
-    // One set of keys for sorting spheres, one for sorting an arbitrary
-    // number of other properties.
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);
@@ -107,7 +103,7 @@ int main(int argc, char* argv[]) {
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
-    /* Compute informatino needed for ray generation; rays are emitted from the
+    /* Compute information needed for ray generation; rays are emitted from the
      * box centre and of sufficient length to be terminated outside the box.
      */
 

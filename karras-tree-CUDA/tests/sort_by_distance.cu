@@ -5,19 +5,16 @@
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
-#include <thrust/scatter.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
-#include "utils.cuh"
-#include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/sort.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -62,22 +59,13 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree. */
 
-    float4 bot = make_float4(0.f, 0.f, 0.f, 0.f);
-    float4 top = make_float4(1.f, 1.f, 1.f, 0.f);
+    float3 top = make_float3(1.f, 1.f, 1.f);
+    float3 bot = make_float3(0.f, 0.f, 0.f);
 
-    // One set of keys for sorting spheres' x, y, z and radii, another for
-    // sorting their densities.
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    thrust::device_vector<grace::uinteger32> d_keys_2(N);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
-    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
-
-    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
-                        d_spheres_xyzr.begin());
-    d_keys_2.clear(); d_keys_2.shrink_to_fit();
-
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rho.begin());
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
