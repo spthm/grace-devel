@@ -3,6 +3,7 @@
 #include <curand_kernel.h>
 
 #include <thrust/device_vector.h>
+#include <thrust/sort.h>
 
 #include "morton.cuh"
 #include "sort.cuh"
@@ -15,17 +16,14 @@ namespace grace {
 namespace gpu {
 
 __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
-                          curandDirectionVectors32_t *const qrng_directions,
-                          const size_t N)
+                          curandDirectionVectors32_t *const qrng_directions)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    if (tid < N) {
-        // Initialise the Q-RNG
-        curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
-        curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
-        curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
-    }
+    // Initialise the Q-RNG
+    curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
+    curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
+    curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
 }
 
 /* N normally distributed values (mean 0, fixed variance) normalized
@@ -41,7 +39,7 @@ __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
 template <typename Float4>
 __global__ void gen_uniform_rays(Ray* rays,
                                  unsigned int* keys,
-                                 const Float4 origin, // ox, oy, oz, length.
+                                 const Float4 ol, // ox, oy, oz, length.
                                  curandStateSobol32_t *const qrng_states,
                                  const size_t N_rays)
 {
@@ -53,7 +51,6 @@ __global__ void gen_uniform_rays(Ray* rays,
 
     float dx, dy, dz;
     Ray ray;
-    unsigned int key;
 
     while (tid < N_rays)
     {
@@ -69,10 +66,10 @@ __global__ void gen_uniform_rays(Ray* rays,
         // morton_key requires floats in (0, 1).
         keys[tid] = morton_key((ray.dx+1)/2., (ray.dy+1)/2., (ray.dz+1)/2.);
 
-        ray.ox = origin.x;
-        ray.oy = origin.y;
-        ray.oz = origin.z;
-        ray.length = origin.w;
+        ray.ox = ol.x;
+        ray.oy = ol.y;
+        ray.oz = ol.z;
+        ray.length = ol.w;
 
         unsigned int dclass = 0;
         if (dx >= 0)
@@ -117,12 +114,15 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                3*sizeof(curandDirectionVectors32_t),
                cudaMemcpyHostToDevice);
 
-    int blocks = min(MAX_BLOCKS, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
+    // We launch exactly enough blocks to fill the hardware for both of
+    // these kernels, or fewer if there are not sufficient rays).
+    // On Tesla M2090, there are 16MPs, so se have a maxiumum of 16 blocks.
+    // On GTX 670, there are 7MPs, so we have a maximum of 7 blocks.
+    int blocks = min(16, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
                                         / RAYS_THREADS_PER_BLOCK));
 
     gpu::init_QRNG<<<blocks, RAYS_THREADS_PER_BLOCK>>>(d_qrng_states,
-                                                       d_qrng_directions,
-                                                       N_rays);
+                                                       d_qrng_directions);
 
     thrust::device_vector<unsigned int> d_keys(N_rays);
     gpu::gen_uniform_rays<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
@@ -135,7 +135,7 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
     cudaFree(d_qrng_states);
     cudaFree(d_qrng_directions);
 
-    thrust::sort_by_key(d_keys, d_rays);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
 }
 
 // template <typename Float4>
