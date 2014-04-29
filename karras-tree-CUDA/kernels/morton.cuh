@@ -3,6 +3,7 @@
 #include <thrust/device_vector.h>
 
 #include "../kernel_config.h"
+#include "../utils.cuh"
 #include "bits.cuh"
 
 namespace grace {
@@ -84,25 +85,6 @@ __global__ void morton_keys_kernel(UInteger* keys,
 
 template <typename UInteger, typename Float4>
 void morton_keys(thrust::device_vector<UInteger>& d_keys,
-                 const thrust::device_vector<Float4>& d_points)
-{
-    float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_points);
-
-    float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_points);
-
-    float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_points);
-
-    float3 bot = make_float3(min_x, min_y, min_z);
-    float3 top = make_float3(max_x, max_y, max_z);
-
-    morton_keys(d_keys, d_points, top, bot);
-}
-
-template <typename UInteger, typename Float4>
-void morton_keys(thrust::device_vector<UInteger>& d_keys,
                  const thrust::device_vector<Float4>& d_points,
                  const float3 AABB_top,
                  const float3 AABB_bot)
@@ -123,6 +105,25 @@ void morton_keys(thrust::device_vector<UInteger>& d_keys,
         thrust::raw_pointer_cast(d_points.data()),
         n_points,
         scale);
+}
+
+template <typename UInteger, typename Float4>
+void morton_keys(thrust::device_vector<UInteger>& d_keys,
+                 const thrust::device_vector<Float4>& d_points)
+{
+    float min_x, max_x;
+    grace::min_max_x(&min_x, &max_x, d_points);
+
+    float min_y, max_y;
+    grace::min_max_y(&min_y, &max_y, d_points);
+
+    float min_z, max_z;
+    grace::min_max_z(&min_z, &max_z, d_points);
+
+    float3 bot = make_float3(min_x, min_y, min_z);
+    float3 top = make_float3(max_x, max_y, max_z);
+
+    morton_keys(d_keys, d_points, top, bot);
 }
 
 } // namespace grace

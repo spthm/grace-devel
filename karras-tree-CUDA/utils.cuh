@@ -1,3 +1,5 @@
+#pragma once
+
 #include <fstream>
 
 #include <thrust/device_vector.h>
@@ -199,53 +201,53 @@ struct float4_compare_w
 template <typename Float4, typename Float>
 void min_max_x(Float* min_x,
                Float* max_x,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_x());
-    *min_x = ((float4) *min_max.first).x;
-    *max_x = ((float4) *min_max.second).x;
+    *min_x = ((Float4) *min_max.first).x;
+    *max_x = ((Float4) *min_max.second).x;
 }
 
 template <typename Float4, typename Float>
 void min_max_y(Float* min_y,
                Float* max_y,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_y());
-    *min_y = ((float4) *min_max.first).y;
-    *max_y = ((float4) *min_max.second).y;
+    *min_y = ((Float4) *min_max.first).y;
+    *max_y = ((Float4) *min_max.second).y;
 }
 
 template <typename Float4, typename Float>
 void min_max_z(Float* min_z,
                Float* max_z,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_z());
-    *min_z = ((float4) *min_max.first).z;
-    *max_z = ((float4) *min_max.second).z;
+    *min_z = ((Float4) *min_max.first).z;
+    *max_z = ((Float4) *min_max.second).z;
 }
 
 template <typename Float4, typename Float>
 void min_max_w(Float* min_w,
                Float* max_w,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_w());
-    *min_w = ((float4) *min_max.first).w;
-    *max_w = ((float4) *min_max.second).w;
+    *min_w = ((Float4) *min_max.first).w;
+    *max_w = ((Float4) *min_max.second).w;
 }
 
 //-----------------------------------------------------------------------------
