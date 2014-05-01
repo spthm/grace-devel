@@ -21,9 +21,11 @@ __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     // Initialise the Q-RNG
-    curand_init(qrng_directions[0], tid, &qrng_states[3*tid+0]); // x
-    curand_init(qrng_directions[1], tid, &qrng_states[3*tid+1]); // y
-    curand_init(qrng_directions[2], tid, &qrng_states[3*tid+2]); // z
+    // +2 to the offset since the second value generated =~ -0 (for all three
+    // dimensions).
+    curand_init(qrng_directions[0], tid+2, &qrng_states[3*tid+0]); // x
+    curand_init(qrng_directions[1], tid+2, &qrng_states[3*tid+1]); // y
+    curand_init(qrng_directions[2], tid+2, &qrng_states[3*tid+2]); // z
 }
 
 /* N normally distributed values (mean 0, fixed variance) normalized
