@@ -16,16 +16,25 @@ namespace grace {
 namespace gpu {
 
 __global__ void init_QRNG(curandStateSobol32_t *const qrng_states,
-                          curandDirectionVectors32_t *const qrng_directions)
+                          curandDirectionVectors32_t *const qrng_directions,
+                          const unsigned int N_per_thread)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int stride = blockDim.x * gridDim.x;
 
     // Initialise the Q-RNG
-    // +2 to the offset since the second value generated =~ -0 (for all three
-    // dimensions).
-    curand_init(qrng_directions[0], tid+2, &qrng_states[3*tid+0]); // x
-    curand_init(qrng_directions[1], tid+2, &qrng_states[3*tid+1]); // y
-    curand_init(qrng_directions[2], tid+2, &qrng_states[3*tid+2]); // z
+    // We may have that max(tid) < N_rays. For performance reasons, we only
+    // only generate max(tid) states, and they are reused.  Each state's
+    // initializing offset is such that it will not be 'caught' by the state
+    // preceding it when states are reused.
+    // Additionally, we +2 to the offset since the second value generated =~ -0
+    // (for all three dimensions).
+    curand_init(qrng_directions[0], (N_per_thread*tid)+2,
+                &qrng_states[tid+0*stride]); // x
+    curand_init(qrng_directions[1], (N_per_thread*tid)+2,
+                &qrng_states[tid+1*stride]); // y
+    curand_init(qrng_directions[2], (N_per_thread*tid)+2,
+                &qrng_states[tid+2*stride]); // z
 }
 
 /* N normally distributed values (mean 0, fixed variance) normalized
@@ -46,27 +55,28 @@ __global__ void gen_uniform_rays(Ray* rays,
                                  const size_t N_rays)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
+    unsigned int stride = blockDim.x * gridDim.x;
 
-    curandStateSobol32_t x_state = qrng_states[3*tid+0];
-    curandStateSobol32_t y_state = qrng_states[3*tid+1];
-    curandStateSobol32_t z_state = qrng_states[3*tid+2];
-
-    float dx, dy, dz;
-    Ray ray;
+    curandStateSobol32_t x_state = qrng_states[tid+0*stride];
+    curandStateSobol32_t y_state = qrng_states[tid+1*stride];
+    curandStateSobol32_t z_state = qrng_states[tid+2*stride];
 
     while (tid < N_rays)
     {
+        float dx, dy, dz, invR;
+        Ray ray;
+
         dx = curand_normal(&x_state);
         dy = curand_normal(&y_state);
         dz = curand_normal(&z_state);
-
-        float invR = 1. / sqrt(dx*dx + dy*dy + dz*dz);
+        invR = 1. / sqrt(dx*dx + dy*dy + dz*dz);
 
         ray.dx = dx*invR;
         ray.dy = dy*invR;
         ray.dz = dz*invR;
-        // morton_key requires floats in (0, 1).
-        keys[tid] = morton_key((ray.dx+1)/2., (ray.dy+1)/2., (ray.dz+1)/2.);
+
+        // morton_key requires *floats* in (0, 1) for 30-bit keys.
+        keys[tid] = morton_key((ray.dx+1)/2.f, (ray.dy+1)/2.f, (ray.dz+1)/2.f);
 
         ray.ox = ol.x;
         ray.oy = ol.y;
@@ -75,15 +85,15 @@ __global__ void gen_uniform_rays(Ray* rays,
 
         unsigned int dclass = 0;
         if (dx >= 0)
-            ray.dclass += 1;
+            dclass += 1;
         if (dy >= 0)
-            ray.dclass += 2;
+            dclass += 2;
         if (dz >= 0)
-            ray.dclass += 4;
+            dclass += 4;
         ray.dclass = dclass;
 
         rays[tid] = ray;
-        tid += blockDim.x * gridDim.x;
+        tid += stride;
     }
 }
 
@@ -99,10 +109,22 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
     size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, oz, length);
 
+    // We launch exactly enough blocks to fill the hardware for both of
+    // these kernels, or fewer if there are not sufficient rays).
+    // On Tesla M2090, there are 16MPs, so se have a maxiumum of 16 blocks.
+    // On GTX 670, there are 7MPs, so we have a maximum of 7 blocks.
+    int blocks = min(16, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
+                                        / RAYS_THREADS_PER_BLOCK));
+
+    // Upper bound on number of times curand_normal will be called by each
+    // of the blocks * RAYS_THREADS_PER_BLOCK threads.
+    unsigned int N_per_thread = (N_rays + blocks * RAYS_THREADS_PER_BLOCK - 1)
+                                / (blocks * RAYS_THREADS_PER_BLOCK);
+
     // Allocate space for Q-RNG states and the three direction vectors.
     curandStateSobol32_t *d_qrng_states;
     cudaMalloc((void**)&d_qrng_states,
-               3*N_rays * sizeof(curandStateSobol32_t));
+               3*blocks*RAYS_THREADS_PER_BLOCK * sizeof(curandStateSobol32_t));
 
     curandDirectionVectors32_t *d_qrng_directions;
     cudaMalloc((void**)&d_qrng_directions,
@@ -116,15 +138,9 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                3*sizeof(curandDirectionVectors32_t),
                cudaMemcpyHostToDevice);
 
-    // We launch exactly enough blocks to fill the hardware for both of
-    // these kernels, or fewer if there are not sufficient rays).
-    // On Tesla M2090, there are 16MPs, so se have a maxiumum of 16 blocks.
-    // On GTX 670, there are 7MPs, so we have a maximum of 7 blocks.
-    int blocks = min(16, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
-                                        / RAYS_THREADS_PER_BLOCK));
-
     gpu::init_QRNG<<<blocks, RAYS_THREADS_PER_BLOCK>>>(d_qrng_states,
-                                                       d_qrng_directions);
+                                                       d_qrng_directions,
+                                                       N_per_thread);
 
     thrust::device_vector<unsigned int> d_keys(N_rays);
     gpu::gen_uniform_rays<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
