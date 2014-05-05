@@ -9,8 +9,8 @@ __global__ void init_QRNG(curandStateSobol32_t *const rngStates,
     unsigned int tid = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int step = gridDim.x * blockDim.x;
 
-    curand_init(rngDirections[0], tid, &rngStates[tid]);
-    curand_init(rngDirections[1], tid, &rngStates[tid + step]);
+    curand_init(rngDirections[0], 2*tid, &rngStates[tid]);
+    curand_init(rngDirections[1], 2*tid, &rngStates[tid + step]);
 }
 
 __global__ void generate_uniforms(float *const results,
@@ -41,7 +41,7 @@ int main(void) {
     dim3 grid;
 
     // The number of random points we wish to generate.
-    unsigned int N = 16;
+    unsigned int N = 32;
 
     // A maximum/optimum for our hypothetical device.
     unsigned int threadBlockSize = 4;

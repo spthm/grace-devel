@@ -2,9 +2,6 @@
 
 #include <fstream>
 
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-
 #define N_DIM_MAX 3
 
 inline void cuda_call(cudaError_t code, char* file, int line, bool abort=true)
@@ -103,8 +100,6 @@ int main(int argc, char* argv[]) {
     // Copy back to device.
     float* h_out = new float[N*N_dim];
     cudaMemcpy(h_out, d_out, N*N_dim*sizeof(float), cudaMemcpyDeviceToHost);
-
-    std::cout << sizeof(curandDirectionVectors32_t) << std::endl;
 
     // Write normals to file.
     outfile.open("normals.txt");
