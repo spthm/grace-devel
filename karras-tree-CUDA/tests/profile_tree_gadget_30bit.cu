@@ -6,9 +6,8 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "utils.cuh"
-#include "../types.h"
 #include "../nodes.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 
@@ -56,37 +55,22 @@ int main(int argc, char* argv[]) {
 
     /* Read in Gadget data. */
 
-    infile.open(infile_name.c_str(), std::ios::binary);
-    grace::gadget_header header = grace::read_gadget_header(infile);
-    infile.close();
-
-    size_t N = header.npart[0];
-
-    thrust::host_vector<float4> h_spheres_xyzr(N);
-    thrust::host_vector<float> h_masses(N);
-    thrust::host_vector<float> h_rho(N);
+    // Arrays are resized in read_gadget_gas()
+    thrust::host_vector<float4> h_spheres_xyzr(1);
+    thrust::host_vector<float> h_masses(1);
+    thrust::host_vector<float> h_rho(1);
 
     infile.open(infile_name.c_str(), std::ios::binary);
     grace::read_gadget_gas(infile, h_spheres_xyzr, h_masses, h_rho);
     infile.close();
-    // Masses and densities unused.  Free space.
+
+    size_t N = h_spheres_xyzr.size();
+
+    // Masses and densities unused.
     h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-
-    // Set the tree-build AABB (contains all sphere centres).
-    float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
-
-    float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
-
-    float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
-
-    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
-    float4 top = make_float4(max_x, max_y, max_z, 0.f);
 
 
     /* Profile the tree constructed from Gadget data. */
@@ -103,10 +87,10 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
         thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-
         thrust::device_vector<grace::uinteger32> d_keys(N);
+
         cudaEventRecord(part_start);
-        grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
+        grace::morton_keys(d_keys, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

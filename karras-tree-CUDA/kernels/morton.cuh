@@ -4,6 +4,7 @@
 
 #include "../kernel_config.h"
 #include "../types.h"
+#include "../utils.cuh"
 #include "bits.cuh"
 
 namespace grace {
@@ -58,35 +59,14 @@ namespace gpu {
 // CUDA kernels for generating morton keys
 //-----------------------------------------------------------------------------
 
-template <typename UInteger, typename Float>
-__global__ void morton_keys_kernel(const Float* xs,
-                                   const Float* ys,
-                                   const Float* zs,
-                                   UInteger* keys,
-                                   const size_t n_keys,
-                                   const Vector3<Float> scale)
-{
-    uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
-    while (tid < n_keys) {
-        UInteger x = (UInteger) (scale.x * xs[tid]);
-        UInteger y = (UInteger) (scale.y * ys[tid]);
-        UInteger z = (UInteger) (scale.z * zs[tid]);
-
-        keys[tid] = morton_key(x, y, z);
-
-        tid += blockDim.x * gridDim.x;
-    }
-    return;
-}
-
 template <typename UInteger, typename Float4>
-__global__ void morton_keys_kernel(const Float4* xyzr,
-                                   UInteger* keys,
-                                   const size_t n_keys,
-                                   const Float4 scale)
+__global__ void morton_keys_kernel(UInteger* keys,
+                                   const Float4* xyzr,
+                                   const size_t n_points,
+                                   const float3 scale)
 {
     uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
-    while (tid < n_keys) {
+    while (tid < n_points) {
         UInteger x = (UInteger) (scale.x * xyzr[tid].x);
         UInteger y = (UInteger) (scale.y * xyzr[tid].y);
         UInteger z = (UInteger) (scale.z * xyzr[tid].z);
@@ -104,57 +84,47 @@ __global__ void morton_keys_kernel(const Float4* xyzr,
 // C-like wrappers for morton key kernels
 //-----------------------------------------------------------------------------
 
-template <typename UInteger, typename Float>
-void morton_keys(const thrust::device_vector<Float>& d_xs,
-                 const thrust::device_vector<Float>& d_ys,
-                 const thrust::device_vector<Float>& d_zs,
-                 thrust::device_vector<UInteger>& d_keys,
-                 const Vector3<Float>& AABB_bottom,
-                 const Vector3<Float>& AABB_top)
+template <typename UInteger, typename Float4>
+void morton_keys(thrust::device_vector<UInteger>& d_keys,
+                 const thrust::device_vector<Float4>& d_points,
+                 const float3 AABB_top,
+                 const float3 AABB_bot)
 {
     unsigned int span = CHAR_BIT * sizeof(UInteger) > 32 ?
                             ((1u << 21) - 1) : ((1u << 10) - 1);
-    Vector3<Float> scale((Float)span / (AABB_top.x - AABB_bottom.x),
-                         (Float)span / (AABB_top.y - AABB_bottom.y),
-                         (Float)span / (AABB_top.z - AABB_bottom.z));
-    size_t n_keys = d_xs.size();
+    float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
+                               span / (AABB_top.y - AABB_bot.y),
+                               span / (AABB_top.z - AABB_bot.z));
+    size_t n_points = d_points.size();
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
+    int blocks = min(MAX_BLOCKS, (int) ((n_points + MORTON_THREADS_PER_BLOCK-1)
                                         / MORTON_THREADS_PER_BLOCK));
 
-    d_keys.resize(n_keys);
+    d_keys.resize(n_points);
     gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_xs.data()),
-        thrust::raw_pointer_cast(d_ys.data()),
-        thrust::raw_pointer_cast(d_zs.data()),
         thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
+        thrust::raw_pointer_cast(d_points.data()),
+        n_points,
         scale);
 }
 
 template <typename UInteger, typename Float4>
-void morton_keys(const thrust::device_vector<Float4>& d_spheres_xyzr,
-                 thrust::device_vector<UInteger>& d_keys,
-                 const Float4 AABB_bottom,
-                 const Float4 AABB_top)
+void morton_keys(thrust::device_vector<UInteger>& d_keys,
+                 const thrust::device_vector<Float4>& d_points)
 {
-    unsigned int span = CHAR_BIT * sizeof(UInteger) > 32 ?
-                            ((1u << 21) - 1) : ((1u << 10) - 1);
-    Float4 scale = make_float4(span / (AABB_top.x - AABB_bottom.x),
-                               span / (AABB_top.y - AABB_bottom.y),
-                               span / (AABB_top.z - AABB_bottom.z),
-                               0);
-    size_t n_keys = d_spheres_xyzr.size();
+    float min_x, max_x;
+    grace::min_max_x(&min_x, &max_x, d_points);
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
-                                        / MORTON_THREADS_PER_BLOCK));
+    float min_y, max_y;
+    grace::min_max_y(&min_y, &max_y, d_points);
 
-    d_keys.resize(n_keys);
-    gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_spheres_xyzr.data()),
-        thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
-        scale);
+    float min_z, max_z;
+    grace::min_max_z(&min_z, &max_z, d_points);
+
+    float3 bot = make_float3(min_x, min_y, min_z);
+    float3 top = make_float3(max_x, max_y, max_z);
+
+    morton_keys(d_keys, d_points, top, bot);
 }
 
 } // namespace grace

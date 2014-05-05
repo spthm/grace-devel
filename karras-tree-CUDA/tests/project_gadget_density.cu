@@ -4,17 +4,15 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/copy.h>
 #include <thrust/sort.h>
-#include <thrust/scan.h>
 
-#include "utils.cuh"
-#include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
-#include "../kernels/morton.cuh"
+#include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/morton.cuh"
+#include "../kernels/sort.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -61,6 +59,8 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
 
+    // Calculate limits here explicity since we need them later (i.e. do not
+    // get morton_keys() to do it for us).
     float min_x, max_x;
     grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
 
@@ -73,34 +73,13 @@ int main(int argc, char* argv[]) {
     float min_r, max_r;
     grace::min_max_w(&min_r, &max_r, d_spheres_xyzr);
 
-    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
-    float4 top = make_float4(max_x, max_y, max_z, 0.f);
+    float3 top = make_float3(max_x, max_y, max_z);
+    float3 bot = make_float3(min_x, min_y, min_z);
 
-    // One set of keys for sorting spheres, one for sorting an arbitrary
-    // number of other properties.
     thrust::device_vector<unsigned int> d_keys(N);
-    thrust::device_vector<unsigned int> d_keys_2(N);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
-    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
-
-    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
-                        d_spheres_xyzr.begin());
-    d_keys_2.clear(); d_keys_2.shrink_to_fit();
-
-    thrust::device_vector<int> d_indices(N);
-    thrust::device_vector<float> d_sorted(N);
-
-    thrust::sequence(d_indices.begin(), d_indices.end());
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_indices.begin());
-    thrust::gather(d_indices.begin(), d_indices.end(),
-                   d_rho.begin(), d_sorted.begin());
-
-    d_rho = d_sorted;
-
-    // Working arrays no longer needed.
-    d_sorted.clear(); d_sorted.shrink_to_fit();
-    d_indices.clear(); d_indices.shrink_to_fit();
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
@@ -196,22 +175,8 @@ int main(int argc, char* argv[]) {
     }
     thrust::host_vector<float> h_traced_rho = d_traced_rho;
     thrust::host_vector<int> h_indices(N_rays);
-    thrust::sequence(h_indices.begin(), h_indices.end());
-    thrust::sort_by_key(h_pos_keys.begin(), h_pos_keys.end(),
-                        h_indices.begin());
-    {
-        thrust::host_vector<float> h_sorted(N_rays);
-        thrust::gather(h_indices.begin(), h_indices.end(),
-                       h_traced_rho.begin(), h_sorted.begin());
-        h_traced_rho = h_sorted;
-    }
-    {
-        thrust::host_vector<grace::Ray> h_sorted(N_rays);
-        thrust::gather(h_indices.begin(), h_indices.end(),
-                       h_rays.begin(), h_sorted.begin());
-        h_rays = h_sorted;
-    }
-    h_indices.clear(); h_indices.shrink_to_fit();
+
+    grace::sort_by_key(h_pos_keys, h_traced_rho, h_rays);
 
     // Increase the dynamic range.
     for (int i=0; i<N_rays; i++) {

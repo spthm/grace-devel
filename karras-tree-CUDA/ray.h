@@ -7,7 +7,7 @@ struct Ray
     float dx, dy, dz;
     float ox, oy, oz;
     float length;
-    int dclass;
+    unsigned int dclass;
 };
 
 struct RaySlope

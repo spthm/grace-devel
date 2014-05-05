@@ -3,17 +3,15 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/copy.h>
 #include <thrust/sort.h>
-#include <thrust/scan.h>
 
-#include "utils.cuh"
-#include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/sort.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -29,8 +27,9 @@ int main(int argc, char* argv[]) {
 
     /* Generate two spheres (tree does not work for N < 2 objects). */
 
-    thrust::host_vector<float4> h_spheres_xyzr(2);
-    size_t N = h_spheres_xyzr.size();
+    unsigned int N = 2;
+    thrust::host_vector<float4> h_spheres_xyzr(N);
+
     float radius = 0.2f;
     h_spheres_xyzr[0].x = -0.5f;
     h_spheres_xyzr[0].y = 0.0f;
@@ -60,23 +59,16 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_pmasses = h_pmasses;
 
-    float min_x, min_y, min_z, max_x, max_y, max_z;
-    min_x = min_y = min_z = -1.f;
+    float max_x, max_y, max_z, min_x, min_y, min_z;
     max_x = max_y = max_z = 1.f;
-    float4 bot = make_float4(min_x, min_y, min_z, 0.f);
-    float4 top = make_float4(max_x, max_y, max_z, 0.f);
+    min_x = min_y = min_z = -1.f;
+    float3 top = make_float3(max_x, max_y, max_z);
+    float3 bot = make_float3(min_x, min_y, min_z);
 
     thrust::device_vector<unsigned int> d_keys(N);
-    thrust::device_vector<unsigned int> d_keys_2(N);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
-    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
-
-    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
-                        d_spheres_xyzr.begin());
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_pmasses.begin());
-
-    d_keys_2.clear(); d_keys_2.shrink_to_fit();
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    grace::sort_by_key(d_keys, d_spheres_xyzr, d_pmasses);
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);

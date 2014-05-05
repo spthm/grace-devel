@@ -1,3 +1,5 @@
+#pragma once
+
 #include <fstream>
 
 #include <thrust/device_vector.h>
@@ -100,6 +102,60 @@ public:
     }
 };
 
+class random_double_functor
+{
+    const unsigned int offset;
+    thrust::uniform_real_distribution<double> uniform;
+    const unsigned int seed_factor;
+
+public:
+    random_double_functor() : offset(0u), seed_factor(1u),
+                             uniform(0.0, 1.0) {}
+
+    explicit random_double_functor(const unsigned int offset_) :
+        offset(offset_), uniform(0.0, 1.0), seed_factor(1u) {}
+
+    explicit random_double_functor(const double scale_) :
+        offset(0u), uniform(0.0, scale_), seed_factor(1u) {}
+
+    explicit random_double_functor(const double low_,
+                                   const double high_) :
+        offset(0u), uniform(low_, high_), seed_factor(1u) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const double low_,
+                                   const double high_) :
+        offset(offset_), uniform(low_, high_), seed_factor(1u) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const unsigned int seed_factor_) :
+        offset(offset_), uniform(0.0, 1.0), seed_factor(seed_factor_) {}
+
+    explicit random_double_functor(const double low_,
+                                   const double high_,
+                                   const unsigned int seed_factor_) :
+        offset(0u), uniform(low_, high_), seed_factor(seed_factor_) {}
+
+    explicit random_double_functor(const unsigned int offset_,
+                                   const double low_,
+                                   const double high_,
+                                   const unsigned int seed_factor_) :
+        offset(offset_), uniform(low_, high_), seed_factor(seed_factor_) {}
+
+    __host__ __device__ double operator() (unsigned int n)
+    {
+        unsigned int seed = n;
+        for (unsigned int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
+        thrust::default_random_engine rng(seed);
+
+        rng.discard(offset);
+
+        return uniform(rng);
+    }
+};
+
 class random_float4_functor
 {
     float4 xyzw;
@@ -140,6 +196,62 @@ public:
         uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
     __host__ __device__ float4 operator() (unsigned int n)
+    {
+        seed = n;
+        for (unsigned int i=0; i<seed_factor; i++) {
+            seed = hash(seed);
+        }
+        thrust::default_random_engine rng(seed);
+
+        xyzw.x = uniform(rng);
+        xyzw.y = uniform(rng);
+        xyzw.z = uniform(rng);
+        xyzw.w = w_scale*xyzw.x;
+
+        return xyzw;
+    }
+};
+
+class random_double4_functor
+{
+    double4 xyzw;
+    unsigned int seed;
+    thrust::uniform_real_distribution<double> uniform;
+    const double w_scale;
+    const unsigned int seed_factor;
+
+public:
+    random_double4_functor() : uniform(0.0, 1.0), w_scale(1.0),
+                              seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_) :
+        uniform(low_, high_), w_scale(1.0), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double w_scale_) :
+        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const double w_scale_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(1.0), seed_factor(seed_factor_) {}
+
+    explicit random_double4_functor(const double w_scale_,
+                                    const unsigned int seed_factor_) :
+        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    explicit random_double4_functor(const double low_,
+                                    const double high_,
+                                    const double w_scale_,
+                                    const unsigned int seed_factor_) :
+        uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
+
+    __host__ __device__ double4 operator() (unsigned int n)
     {
         seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {
@@ -199,53 +311,53 @@ struct float4_compare_w
 template <typename Float4, typename Float>
 void min_max_x(Float* min_x,
                Float* max_x,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_x());
-    *min_x = ((float4) *min_max.first).x;
-    *max_x = ((float4) *min_max.second).x;
+    *min_x = ((Float4) *min_max.first).x;
+    *max_x = ((Float4) *min_max.second).x;
 }
 
 template <typename Float4, typename Float>
 void min_max_y(Float* min_y,
                Float* max_y,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_y());
-    *min_y = ((float4) *min_max.first).y;
-    *max_y = ((float4) *min_max.second).y;
+    *min_y = ((Float4) *min_max.first).y;
+    *max_y = ((Float4) *min_max.second).y;
 }
 
 template <typename Float4, typename Float>
 void min_max_z(Float* min_z,
                Float* max_z,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_z());
-    *min_z = ((float4) *min_max.first).z;
-    *max_z = ((float4) *min_max.second).z;
+    *min_z = ((Float4) *min_max.first).z;
+    *max_z = ((Float4) *min_max.second).z;
 }
 
 template <typename Float4, typename Float>
 void min_max_w(Float* min_w,
                Float* max_w,
-               thrust::device_vector<Float4>& d_data)
+               const thrust::device_vector<Float4>& d_data)
 {
-    typedef typename thrust::device_vector<Float4>::iterator iter;
+    typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
     min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
                                      float4_compare_w());
-    *min_w = ((float4) *min_max.first).w;
-    *max_w = ((float4) *min_max.second).w;
+    *min_w = ((Float4) *min_max.first).w;
+    *max_w = ((Float4) *min_max.second).w;
 }
 
 //-----------------------------------------------------------------------------

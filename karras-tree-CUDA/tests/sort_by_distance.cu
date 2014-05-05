@@ -1,3 +1,9 @@
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
+
 #include <cmath>
 #include <sstream>
 #include <iomanip>
@@ -5,19 +11,17 @@
 #include <thrust/copy.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
-#include <thrust/scatter.h>
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
-#include "utils.cuh"
-#include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
 #include "../kernels/bintree_trace.cuh"
+#include "../kernels/gen_rays.cuh"
+#include "../kernels/sort.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -27,6 +31,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 1000000;
+    // Few because the random spheres result in many hits per ray.
     unsigned int N_rays = 25000;
 
     if (argc > 1) {
@@ -62,22 +67,13 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree. */
 
-    float4 bot = make_float4(0.f, 0.f, 0.f, 0.f);
-    float4 top = make_float4(1.f, 1.f, 1.f, 0.f);
+    float3 top = make_float3(1.f, 1.f, 1.f);
+    float3 bot = make_float3(0.f, 0.f, 0.f);
 
-    // One set of keys for sorting spheres' x, y, z and radii, another for
-    // sorting their densities.
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    thrust::device_vector<grace::uinteger32> d_keys_2(N);
 
-    grace::morton_keys(d_spheres_xyzr, d_keys, bot, top);
-    thrust::copy(d_keys.begin(), d_keys.end(), d_keys_2.begin());
-
-    thrust::sort_by_key(d_keys_2.begin(), d_keys_2.end(),
-                        d_spheres_xyzr.begin());
-    d_keys_2.clear(); d_keys_2.shrink_to_fit();
-
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rho.begin());
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
@@ -93,69 +89,15 @@ int main(int argc, char* argv[]) {
      * sufficient length to be terminated outside the box.
      */
 
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<unsigned int> h_ray_keys(N_rays);
+    float ox, oy, oz, length;
+    ox = oy = oz = 0.5f;
+    length = sqrt(3);
 
-    thrust::host_vector<float> h_dxs(N_rays);
-    thrust::host_vector<float> h_dys(N_rays);
-    thrust::host_vector<float> h_dzs(N_rays);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dxs.begin(),
-                      grace::random_float_functor(0u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dys.begin(),
-                      grace::random_float_functor(1u, -1.0f, 1.0f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N_rays),
-                      h_dzs.begin(),
-                      grace::random_float_functor(2u, -1.0f, 1.0f) );
-
-    float length = sqrt(3);
-
-    for (int i=0; i<N_rays; i++) {
-        float N_dir = sqrt(h_dxs[i]*h_dxs[i] +
-                           h_dys[i]*h_dys[i] +
-                           h_dzs[i]*h_dzs[i]);
-
-        h_rays[i].dx = h_dxs[i] / N_dir;
-        h_rays[i].dy = h_dys[i] / N_dir;
-        h_rays[i].dz = h_dzs[i] / N_dir;
-
-        h_rays[i].ox = h_rays[i].oy = h_rays[i].oz = 0.5f;
-
-        h_rays[i].length = length;
-
-        h_rays[i].dclass = 0;
-        if (h_dxs[i] >= 0)
-            h_rays[i].dclass += 1;
-        if (h_dys[i] >= 0)
-            h_rays[i].dclass += 2;
-        if (h_dzs[i] >= 0)
-            h_rays[i].dclass += 4;
-
-        // Floats must be in (0, 1) for morton_key().
-        h_ray_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                          (h_rays[i].dy+1)/2.f,
-                                          (h_rays[i].dz+1)/2.f);
-    }
-    h_dxs.clear();
-    h_dxs.shrink_to_fit();
-    h_dys.clear();
-    h_dys.shrink_to_fit();
-    h_dzs.clear();
-    h_dxs.shrink_to_fit();
+    thrust::device_vector<grace::Ray> d_rays(N_rays);
+    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
 
 
     /* Perform a full trace. */
-
-    thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<unsigned int> d_ray_keys = h_ray_keys;
-
-    thrust::sort_by_key(d_ray_keys.begin(), d_ray_keys.end(),
-                        d_rays.begin());
 
     thrust::device_vector<float> d_traced_rho;
     thrust::device_vector<float> d_trace_dists;
