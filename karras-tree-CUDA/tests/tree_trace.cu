@@ -1,0 +1,137 @@
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
+
+#include <cmath>
+
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/sort.h>
+
+#include "../nodes.h"
+#include "../ray.h"
+#include "../utils.cuh"
+#include "../kernels/morton.cuh"
+#include "../kernels/bintree_build.cuh"
+#include "../kernels/bintree_trace.cuh"
+#include "../kernels/gen_rays.cuh"
+
+int main(int argc, char* argv[]) {
+
+    /* Initialize run parameters. */
+
+    unsigned int N = 100000;
+    unsigned int N_rays = 10000;
+
+    if (argc > 1) {
+        N = (unsigned int) std::strtol(argv[1], NULL, 10);
+    }
+    if (argc > 2) {
+        N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
+    }
+
+    std::cout << "Testing " << N << " random points and " << N_rays
+              << " random rays." << std::endl;
+    std::cout << std::endl;
+
+{ // Device code.
+
+    /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
+
+    thrust::device_vector<float4> d_spheres_xyzr(N);
+
+    thrust::transform(thrust::counting_iterator<unsigned int>(0),
+                      thrust::counting_iterator<unsigned int>(N),
+                      d_spheres_xyzr.begin(),
+                      grace::random_float4_functor(0.1f) );
+
+
+    /* Build the tree from the random data. */
+
+    thrust::device_vector<unsigned int> d_keys(N);
+    float3 top = make_float3(1.f, 1.f, 1.f);
+    float3 bot = make_float3(0.f, 0.f, 0.f);
+
+    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
+
+    grace::Nodes d_nodes(N-1);
+    grace::Leaves d_leaves(N);
+
+    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+
+    // Keys no longer needed.
+    d_keys.clear();
+    d_keys.shrink_to_fit();
+
+
+    /* Generate the rays (emitted from box centre and of length 2). */
+
+    float ox, oy, oz, length;
+    ox = oy = oz = 0.5f;
+    length = 2;
+
+    thrust::device_vector<grace::Ray> d_rays(N_rays);
+    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
+
+
+    /* Trace for per-ray hit counts. */
+
+    thrust::device_vector<unsigned int> d_hit_counts(N_rays);
+    grace::trace_hitcounts(d_rays, d_hit_counts, d_nodes, d_spheres_xyzr);
+
+
+    /* Loop through all rays and test for interestion with all particles
+     * directly.
+     */
+
+    thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
+    thrust::host_vector<grace::Ray> h_rays = d_rays;
+    thrust::host_vector<unsigned int> h_hit_counts(N_rays);
+    thrust::host_vector<unsigned int> h_d_hit_counts = d_hit_counts;
+
+    for (unsigned int i=0; i<N_rays; i++)
+    {
+        grace::Ray ray = h_rays[i];
+        grace::RaySlope slope = ray_slope(ray);
+        float dummy1, dummy2;
+        unsigned int hits = 0;
+
+        for (unsigned int j=0; j<N; j++)
+        {
+            if (grace::sphere_hit(ray, h_spheres_xyzr[j], dummy1, dummy2))
+                hits++;
+        }
+
+        h_hit_counts[i] = hits;
+    }
+
+    bool success = true;
+    for (unsigned int i=0; i<N_rays; i++)
+    {
+        if (h_hit_counts[i] != h_d_hit_counts[i])
+        {
+            success = false;
+            std::cout << "Trace failed for ray " << i << " (post-sort index):"
+                      << std::endl;
+            std::cout << "Direct test hits " << h_hit_counts[i] << "  |  "
+                      << "Tree hits " << h_d_hit_counts[i] << std::endl;
+            std::cout << std::endl;
+        }
+    }
+
+    if (success)
+    {
+        std::cout << "All device tree-traced rays agree with direct interestion"
+                  << " tests on host." << std::endl;
+    }
+
+} // End device code.
+
+    // Exit cleanly to ensure a full profiler trace.
+    cudaDeviceReset();
+    return 0;
+}
