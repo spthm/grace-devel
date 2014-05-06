@@ -97,7 +97,16 @@ int main(int argc, char* argv[]) {
     {
         grace::Ray ray = h_rays[i];
         grace::RaySlope slope = ray_slope(ray);
-        float dummy1, dummy2;
+        // We use doubles to force the host to make double-precision floating-
+        // point calculations in sphere_hit().
+        // nvcc automatically compiles to FMA where possible, which contains
+        // only one round (compared to a+b -> round -> *c -> round, which has
+        // two). In some edge cases, this results in different host and device
+        // results for sphere_hit() if dummy1,2 are floats.
+        // Another alternative is to leave them as floats, but compile the code
+        // with -fma=false (only available for CC >= 2.0); in this case host and
+        // device agree, but both are inaccurate.
+        double dummy1, dummy2;
         unsigned int hits = 0;
 
         for (unsigned int j=0; j<N; j++)
