@@ -727,10 +727,6 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_lookup.data()));
 
     sort_by_distance(d_hit_distances, d_out_data, d_hit_offsets);
-
-    // Cumulative column densitiy.
-    thrust::exclusive_scan(d_out_data.begin(), d_out_data.end(),
-                           d_out_data.begin());
 }
 
 } // namespace grace
