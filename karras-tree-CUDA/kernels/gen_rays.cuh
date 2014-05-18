@@ -138,6 +138,7 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
                3*sizeof(curandDirectionVectors32_t),
                cudaMemcpyHostToDevice);
 
+    // Initialize the Q-RNG states.
     gpu::init_QRNG<<<blocks, RAYS_THREADS_PER_BLOCK>>>(d_qrng_states,
                                                        d_qrng_directions,
                                                        N_per_thread);
