@@ -30,4 +30,80 @@ void sort_by_key(thrust::host_vector<UInteger>& h_keys,
     thrust::sort_by_key(h_keys2.begin(), h_keys2.end(), h_b.begin());
 }
 
+template <typename Float4>
+class particle_distance_functor
+{
+    const float3 origin;
+    const Float4* particles;
+    Float4 lpar, rpar;
+    float l, r;
+
+public:
+    template <typename Float4>
+    particle_distance_functor(float3 _origin, Float4* _particles) :
+        origin(_origin), particles(_particles) {}
+
+    template <typename Float4>
+    __host__ __device__ bool operator(unsigned int li, unsigned int ri)
+    {
+        lpar = particles[li];
+        rpar = particles[ri];
+
+        l = (lpar.x - origin.x)*(lpar.x - origin.x)
+             + (lpar.y - origin.y)*(lpar.y - origin.y)
+             + (lpar.z - origin.z)*(lpar.z - origin.z);
+        r = (rpar.x - origin.x)*(rpar.x - origin.x)
+             + (rpar.y - origin.y)*(rpar.y - origin.y)
+             + (rpar.z - origin.z)*(rpar.z - origin.z);
+
+        return l < r;
+    }
+};
+
+template <typename Float, typename T, typename Float4>
+void sort_by_distance(thrust::device_vector<Float>& d_hit_indices,
+                      thrust::device_vector<T>& d_out_data,
+                      const thrust::device_vector<unsigned int>& d_ray_offsets,
+                      const thrust::device_vector<Float4>& d_particles,
+                      const float3 origin)
+{
+    unsigned int total_hits = d_hit_indices.size();
+    unsigned int n_rays = d_ray_offsets.size();
+
+    thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
+    thrust::constant_iterator<unsigned int> first(1);
+    thrust::constant_iterator<unsigned int> last = first + n_rays;
+
+    // offsets = [0, 3, 3, 7]
+    // scatter:
+    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
+    // inclusive_scan:
+    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
+    thrust::scatter(first, last,
+                    d_ray_offsets.begin(),
+                    d_ray_segments.begin());
+    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
+                           d_ray_segments.begin());
+
+    // Sort the hits by their distance from the source.
+    thrust::sort_by_key(d_hit_indices.begin(), d_hit_indices.end(),
+                        thrust::make_zip_iterator(
+                            thrust::make_tuple(d_out_data.begin(),
+                                               d_ray_segments.begin())
+                        ),
+                        particle_distance_functor<float4>(
+                            origin,
+                            thrust::raw_pointer_cast(d_particles.data())
+                        )
+    );
+    // Sort the hits by their ray ID.  Since this is a stable sort, all the
+    // elements belonging to a particular ray ID remain sorted by distance!
+    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
+                               thrust::make_zip_iterator(
+                                   thrust::make_tuple(d_out_data.begin(),
+                                                      d_hit_indices.begin())
+                               )
+    );
+}
+
 } // namespace grace
