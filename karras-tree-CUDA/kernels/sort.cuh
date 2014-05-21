@@ -86,6 +86,9 @@ void sort_by_distance(thrust::device_vector<Float>& d_hit_indices,
                            d_ray_segments.begin());
 
     // Sort the hits by their distance from the source.
+    // The custom comparison function means this will be a merge sort, not the
+    // faster radix sort, but we could pass d_ray_segments into the functor and
+    // use it during the comparison to eliminate the second sort.
     thrust::sort_by_key(d_hit_indices.begin(), d_hit_indices.end(),
                         thrust::make_zip_iterator(
                             thrust::make_tuple(d_out_data.begin(),
