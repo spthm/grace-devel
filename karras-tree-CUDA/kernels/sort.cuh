@@ -56,19 +56,20 @@ public:
              + (rpar.y - origin.y)*(rpar.y - origin.y)
              + (rpar.z - origin.z)*(rpar.z - origin.z);
 
+        // Distance along a ray will always be positive, no need to sqrt.
         return l < r;
     }
 };
 
-template <typename Float, typename T, typename Float4>
-void sort_by_distance(thrust::device_vector<Float>& d_hit_indices,
-                      thrust::device_vector<T>& d_out_data,
-                      const thrust::device_vector<unsigned int>& d_ray_offsets,
+template <typename Float4, typename T>
+void sort_by_distance(const float3 origin,
                       const thrust::device_vector<Float4>& d_particles,
-                      const float3 origin)
+                      const thrust::device_vector<unsigned int>& d_ray_offsets,
+                      thrust::device_vector<unsigned int>& d_hit_indices,
+                      thrust::device_vector<T>& d_hit_data)
 {
-    unsigned int total_hits = d_hit_indices.size();
-    unsigned int n_rays = d_ray_offsets.size();
+    size_t total_hits = d_hit_indices.size();
+    size_t n_rays = d_ray_offsets.size();
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
     thrust::constant_iterator<unsigned int> first(1);
@@ -91,7 +92,7 @@ void sort_by_distance(thrust::device_vector<Float>& d_hit_indices,
     // use it during the comparison to eliminate the second sort.
     thrust::sort_by_key(d_hit_indices.begin(), d_hit_indices.end(),
                         thrust::make_zip_iterator(
-                            thrust::make_tuple(d_out_data.begin(),
+                            thrust::make_tuple(d_hit_data.begin(),
                                                d_ray_segments.begin())
                         ),
                         particle_distance_functor<float4>(
@@ -103,7 +104,7 @@ void sort_by_distance(thrust::device_vector<Float>& d_hit_indices,
     // elements belonging to a particular ray ID remain sorted by distance!
     thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
                                thrust::make_zip_iterator(
-                                   thrust::make_tuple(d_out_data.begin(),
+                                   thrust::make_tuple(d_hit_data.begin(),
                                                       d_hit_indices.begin())
                                )
     );
