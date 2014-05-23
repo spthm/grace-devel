@@ -7,7 +7,7 @@ namespace grace {
 
 // Particle specific properties. Similar to RT_Cell_struct, but compacted and
 // without rates.
-struct ion_particle
+struct particle_ion
 {
     float n_H, n_He, rho;
     float T, entropy;
@@ -17,7 +17,7 @@ struct ion_particle
 
 // Similar to RT_Rates_struct.  Can apply to a single particle during an update,
 // or to a ray-particle intersection.  Multiple ray-particle intersections
-// can map to a single particle (i.e. a particle can be hit by multiple rays).
+// may map to the same particle (i.e. a particle can be hit by multiple rays).
 struct particle_rates
 {
     float gamma_HI, gamma_HeI, gamma_HeII;
@@ -28,14 +28,21 @@ struct particle_rates
 
 // Properties calculated for each ray-particle intersection.  A hybrid of
 // RT_Rates_struct and RT_Cell_struct.
-// Multiple intersect structs may map back to the same (ion_)particle (i.e. the
+// Multiple intersect structs may map to the same particle(_ion) (i.e. the
 // same particle may be intersected by multiple rays).
-struct intersect
-{
-    particle_rates rates;
+//
+// If this is scan-summed to convert from intersection/particle NCols to
+// cumulative Ncols, the operator should preserve the rates of the RHS.
+// The operator is then associative, but not commutative, so still fits the
+// model prescribed by Thrust for custom functors provided to parallel scans.
+//
+// For now, simple arrays for cum_NCol_HI/HeI/HeII will be used.
+// struct intersect
+// {
+//     particle_rates rates;
 
-    float column_HI, column_HeI, column_HeII;
+//     float column_HI, column_HeI, column_HeII;
 
-};
+// };
 
 } // namespace grace
