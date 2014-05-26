@@ -30,21 +30,19 @@ void sort_by_key(thrust::host_vector<UInteger>& h_keys,
     thrust::sort_by_key(h_keys2.begin(), h_keys2.end(), h_b.begin());
 }
 
-template <typename Float4>
+template <typename Float, typename Float4>
 class particle_distance_functor
 {
     const float3 origin;
     const Float4* particles;
     Float4 lpar, rpar;
-    float l, r;
+    Float l, r;
 
 public:
-    template <typename Float4>
     particle_distance_functor(float3 _origin, Float4* _particles) :
         origin(_origin), particles(_particles) {}
 
-    template <typename Float4>
-    __host__ __device__ bool operator(unsigned int li, unsigned int ri)
+    __host__ __device__ bool operator() (unsigned int li, unsigned int ri)
     {
         lpar = particles[li];
         rpar = particles[ri];
@@ -61,8 +59,10 @@ public:
     }
 };
 
-template <typename Float4, typename T>
-void sort_by_distance(const float3 origin,
+template <typename Float, typename Float4, typename T>
+void sort_by_distance(const Float origin_x,
+                      const Float origin_y,
+                      const Float origin_z,
                       const thrust::device_vector<Float4>& d_particles,
                       const thrust::device_vector<unsigned int>& d_ray_offsets,
                       thrust::device_vector<unsigned int>& d_hit_indices,
@@ -70,6 +70,8 @@ void sort_by_distance(const float3 origin,
 {
     size_t total_hits = d_hit_indices.size();
     size_t n_rays = d_ray_offsets.size();
+
+    float3 origin = make_float3(origin_x, origin_y, origin_z);
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
     thrust::constant_iterator<unsigned int> first(1);
@@ -95,9 +97,9 @@ void sort_by_distance(const float3 origin,
                             thrust::make_tuple(d_hit_data.begin(),
                                                d_ray_segments.begin())
                         ),
-                        particle_distance_functor<float4>(
+                        particle_distance_functor<Float, Float4>(
                             origin,
-                            thrust::raw_pointer_cast(d_particles.data())
+                            (Float4*)thrust::raw_pointer_cast(d_particles.data())
                         )
     );
     // Sort the hits by their ray ID.  Since this is a stable sort, all the
