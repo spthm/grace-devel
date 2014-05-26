@@ -30,9 +30,9 @@ int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
-    unsigned int N = 1000000;
-    // Few because the random spheres result in many hits per ray.
-    unsigned int N_rays = 25000;
+    unsigned int N = 100000;
+    // Relatively few because the random spheres result in many hits per ray.
+    unsigned int N_rays = 80000;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -100,10 +100,22 @@ int main(int argc, char* argv[]) {
     /* Perform a full trace. */
 
     thrust::device_vector<float> d_traced_rho;
-    thrust::device_vector<float> d_trace_dists;
+    thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
+    thrust::device_vector<unsigned int> d_hit_indices;
 
-    grace::trace<float>(d_rays, d_traced_rho, d_trace_dists,
-                        d_nodes, d_spheres_xyzr, d_rho);
+    grace::trace<float>(d_rays,
+                        d_traced_rho,
+                        d_ray_offsets,
+                        d_hit_indices,
+                        d_nodes,
+                        d_spheres_xyzr,
+                        d_rho);
+
+    grace::sort_by_distance(ox, oy, oz,
+                            d_spheres_xyzr,
+                            d_ray_offsets,
+                            d_hit_indices,
+                            d_traced_rho);
 
     unsigned int total_hits = d_traced_rho.size();
     std::cout << "Total hits:   " << total_hits << std::endl;
@@ -115,40 +127,63 @@ int main(int argc, char* argv[]) {
      * distance.
      */
 
-    thrust::host_vector<float> h_trace_dists = d_trace_dists;
-    // We require the per-ray offsets into d_trace_dists/rho that grace::trace
-    // computes internally. Simply (wastefully) compute them again here.
-    thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
-    grace::trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres_xyzr);
-    thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
-                           d_hit_offsets.begin());
-    thrust::host_vector<unsigned int> h_hit_offsets = d_hit_offsets;
+    thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
+    thrust::host_vector<unsigned int> h_ray_offsets = d_ray_offsets;
+    thrust::host_vector<unsigned int> h_hit_indices = d_hit_indices;
 
-    bool success = true;
+    unsigned int failures = 0u;
     for (int ray_i=0; ray_i<N_rays; ray_i++) {
-        int start = h_hit_offsets[ray_i];
-        int end = (ray_i < N_rays-1 ? h_hit_offsets[ray_i+1] : total_hits);
+        int start = h_ray_offsets[ray_i];
+        int end = (ray_i < N_rays-1 ? h_ray_offsets[ray_i+1] : total_hits);
 
-        float dist = h_trace_dists[start];
+        if (start == end) {
+            // Ray hit nothing. Move to next ray.
+            continue;
+        }
 
+        // Check first hit is not < 0 along ray.
+        unsigned int par_i = h_hit_indices[start];
+        float4 xyzr = h_spheres_xyzr[par_i];
+        float prev_dist = ( (xyzr.x - ox)*(xyzr.x - ox) +
+                            (xyzr.y - oy)*(xyzr.y - oy) +
+                            (xyzr.z - oz)*(xyzr.z - oz) );
+
+        // Check all following hits are >= along the ray than those preceding.
         for (int hit_i=start+1; hit_i<end; hit_i++) {
-            float next = h_trace_dists[hit_i];
-            if (next < dist){
-                std::cout << "Error for ray " << ray_i << "!  distance["
-                          << hit_i << "] = " << std::setw(8) << next
-                          << " < distance[" << hit_i - 1 << "] = "
-                          << std::setw(8) << dist << std::endl;
+            par_i = h_hit_indices[hit_i];
+            xyzr = h_spheres_xyzr[par_i];
+            float dist = ( (xyzr.x - ox)*(xyzr.x - ox) +
+                           (xyzr.y - oy)*(xyzr.y - oy) +
+                           (xyzr.z - oz)*(xyzr.z - oz) );
+
+            if (dist < prev_dist) {
+                std::cout << "Error! @ ray " << ray_i << "!" << std::endl;
+                std::cout << "   (squared) distance to particle " << par_i
+                          << " = " << std::setw(8) << dist << std::endl;
+                std::cout << " < (squared) distance to particle "
+                          << h_hit_indices[hit_i-1] << " = " << std::setw(8)
+                          << prev_dist << std::endl;
                 std::cout << std::endl;
-                success = false;
+                failures++;
             }
-            dist = next;
+            prev_dist = dist;
         }
 
     }
 
-    if (success) {
+    if (failures == 0u) {
         std::cout << "All " << N_rays << " rays sorted correctly."
                   << std::endl;
+    }
+    else {
+        std::cout << failures << " intersections sorted incorrectly."
+                  << std::endl;
+        std::cout << "Device code may compile to FMA instructions; if the "
+                  << "above errors are within" << std::endl;
+        std::cout << "floating point error, try compiling this file with "
+                  << "nvcc's -fmad=false option."  << std::endl;
+        std::cout << "Note that FMADs reduce rounding error, so should not in "
+                  << "general be disabled." << std::endl;
     }
 
 } // End device code.

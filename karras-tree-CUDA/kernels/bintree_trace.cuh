@@ -1,10 +1,7 @@
 #pragma once
 
 #include <thrust/device_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
 #include <thrust/scan.h>
-#include <thrust/sort.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -307,43 +304,6 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     return true;
 }
 
-template <typename Float, typename T>
-void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
-                      thrust::device_vector<T>& d_out_data,
-                      const thrust::device_vector<unsigned int>& d_hit_offsets)
-{
-    unsigned int total_hits = d_hit_distances.size();
-    unsigned int n_rays = d_hit_offsets.size();
-
-    thrust::device_vector<unsigned int> d_ray_segments(d_hit_distances.size());
-    thrust::constant_iterator<unsigned int> first(1);
-    thrust::constant_iterator<unsigned int> last = first + n_rays;
-
-    // offsets = [0, 3, 3, 7]
-    // scatter:
-    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
-    // inclusive_scan:
-    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
-    thrust::scatter(first, last,
-                    d_hit_offsets.begin(),
-                    d_ray_segments.begin());
-    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
-                           d_ray_segments.begin());
-
-    thrust::sort_by_key(d_hit_distances.begin(), d_hit_distances.end(),
-                        thrust::make_zip_iterator(
-                            thrust::make_tuple(d_out_data.begin(),
-                                               d_ray_segments.begin())
-                        )
-    );
-    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                               thrust::make_zip_iterator(
-                                   thrust::make_tuple(d_hit_distances.begin(),
-                                                      d_out_data.begin())
-                               )
-    );
-}
-
 namespace gpu {
 
 //-----------------------------------------------------------------------------
@@ -522,8 +482,8 @@ template <typename Tout, typename Float, typename Float4, typename Tin>
 __global__ void trace_kernel(const Ray* rays,
                              const size_t n_rays,
                              Tout* out_data,
-                             Float* hit_dists,
-                             const unsigned int* hit_offsets,
+                             unsigned int* hit_indices,
+                             const unsigned int* ray_offsets,
                              const int4* nodes,
                              const Box* node_AABBs,
                              const size_t n_nodes,
@@ -544,7 +504,7 @@ __global__ void trace_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        out_index = hit_offsets[ray_index];
+        out_index = ray_offsets[ray_index];
         Ray ray = rays[ray_index];
         RaySlope slope = ray_slope(ray);
 
@@ -594,7 +554,7 @@ __global__ void trace_kernel(const Ray* rays,
                     kernel_fac *= (ir*ir);
                     out_data[out_index] =
                         (Tout) (kernel_fac * p_data[node_index-n_nodes]);
-                    hit_dists[out_index] = d;
+                    hit_indices[out_index] = node_index-n_nodes;
                     out_index++;
                 }
                 node_index = trace_stack[stack_index];
@@ -674,7 +634,8 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
-           thrust::device_vector<Float>& d_hit_distances,
+           thrust::device_vector<unsigned int>& d_ray_offsets,
+           thrust::device_vector<unsigned int>& d_hit_indices,
            const Nodes& d_nodes,
            const thrust::device_vector<Float4>& d_spheres,
            const thrust::device_vector<Tin>& d_in_data)
@@ -682,11 +643,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_nodes.hierarchy.size();
 
-    thrust::device_vector<unsigned int> d_hit_offsets(n_rays);
-
-    // Here, d_hit_offsets is actually per-ray hit *counts*.
-    trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres);
-    unsigned int last_ray_hits = d_hit_offsets[n_rays-1];
+    // Here, d_ray_offsets is actually per-ray *hit counts*.
+    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_spheres);
+    unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
     // individual ray offsets into this array:
@@ -695,12 +654,12 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     // exclusive_scan:
     //    => offsets = [0, 3, 3, 7]
     // total_hits = hits[3] + offsets[3] = 7 + 1 = 8
-    thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
-                           d_hit_offsets.begin());
-    unsigned int total_hits = d_hit_offsets[n_rays-1] + last_ray_hits;
+    thrust::exclusive_scan(d_ray_offsets.begin(), d_ray_offsets.end(),
+                           d_ray_offsets.begin());
+    unsigned int total_hits = d_ray_offsets[n_rays-1] + last_ray_hits;
 
     d_out_data.resize(total_hits);
-    d_hit_distances.resize(total_hits);
+    d_hit_indices.resize(total_hits);
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
@@ -717,16 +676,14 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
-        thrust::raw_pointer_cast(d_hit_distances.data()),
-        thrust::raw_pointer_cast(d_hit_offsets.data()),
+        thrust::raw_pointer_cast(d_hit_indices.data()),
+        thrust::raw_pointer_cast(d_ray_offsets.data()),
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
-
-    sort_by_distance(d_hit_distances, d_out_data, d_hit_offsets);
 }
 
 } // namespace grace

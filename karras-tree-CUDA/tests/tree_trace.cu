@@ -107,6 +107,9 @@ int main(int argc, char* argv[]) {
         // An alternative is to leave them as floats, but compile the code with
         // -fma=false (only available for CC >= 2.0); in this case host and
         // device agree, but both are inaccurate.
+        // Note: this is a bigger problem in sort_by_distance, where the double
+        //       does bring host and device computations close enough; there,
+        //       setting -fmad=flase is the only solution.
         double dummy1, dummy2;
         unsigned int hits = 0;
 
@@ -119,12 +122,12 @@ int main(int argc, char* argv[]) {
         h_hit_counts[i] = hits;
     }
 
-    bool success = true;
+    unsigned int failures = 0u;
     for (unsigned int i=0; i<N_rays; i++)
     {
         if (h_hit_counts[i] != h_d_hit_counts[i])
         {
-            success = false;
+            failures++;
             std::cout << "Trace failed for ray " << i << " (post-sort index):"
                       << std::endl;
             std::cout << "Direct test hits " << h_hit_counts[i] << "  |  "
@@ -133,10 +136,19 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    if (success)
+    if (failures == 0)
     {
         std::cout << "All device tree-traced rays agree with direct interestion"
                   << " tests on host." << std::endl;
+    }
+    else
+    {
+        std::cout << failures << " intersections failed." << std::endl;
+        std::cout << "Device code may compile to FMA instructions; try "
+                  << "compiling this file" << std::endl;
+        std::cout << "with nvcc's -fmad=false option."  << std::endl;
+        std::cout << "Note that FMADs reduce rounding error, so should not in "
+                  << "general be disabled." << std::endl;
     }
 
 } // End device code.
