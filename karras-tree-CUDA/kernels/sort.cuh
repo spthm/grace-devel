@@ -2,6 +2,9 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <thrust/iterator/constant_iterator.h>
+#include <thrust/iterator/zip_iterator.h>
+#include <thrust/scan.h>
 #include <thrust/sort.h>
 
 namespace grace {
@@ -77,7 +80,8 @@ void sort_by_distance(const Float origin_x,
     thrust::constant_iterator<unsigned int> first(1);
     thrust::constant_iterator<unsigned int> last = first + n_rays;
 
-    // offsets = [0, 3, 3, 7]
+    // Suppose hits = [3, 0, 4, 1]
+    //    => offsets = [0, 3, 3, 7]
     // scatter:
     //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
     // inclusive_scan:

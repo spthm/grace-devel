@@ -1,10 +1,7 @@
 #pragma once
 
 #include <thrust/device_vector.h>
-#include <thrust/iterator/constant_iterator.h>
-#include <thrust/iterator/zip_iterator.h>
 #include <thrust/scan.h>
-#include <thrust/sort.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
