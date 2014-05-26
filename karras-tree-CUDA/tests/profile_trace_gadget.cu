@@ -101,9 +101,9 @@ int main(int argc, char* argv[]) {
 
     // Rays emitted from box side (x, y, min_z - max_r) and of length
     // (max_z + max_r) - (min_z - max_r).  For simplicity, the ray (ox, oy)
-    // limits are determined only by the particle min(x, y) / max(x, y) limits
-    // and smoothing lengths are ignored.  This ensures that rays at the edge
-    // will hit something!
+    // limits are determined only by the particle min(x), min(y) and max(x),
+    // max(y) limits and smoothing lengths are ignored.  This ensures that rays
+    // at the edge will hit something!
     float min_x, max_x;
     grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
 

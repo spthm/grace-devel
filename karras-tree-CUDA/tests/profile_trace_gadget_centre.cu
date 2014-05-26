@@ -161,27 +161,42 @@ int main(int argc, char* argv[]) {
 
         /* Full trace. */
 
-        thrust::device_vector<float> d_trace_dists;
+        // Indices of particles for all ray-particle intersections.
+        thrust::device_vector<unsigned int> d_hit_indices;
+        // Offsets into the above vector where each ray's data starts.
+        thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
 
         cudaEventRecord(part_start);
         grace::trace<float>(d_rays,
                             d_traced_rho,
-                            d_trace_dists,
+                            d_ray_offsets,
+                            d_hit_indices,
                             d_nodes,
                             d_spheres_xyzr,
-                            d_rho);
+                            d_rho); // For RT, we'd pass ~number counts.
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         trace_full_tot += elapsed;
 
-        /* End of full trace. */
+        cudaEventRecord(part_start);
+        grace::sort_by_distance(x_centre, y_centre, z_centre,
+                                d_spheres_xyzr,
+                                d_ray_offsets,
+                                d_hit_indices,
+                                d_traced_rho);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&elapsed, part_start, part_stop);
+        sort_rho_dists_tot += elapsed;
 
+        /* End of full trace. */
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
         cudaEventElapsedTime(&elapsed, tot_start, tot_stop);
         all_tot += elapsed;
+
 
         // Must be done in-loop for cuMemGetInfo to return relevant results.
         if (i == 0) {
@@ -189,8 +204,8 @@ int main(int argc, char* argv[]) {
             float unused_bytes = 0.0;
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_traced_rho.size() * sizeof(float);
-            trace_bytes += d_trace_dists.size() * sizeof(float);
-            trace_bytes += d_rays.size() * sizeof(unsigned int); // Hit offsets
+            trace_bytes += d_ray_offsets.size() * sizeof(float);
+            trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
             trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
             trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
@@ -198,7 +213,7 @@ int main(int argc, char* argv[]) {
             // Integral lookup.
             trace_bytes += grace::N_table * sizeof(float);
             // Ray segments, used in sort.
-            trace_bytes += d_trace_dists.size() * sizeof(unsigned int);
+            trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
@@ -222,25 +237,6 @@ int main(int argc, char* argv[]) {
                       << " GiB" << std::endl;
             std::cout << std::endl;
         }
-
-
-        /* Test sort outside the main timing loop, since it's done in trace. */
-
-        // We require the per-ray offsets into d_trace_dists/rho that
-        // grace::trace computes internally. Simply (wastefully) compute them
-        // again here.
-        thrust::device_vector<unsigned int> d_hit_offsets(N_rays);
-        grace::trace_hitcounts(d_rays, d_hit_offsets, d_nodes, d_spheres_xyzr);
-        thrust::exclusive_scan(d_hit_offsets.begin(), d_hit_offsets.end(),
-                               d_hit_offsets.begin());
-        thrust::host_vector<unsigned int> h_hit_offsets = d_hit_offsets;
-
-        cudaEventRecord(part_start);
-        grace::sort_by_distance(d_trace_dists, d_traced_rho, d_hit_offsets);
-        cudaEventRecord(part_stop);
-        cudaEventSynchronize(part_stop);
-        cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        sort_rho_dists_tot += elapsed;
     }
 
     std::cout << "Time for generating and sorting rays:   ";
@@ -255,9 +251,9 @@ int main(int argc, char* argv[]) {
     std::cout.width(8);
     std::cout << trace_full_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "(Time for sort-by-distance component:   ";
+    std::cout << "Time for sort-by-distance:              ";
     std::cout.width(8);
-    std::cout << sort_rho_dists_tot / N_iter << " ms)" << std::endl;
+    std::cout << sort_rho_dists_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for total (inc. memory ops):       ";
     std::cout.width(8);
