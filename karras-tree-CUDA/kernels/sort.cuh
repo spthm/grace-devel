@@ -90,8 +90,6 @@ void sort_by_distance(const Float origin_x,
                       thrust::device_vector<unsigned int>& d_hit_indices,
                       thrust::device_vector<T>& d_hit_data)
 {
-    size_t total_hits = d_hit_indices.size();
-
     float3 origin = make_float3(origin_x, origin_y, origin_z);
 
     // Sort the hits by their distance from the source.
