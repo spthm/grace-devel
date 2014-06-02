@@ -111,9 +111,11 @@ int main(int argc, char* argv[]) {
                         d_spheres_xyzr,
                         d_rho);
 
+    thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
+    grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
     grace::sort_by_distance(ox, oy, oz,
                             d_spheres_xyzr,
-                            d_ray_offsets,
+                            d_ray_segments,
                             d_hit_indices,
                             d_traced_rho);
 

@@ -9,6 +9,25 @@
 
 namespace grace {
 
+void offsets_to_segments(const thrust::device_vector<unsigned int>& d_offsets,
+                         thrust::device_vector<unsigned int>& d_segments)
+{
+    size_t N_offsets = d_offsets.size();
+    thrust::constant_iterator<unsigned int> first(1);
+    thrust::constant_iterator<unsigned int> last = first + N_offsets;
+
+    // Suppose offsets = [0, 3, 3, 7]
+    // scatter value 1 at offsets into segments:
+    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1(, 0 ... )]
+    // inclusive_scan:
+    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3(, 3 ... )]
+    thrust::scatter(first, last,
+                    d_offsets.begin(),
+                    d_segments.begin());
+    thrust::inclusive_scan(d_segments.begin(), d_segments.end(),
+                           d_segments.begin());
+}
+
 template <typename UInteger, typename Ta, typename Tb>
 void sort_by_key(thrust::device_vector<UInteger>& d_keys,
                  thrust::device_vector<Ta>& d_a,
@@ -67,30 +86,13 @@ void sort_by_distance(const Float origin_x,
                       const Float origin_y,
                       const Float origin_z,
                       const thrust::device_vector<Float4>& d_particles,
-                      const thrust::device_vector<unsigned int>& d_ray_offsets,
+                      thrust::device_vector<unsigned int>& d_ray_segments,
                       thrust::device_vector<unsigned int>& d_hit_indices,
                       thrust::device_vector<T>& d_hit_data)
 {
     size_t total_hits = d_hit_indices.size();
-    size_t n_rays = d_ray_offsets.size();
 
     float3 origin = make_float3(origin_x, origin_y, origin_z);
-
-    thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
-    thrust::constant_iterator<unsigned int> first(1);
-    thrust::constant_iterator<unsigned int> last = first + n_rays;
-
-    // Suppose hits = [3, 0, 4, 1]
-    //    => offsets = [0, 3, 3, 7]
-    // scatter:
-    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1]
-    // inclusive_scan:
-    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3]
-    thrust::scatter(first, last,
-                    d_ray_offsets.begin(),
-                    d_ray_segments.begin());
-    thrust::inclusive_scan(d_ray_segments.begin(), d_ray_segments.end(),
-                           d_ray_segments.begin());
 
     // Sort the hits by their distance from the source.
     // The custom comparison function means this will be a merge sort, not the

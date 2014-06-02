@@ -179,10 +179,15 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         trace_full_tot += elapsed;
 
+        // If offets = [0, 3, 3, 7], then
+        //    segments = [1, 1, 1, 2, 2, 2, 2, 3(, 3 ... )]
+        thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
+
         cudaEventRecord(part_start);
+        grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
         grace::sort_by_distance(x_centre, y_centre, z_centre,
                                 d_spheres_xyzr,
-                                d_ray_offsets,
+                                d_ray_segments,
                                 d_hit_indices,
                                 d_traced_rho);
         cudaEventRecord(part_stop);
@@ -212,8 +217,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_rho.size() * sizeof(float);
             // Integral lookup.
             trace_bytes += grace::N_table * sizeof(float);
-            // Ray segments, used in sort.
-            trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
+            trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
