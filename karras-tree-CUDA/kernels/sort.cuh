@@ -2,8 +2,13 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/iterator/zip_iterator.h>
+
+#include <thrust/gather.h>
+#include <thrust/scatter.h>
+
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 
@@ -28,6 +33,24 @@ void offsets_to_segments(const thrust::device_vector<unsigned int>& d_offsets,
                            d_segments.begin());
 }
 
+template <typename UInteger, typename T>
+void order_by_index(const thrust::device_vector<UInteger>& d_indices,
+                    thrust::device_vector<T>& d_unordered)
+{
+    thrust::device_vector<T> d_tmp = d_unordered;
+    thrust::gather(d_indices.begin(), d_indices.end(),
+                   d_tmp.begin(),
+                   d_unordered.begin());
+}
+
+template <typename T, typename UInteger>
+void sort_and_map(thrust::device_vector<T>& d_unsorted,
+                  thrust::device_vector<UInteger>& d_map)
+{
+    thrust::sequence(d_map.begin(), d_map.end(), 0u);
+    thrust::sort_by_key(d_unsorted.begin(), d_unsorted.end(), d_map.begin());
+}
+
 template <typename UInteger, typename Ta, typename Tb>
 void sort_by_key(thrust::device_vector<UInteger>& d_keys,
                  thrust::device_vector<Ta>& d_a,
@@ -38,18 +61,6 @@ void sort_by_key(thrust::device_vector<UInteger>& d_keys,
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_a.begin());
 
     thrust::sort_by_key(d_keys2.begin(), d_keys2.end(), d_b.begin());
-}
-
-template <typename UInteger, typename Ta, typename Tb>
-void sort_by_key(thrust::host_vector<UInteger>& h_keys,
-                 thrust::host_vector<Ta>& h_a,
-                 thrust::host_vector<Tb>& h_b)
-{
-    thrust::host_vector<UInteger> h_keys2 = h_keys;
-
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_a.begin());
-
-    thrust::sort_by_key(h_keys2.begin(), h_keys2.end(), h_b.begin());
 }
 
 template <typename Float, typename Float4>
