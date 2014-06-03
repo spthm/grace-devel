@@ -366,7 +366,7 @@ void min_max_w(Float* min_w,
 
 inline void skip_spacer(std::ifstream& file) {
     int dummy;
-    file.read((char*)&dummy, sizeof(int));
+    file.read((char*)&dummy, sizeof(dummy));
 }
 
 struct gadget_header
@@ -400,6 +400,7 @@ gadget_header read_gadget_header(std::ifstream& file) {
 
 void read_gadget_gas(std::ifstream& file,
                      thrust::host_vector<float4>& xyzh,
+                     thrust::host_vector<unsigned int>& ID,
                      thrust::host_vector<float>& m,
                      thrust::host_vector<float>& rho)
 {
@@ -415,7 +416,7 @@ void read_gadget_gas(std::ifstream& file,
 
     // Calculate particle number counts, and read in positions block.
     N_gas = header.npart[0];
-    xyzh.resize(N_gas); m.resize(N_gas); rho.resize(N_gas);
+    xyzh.resize(N_gas); m.resize(N_gas); rho.resize(N_gas); ID.resize(N_gas);
 
     N_withmasses = 0;
     skip_spacer(file);
@@ -451,10 +452,14 @@ void read_gadget_gas(std::ifstream& file,
     skip_spacer(file);
 
     // IDs.
-    skip_spacer(file); {
-    for(int i=0; i<6; i++)
+    skip_spacer(file);
+    for(int i=0; i<6; i++) {
         for(int n=0; n<header.npart[i]; n++) {
-            file.read((char*)&i_dummy, sizeof(int));
+            // Save gas particle data only.
+            if (i == 0)
+                file.read((char*)&ID[n], sizeof(int));
+            else
+                file.read((char*)&i_dummy, sizeof(int));
         }
     }
     skip_spacer(file);

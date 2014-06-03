@@ -35,11 +35,15 @@ int main(int argc, char* argv[]) {
 
     // Arrays are resized in read_gadget_gas().
     thrust::host_vector<float4> h_spheres_xyzr(1);
+    thrust::host_vector<unsigned int> h_gadget_IDs(1);
     thrust::host_vector<float> h_pmasses(1);
     thrust::host_vector<float> h_rho(1);
 
     file.open(fname.c_str(), std::ios::binary);
-    grace::read_gadget_gas(file, h_spheres_xyzr, h_pmasses, h_rho);
+    grace::read_gadget_gas(file, h_spheres_xyzr,
+                           h_gadget_IDs,
+                           h_pmasses,
+                           h_rho);
     file.close();
 
     size_t N = h_spheres_xyzr.size();
@@ -47,7 +51,8 @@ int main(int argc, char* argv[]) {
               << " particles..." << std::endl;
     std::cout << std::endl;
 
-    // Density unused.
+    // Gadget IDs and densities unused.
+    h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
 
     // Set all (pseudo)masses equal to 1/N so the total sum is one.

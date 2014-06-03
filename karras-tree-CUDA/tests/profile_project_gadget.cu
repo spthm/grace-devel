@@ -48,16 +48,21 @@ int main(int argc, char* argv[]) {
 
     // Arrays are resized in read_gadget_gas().
     thrust::host_vector<float4> h_spheres_xyzr(1);
+    thrust::host_vector<unsigned int> h_gadget_IDs(1);
     thrust::host_vector<float> h_masses(1);
     thrust::host_vector<float> h_rho(1);
 
     file.open(fname.c_str(), std::ios::binary);
-    grace::read_gadget_gas(file, h_spheres_xyzr, h_masses, h_rho);
+    grace::read_gadget_gas(file, h_spheres_xyzr,
+                                 h_gadget_IDs,
+                                 h_masses,
+                                 h_rho);
     file.close();
 
     size_t N = h_spheres_xyzr.size();
 
-    // Masses unused.
+    // Gadget IDs and masses unused.
+    h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
     h_masses.clear(); h_masses.shrink_to_fit();
 
 
