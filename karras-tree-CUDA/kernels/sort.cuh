@@ -22,12 +22,13 @@ void offsets_to_segments(const thrust::device_vector<unsigned int>& d_offsets,
     thrust::constant_iterator<unsigned int> last = first + N_offsets;
 
     // Suppose offsets = [0, 3, 3, 7]
-    // scatter value 1 at offsets into segments:
-    //    => ray_segments = [1, 0, 0, 1, 0, 0, 0, 1(, 0 ... )]
+    // scatter value 1 at offsets[1:N] into segments:
+    //    => ray_segments = [0, 0, 0, 1, 0, 0, 0, 1(, 0 ... )]
     // inclusive_scan:
-    //    => ray_segments = [1, 1, 1, 2, 2, 2, 2, 3(, 3 ... )]
-    thrust::scatter(first, last,
-                    d_offsets.begin(),
+    //    => ray_segments = [0, 0, 0, 1, 1, 1, 1, 2(, 2 ... )]
+    // Note that we do not scatter a 1 into ray_segments[offsets[0]].
+    thrust::scatter(first+1, last,
+                    d_offsets.begin()+1,
                     d_segments.begin());
     thrust::inclusive_scan(d_segments.begin(), d_segments.end(),
                            d_segments.begin());

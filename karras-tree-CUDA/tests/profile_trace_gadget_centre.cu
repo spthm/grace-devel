@@ -185,7 +185,7 @@ int main(int argc, char* argv[]) {
         trace_full_tot += elapsed;
 
         // If offets = [0, 3, 3, 7], then
-        //    segments = [1, 1, 1, 2, 2, 2, 2, 3(, 3 ... )]
+        //    segments = [0, 0, 0, 1, 1, 1, 1, 2(, 2 ... )]
         thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
 
         cudaEventRecord(part_start);
