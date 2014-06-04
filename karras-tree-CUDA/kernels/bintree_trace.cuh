@@ -630,7 +630,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 }
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
-// arrays to this function, handling any memory issues therein themselves.
+//       arrays to this function, handling any memory issues therein themselves.
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
@@ -660,6 +660,77 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 
     d_out_data.resize(total_hits);
     d_hit_indices.resize(total_hits);
+
+    // TODO: Change it such that this is passed in, rather than instantiating
+    // and copying it on each call to trace_property and trace.
+    // Or initialize it as static, above, for both float and double.
+    // Also then copy it into device memory?
+    const KernelIntegrals<Float> lookup;
+    thrust::device_vector<Float> d_lookup(&lookup.table[0],
+                                          &lookup.table[N_table-1]);
+
+    int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
+                                        / TRACE_THREADS_PER_BLOCK));
+
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        n_rays,
+        thrust::raw_pointer_cast(d_out_data.data()),
+        thrust::raw_pointer_cast(d_hit_indices.data()),
+        thrust::raw_pointer_cast(d_ray_offsets.data()),
+        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
+        thrust::raw_pointer_cast(d_nodes.AABB.data()),
+        n_nodes,
+        thrust::raw_pointer_cast(d_spheres.data()),
+        thrust::raw_pointer_cast(d_in_data.data()),
+        thrust::raw_pointer_cast(d_lookup.data()));
+}
+
+// TODO: Break this and trace() into multiple functions.
+template <typename Float, typename Tout, typename Float4, typename Tin>
+void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
+                          thrust::device_vector<Tout>& d_out_data,
+                          thrust::device_vector<unsigned int>& d_ray_offsets,
+                          thrust::device_vector<unsigned int>& d_hit_indices,
+                          const Nodes& d_nodes,
+                          const thrust::device_vector<Float4>& d_spheres,
+                          const thrust::device_vector<Tin>& d_in_data)
+{
+    size_t n_rays = d_rays.size();
+    size_t n_nodes = d_nodes.hierarchy.size();
+
+    // Here, d_ray_offsets is actually per-ray *hit counts*.
+    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_spheres);
+    unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
+
+    // Allocate output array based on per-ray hit counts, and calculate
+    // individual ray offsets into this array:
+    //
+    // hits = [3, 0, 4, 1]
+    // exclusive_scan:
+    //     => offsets = [0, 3, 3, 7]
+    thrust::exclusive_scan(d_ray_offsets.begin(), d_ray_offsets.end(),
+                           d_ray_offsets.begin());
+    size_t allocate_size = d_ray_offsets[n_rays-1] + last_ray_hits;
+    // Increase the offsets such that they are correct if each ray segment in
+    // the output array(s) ends with a dummy particle, or sentinel value,
+    // marking the end of that ray's data.
+    // transform:
+    //     => offsets = [0, 4, 5, 10]
+    allocate_size += n_rays; // For ray-end markers.
+    {
+    thrust::device_vector<unsigned int> d_offsets_inc(n_rays);
+    thrust::sequence(d_offsets_inc.begin(), d_offsets_inc.end(), 0u);
+    thrust::transform(d_ray_offsets.begin(), d_ray_offsets.end(),
+                      d_offsets_inc.begin(),
+                      d_ray_offsets.begin(),
+                      thrust::plus<unsigned int>());
+    } // So temporary d_offsets_inc is destroyed.
+
+    // Initially, outputs should be populated with their sentinel/dummy values,
+    // since these are not touched during tracing.
+    d_out_data.resize(allocate_size);
+    d_hit_indices.resize(allocate_size, (unsigned int)d_spheres.size());
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
