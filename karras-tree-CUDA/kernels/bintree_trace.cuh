@@ -690,8 +690,10 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           thrust::device_vector<Tout>& d_out_data,
+                          const Tout out_sentinel,
                           thrust::device_vector<unsigned int>& d_ray_offsets,
                           thrust::device_vector<unsigned int>& d_hit_indices,
+                          const unsigned int hit_sentinel,
                           const Nodes& d_nodes,
                           const thrust::device_vector<Float4>& d_spheres,
                           const thrust::device_vector<Tin>& d_in_data)
@@ -729,8 +731,8 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
 
     // Initially, outputs should be populated with their sentinel/dummy values,
     // since these are not touched during tracing.
-    d_out_data.resize(allocate_size);
-    d_hit_indices.resize(allocate_size, (unsigned int)d_spheres.size());
+    d_out_data.resize(allocate_size, out_sentinel);
+    d_hit_indices.resize(allocate_size, hit_sentinel);
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
