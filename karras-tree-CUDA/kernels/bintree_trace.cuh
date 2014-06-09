@@ -2,6 +2,8 @@
 
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
+#include <thrust/sequence.h>
+#include <thrust/transform.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
