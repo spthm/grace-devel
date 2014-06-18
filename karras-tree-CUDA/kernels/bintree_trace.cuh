@@ -613,8 +613,8 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
     // Or make it static and initalize it in e.g. a grace_init function, that
     // could also determine kernel launch parameters.
     const KernelIntegrals<Float> lookup;
-    thrust::device_vector<Float> d_lookup(&lookup.table[0],
-                                          &lookup.table[N_table-1]);
+    const Float* p_table = &(lookup.table[0]);
+    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
@@ -668,8 +668,8 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     // Or initialize it as static, above, for both float and double.
     // Also then copy it into device memory?
     const KernelIntegrals<Float> lookup;
-    thrust::device_vector<Float> d_lookup(&lookup.table[0],
-                                          &lookup.table[N_table-1]);
+    const Float* p_table = &(lookup.table[0]);
+    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
@@ -741,8 +741,8 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     // Or initialize it as static, above, for both float and double.
     // Also then copy it into device memory?
     const KernelIntegrals<Float> lookup;
-    thrust::device_vector<Float> d_lookup(&lookup.table[0],
-                                          &lookup.table[N_table-1]);
+    const Float* p_table = &(lookup.table[0]);
+    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
