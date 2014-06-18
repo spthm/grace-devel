@@ -52,6 +52,16 @@ void sort_and_map(thrust::device_vector<T>& d_unsorted,
     thrust::sort_by_key(d_unsorted.begin(), d_unsorted.end(), d_map.begin());
 }
 
+// Like sort_and_map, but does not touch the original, unsorted vector.
+template <typename T, typename UInteger>
+void sort_map(thrust::device_vector<T>& d_unsorted,
+              thrust::device_vector<UInteger>& d_map)
+{
+    thrust::sequence(d_map.begin(), d_map.end(), 0u);
+    thrust::device_vector<T> d_tmp = d_unsorted;
+    thrust::sort_by_key(d_tmp.begin(), d_tmp.end(), d_map.begin());
+}
+
 template <typename UInteger, typename Ta, typename Tb>
 void sort_by_key(thrust::device_vector<UInteger>& d_keys,
                  thrust::device_vector<Ta>& d_a,
@@ -64,68 +74,28 @@ void sort_by_key(thrust::device_vector<UInteger>& d_keys,
     thrust::sort_by_key(d_keys2.begin(), d_keys2.end(), d_b.begin());
 }
 
-template <typename Float, typename Float4>
-class particle_distance_functor
-{
-    const float3 origin;
-    const Float4* particles;
-    Float4 lpar, rpar;
-    Float l, r;
-
-public:
-    particle_distance_functor(float3 _origin, Float4* _particles) :
-        origin(_origin), particles(_particles) {}
-
-    __host__ __device__ bool operator() (unsigned int li, unsigned int ri)
-    {
-        lpar = particles[li];
-        rpar = particles[ri];
-
-        l = (lpar.x - origin.x)*(lpar.x - origin.x)
-             + (lpar.y - origin.y)*(lpar.y - origin.y)
-             + (lpar.z - origin.z)*(lpar.z - origin.z);
-        r = (rpar.x - origin.x)*(rpar.x - origin.x)
-             + (rpar.y - origin.y)*(rpar.y - origin.y)
-             + (rpar.z - origin.z)*(rpar.z - origin.z);
-
-        // Distance along a ray will always be positive, no need to sqrt.
-        return l < r;
-    }
-};
-
-template <typename Float, typename Float4, typename T>
-void sort_by_distance(const Float origin_x,
-                      const Float origin_y,
-                      const Float origin_z,
-                      const thrust::device_vector<Float4>& d_particles,
+template <typename Float, typename T>
+void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
                       thrust::device_vector<unsigned int>& d_ray_segments,
                       thrust::device_vector<unsigned int>& d_hit_indices,
                       thrust::device_vector<T>& d_hit_data)
 {
-    float3 origin = make_float3(origin_x, origin_y, origin_z);
+    // d_indices will be a map to reorder the input data.
+    thrust::device_vector<unsigned int> d_indices(d_hit_distances.size());
 
-    // Sort the hits by their distance from the source.
-    // The custom comparison function means this will be a merge sort, not the
-    // faster radix sort, but we could pass d_ray_segments into the functor and
-    // use it during the comparison to eliminate the second sort.
-    thrust::sort_by_key(d_hit_indices.begin(), d_hit_indices.end(),
-                        thrust::make_zip_iterator(
-                            thrust::make_tuple(d_hit_data.begin(),
-                                               d_ray_segments.begin())
-                        ),
-                        particle_distance_functor<Float, Float4>(
-                            origin,
-                            (Float4*)thrust::raw_pointer_cast(d_particles.data())
-                        )
-    );
-    // Sort the hits by their ray ID.  Since this is a stable sort, all the
-    // elements belonging to a particular ray ID remain sorted by distance!
+    // First, sort the ray IDs by the distance from the source.
+    // d_hit_distances is not altered.
+    sort_map(d_hit_distances, d_indices);
+    order_by_index(d_indices, d_ray_segments);
+    // Second, stable sort the distance-ordered ray IDs.  Since this is a stable
+    // sort, all the elements belonging to a particular ray ID remain sorted by
+    // distance!
     thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                               thrust::make_zip_iterator(
-                                   thrust::make_tuple(d_hit_data.begin(),
-                                                      d_hit_indices.begin())
-                               )
-    );
+                               d_indices.begin());
+
+    order_by_index(d_indices, d_hit_distances);
+    order_by_index(d_indices, d_hit_indices);
+    order_by_index(d_indices, d_hit_data);
 }
 
 } // namespace grace

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <limits>
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -485,6 +487,7 @@ __global__ void trace_kernel(const Ray* rays,
                              const size_t n_rays,
                              Tout* out_data,
                              unsigned int* hit_indices,
+                             Float* hit_distances,
                              const unsigned int* ray_offsets,
                              const int4* nodes,
                              const Box* node_AABBs,
@@ -557,6 +560,7 @@ __global__ void trace_kernel(const Ray* rays,
                     out_data[out_index] =
                         (Tout) (kernel_fac * p_data[node_index-n_nodes]);
                     hit_indices[out_index] = node_index-n_nodes;
+                    hit_distances[out_index] = d;
                     out_index++;
                 }
                 node_index = trace_stack[stack_index];
@@ -638,6 +642,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
            thrust::device_vector<unsigned int>& d_ray_offsets,
            thrust::device_vector<unsigned int>& d_hit_indices,
+           thrust::device_vector<Float>& d_hit_distances,
            const Nodes& d_nodes,
            const thrust::device_vector<Float4>& d_spheres,
            const thrust::device_vector<Tin>& d_in_data)
@@ -662,6 +667,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 
     d_out_data.resize(total_hits);
     d_hit_indices.resize(total_hits);
+    d_hit_distances.resize(total_hits);
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
@@ -679,6 +685,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
         thrust::raw_pointer_cast(d_hit_indices.data()),
+        thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
@@ -696,6 +703,8 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           thrust::device_vector<unsigned int>& d_ray_offsets,
                           thrust::device_vector<unsigned int>& d_hit_indices,
                           const unsigned int hit_sentinel,
+                          thrust::device_vector<Float>& d_hit_distances,
+                          const Float distance_sentinel,
                           const Nodes& d_nodes,
                           const thrust::device_vector<Float4>& d_spheres,
                           const thrust::device_vector<Tin>& d_in_data)
@@ -735,6 +744,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     // since these are not touched during tracing.
     d_out_data.resize(allocate_size, out_sentinel);
     d_hit_indices.resize(allocate_size, hit_sentinel);
+    d_hit_distances.resize(allocate_size, distance_sentinel);
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
@@ -752,6 +762,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
         thrust::raw_pointer_cast(d_hit_indices.data()),
+        thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
