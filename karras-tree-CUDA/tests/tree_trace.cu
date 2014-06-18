@@ -107,9 +107,6 @@ int main(int argc, char* argv[]) {
         // An alternative is to leave them as floats, but compile the code with
         // -fma=false (only available for CC >= 2.0); in this case host and
         // device agree, but both are inaccurate.
-        // Note: this is a bigger problem in sort_by_distance, where the double
-        //       does bring host and device computations close enough; there,
-        //       setting -fmad=flase is the only solution.
         double dummy1, dummy2;
         unsigned int hits = 0;
 

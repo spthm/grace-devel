@@ -102,19 +102,20 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_traced_rho;
     thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
     thrust::device_vector<unsigned int> d_hit_indices;
+    thrust::device_vector<float> d_hit_distances;
 
     grace::trace<float>(d_rays,
                         d_traced_rho,
                         d_ray_offsets,
                         d_hit_indices,
+                        d_hit_distances,
                         d_nodes,
                         d_spheres_xyzr,
                         d_rho);
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
     grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
-    grace::sort_by_distance(ox, oy, oz,
-                            d_spheres_xyzr,
+    grace::sort_by_distance(d_hit_distances,
                             d_ray_segments,
                             d_hit_indices,
                             d_traced_rho);
@@ -129,9 +130,8 @@ int main(int argc, char* argv[]) {
      * distance.
      */
 
-    thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
     thrust::host_vector<unsigned int> h_ray_offsets = d_ray_offsets;
-    thrust::host_vector<unsigned int> h_hit_indices = d_hit_indices;
+    thrust::host_vector<float> h_hit_distances = d_hit_distances;
 
     unsigned int failures = 0u;
     for (int ray_i=0; ray_i<N_rays; ray_i++) {
@@ -144,31 +144,29 @@ int main(int argc, char* argv[]) {
         }
 
         // Check first hit is not < 0 along ray.
-        unsigned int par_i = h_hit_indices[start];
-        float4 xyzr = h_spheres_xyzr[par_i];
-        float prev_dist = ( (xyzr.x - ox)*(xyzr.x - ox) +
-                            (xyzr.y - oy)*(xyzr.y - oy) +
-                            (xyzr.z - oz)*(xyzr.z - oz) );
+        float dist = h_hit_distances[start];
+        if (dist < 0) {
+            std::cout << "Error @ ray " << ray_i << "!" << std::endl;
+            std::cout << "First particle hit distance = " << std::setw(8)
+                      << dist << std::endl;
+            failures++;
+        }
 
         // Check all following hits are >= along the ray than those preceding.
-        for (int hit_i=start+1; hit_i<end; hit_i++) {
-            par_i = h_hit_indices[hit_i];
-            xyzr = h_spheres_xyzr[par_i];
-            float dist = ( (xyzr.x - ox)*(xyzr.x - ox) +
-                           (xyzr.y - oy)*(xyzr.y - oy) +
-                           (xyzr.z - oz)*(xyzr.z - oz) );
+        for (int i=start+1; i<end; i++) {
+            float next_dist = h_hit_distances[i];
 
-            if (dist < prev_dist) {
-                std::cout << "Error! @ ray " << ray_i << "!" << std::endl;
-                std::cout << "   (squared) distance to particle " << par_i
-                          << " = " << std::setw(8) << dist << std::endl;
-                std::cout << " < (squared) distance to particle "
-                          << h_hit_indices[hit_i-1] << " = " << std::setw(8)
-                          << prev_dist << std::endl;
+            if (next_dist < dist) {
+                std::cout << "Error @ ray " << ray_i << "!" << std::endl;
+                std::cout << "  distance[" << i << "] = " << std::setw(8)
+                          << next_dist
+                          << " < distance[" << i-1 << "] = " << std::setw(8)
+                          << dist
+                          << std::endl;
                 std::cout << std::endl;
                 failures++;
             }
-            prev_dist = dist;
+            dist = next_dist;
         }
 
     }

@@ -168,6 +168,8 @@ int main(int argc, char* argv[]) {
 
         // Indices of particles for all ray-particle intersections.
         thrust::device_vector<unsigned int> d_hit_indices;
+        // Distances, from the ray origin, to all ray-particle intersections.
+        thrust::device_vector<float> d_hit_distances;
         // Offsets into the above vector where each ray's data starts.
         thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
 
@@ -176,6 +178,7 @@ int main(int argc, char* argv[]) {
                             d_traced_rho,
                             d_ray_offsets,
                             d_hit_indices,
+                            d_hit_distances,
                             d_nodes,
                             d_spheres_xyzr,
                             d_rho); // For RT, we'd pass ~number counts.
@@ -190,8 +193,7 @@ int main(int argc, char* argv[]) {
 
         cudaEventRecord(part_start);
         grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
-        grace::sort_by_distance(x_centre, y_centre, z_centre,
-                                d_spheres_xyzr,
+        grace::sort_by_distance(d_hit_distances,
                                 d_ray_segments,
                                 d_hit_indices,
                                 d_traced_rho);
