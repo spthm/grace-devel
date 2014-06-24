@@ -36,11 +36,12 @@ public:
 class Leaves
 {
 public:
-    thrust::device_vector<int> parent;
+    // indices.x = first; indices.y = span; indices.z = parent; indices.w = pad.
+    thrust::device_vector<int4> indices;
 
     thrust::device_vector<Box> AABB;
 
-    Leaves(unsigned int N_leaves) : parent(N_leaves), AABB(N_leaves) {}
+    Leaves(unsigned int N_leaves) : indices(N_leaves), AABB(N_leaves) {}
 };
 
 class H_Nodes
@@ -57,11 +58,10 @@ public:
 class H_Leaves
 {
 public:
-    thrust::host_vector<int> parent;
-
+    thrust::host_vector<int4> indices;
     thrust::host_vector<Box> AABB;
 
-    H_Leaves(unsigned int N_leaves) : parent(N_leaves), AABB(N_leaves) {}
+    H_Leaves(unsigned int N_leaves) : indices(N_leaves), AABB(N_leaves) {}
 };
 
 } //namespace grace

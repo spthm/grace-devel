@@ -9,10 +9,44 @@
 
 namespace grace {
 
-namespace gpu {
 
 //-----------------------------------------------------------------------------
 // Helper functions for tree build kernels.
+//-----------------------------------------------------------------------------
+
+struct flag_null_node
+{
+    __host__ __device__ int operator() (const int4 node)
+    {
+        // node.y: index of right child (cannot be the root node)
+        // leaf.y: spheres within leaf (cannot be < 1)
+        if node.y > 0
+            return 0;
+        else
+            return 1;
+    }
+};
+
+struct is_valid_node
+{
+    __host__ __device__ bool operator() (const int4 node)
+    {
+        return (node.y > 0);
+    }
+};
+
+struct is_valid_level
+{
+    __host__ __device__ bool operator() (const unsigned int level)
+    {
+        return (level != 0);
+    }
+};
+
+namespace gpu {
+
+//-----------------------------------------------------------------------------
+// GPU helper functions for tree build kernels.
 //-----------------------------------------------------------------------------
 
 // __device__ and in namespace gpu so we use the __device__ bit_prefix_length()
@@ -38,6 +72,26 @@ __device__ int common_prefix_length(const int i,
     return prefix_length;
 }
 
+void copy_valid_nodes(thrust::device_vector<int4>& d_nodes,
+                      const size_t N_nodes)
+{
+    thrust::device_vector<int4> d_tmp = d_nodes;
+    d_nodes.resize(N_nodes);
+    thrust::copy_if(d_tmp.begin(), d_tmp.end(),
+                    d_nodes.begin(),
+                    is_valid_node());
+}
+
+void copy_valid_levels(thrust::device_vector<unsigned int>& d_levels,
+                       const size_t N_nodes)
+{
+    thrust::device_vector<unsigned int> d_tmp = d_levels;
+    d_levels.resize(N_nodes);
+    thrust::copy_if(d_tmp.begin()+1, d_tmp.end(),
+                    d_levels.begin()+1,
+                    is_valid_level());
+}
+
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
@@ -45,14 +99,16 @@ __device__ int common_prefix_length(const int i,
 template <typename UInteger>
 __global__ void build_nodes_kernel(int4* nodes,
                                    unsigned int* node_levels,
-                                   int* leaf_parents,
+                                   int4* leaves,
+                                   const unsigned int max_per_leaf,
                                    const UInteger* keys,
-                                   const size_t n_keys)
+                                   const size_t n_keys
 {
     int index, end_index, split_index, direction;
     int prefix_left, prefix_right, min_prefix;
     unsigned int node_prefix;
     unsigned int span_max, l, bit;
+    int4 left, right;
 
     // Index of the current node.
     index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -103,28 +159,45 @@ __global__ void build_nodes_kernel(int4* nodes,
         // If direction == -1 we actually found split_index + 1.
         split_index = index + l*direction + min(direction, 0);
 
-        node_levels[index] = node_prefix;
-        nodes[index].x = split_index;
-        nodes[index].y = split_index+1;
-        nodes[index].w = end_index;
+        // Check we have a valid node, i.e. its span is > max_per_leaf.
+        if (abs(index - end_index) + 1 > max_per_leaf)
+        {
+            node_levels[index] = node_prefix;
+            nodes[index].x = split_index;
+            nodes[index].y = split_index+1;
+            nodes[index].w = end_index;
 
-        // Leaves are identified by their indicies, which are >= n_nodes
-        // (and n_nodes == n_keys-1).
-        if (split_index == min(index, end_index)) {
-            nodes[index].x += n_keys-1;
-            leaf_parents[split_index] = index;
-        }
-        else {
-            nodes[split_index].z = index;
-        }
+            left.x = min(index, end_index); // start
+            left.y = (split_index - left.x) + 1; // span
+            right.x = left.x + left.y;
+            right.y = max(index, end_index) - split_index;
 
-        if (split_index+1 == max(index, end_index)) {
-            nodes[index].y += n_keys-1;
-            leaf_parents[split_index+1] = index;
-        }
-        else {
-            nodes[split_index+1].z = index;
-        }
+            assert(left.y > 0);
+            assert(right.y > 0);
+            assert(right.x + right.y - 1 < n_keys);
+
+            // Leaves are identified by their indicies, which are >= n_nodes
+            // (and currently n_nodes == n_keys-1).
+            if (left.y <= max_per_leaf) {
+                // Left child is a leaf.
+                nodes[index].x += n_keys-1;
+                left.z = index;
+                leaves[split_index] = left;
+            }
+            else {
+                // Left child is a node.
+                nodes[split_index].z = index;
+            }
+
+            if (right.y <= max_per_leaf) {
+                nodes[index].y += n_keys-1;
+                right.z = index;
+                leaves[split_index+1] = right;
+            }
+            else {
+                nodes[split_index+1].z = index;
+            }
+        } // No else.  We do not write to an invalid node.
 
         index += blockDim.x * gridDim.x;
     }
@@ -294,6 +367,32 @@ void build_nodes(Nodes& d_nodes,
         thrust::raw_pointer_cast(d_leaves.parent.data()),
         thrust::raw_pointer_cast(d_keys.data()),
         n_keys);
+}
+
+void compact_nodes(Nodes& d_nodes,
+                   Leaves& d_leaves)
+{
+    const size_t N_keys = d_leaves.indices.size();
+    thrust::device_vector<unsigned int> d_leaf_shifts(d_leaves.spheres.size());
+    thrust::transform_inclusive_scan(d_leaves.spheres.begin(),
+                                     d_leaves.spheres.end(),
+                                     d_leaf_shifts.begin(),
+                                     flag_null_leaf(),
+                                     thrust::plus<unsigned int>());
+    const size_t N_leaves = *(d_leaf_shifts.back());
+    // Also try remove(_copy)_if with un-scanned flags as a stencil.
+    // Then assert *(d_leaf_shifts.back()) == d_leaves.indices.size()
+    copy_valid_nodes(d_nodes.hierarchy, N_leaves-1);
+    copy_valid_nodes(d_leaves.indices, N_leaves);
+    copy_valid_levels(d_nodes.levels, N_leaves-1);
+    d_nodes.AABB.resize(d_nodes.hierarchy.size());
+    d_leaves.AABB.resize(d_leaves.indices.size());
+
+    fix_node_indices(thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
+                     thrust::raw_pointer_cast(d_leaves.indices.data()),
+                     thrust::raw_pointer_cast(d_leaf_shifts.data()),
+                     N_leaves-1,
+                     N_keys);
 }
 
 template <typename Float4>
