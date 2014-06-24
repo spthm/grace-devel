@@ -300,7 +300,7 @@ class BinRadixTree(object):
 
             new_index = current_index - leaf_shifts[current_index]
 
-        Though in the case that we have a right child which is not a node,
+        Though in the case that we have a right child which *is* a node,
         the calculation is:
 
             new_index = current_index - leaf_shifts[current_index-1]

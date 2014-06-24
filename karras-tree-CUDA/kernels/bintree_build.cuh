@@ -109,7 +109,7 @@ __global__ void build_nodes_kernel(int4* nodes,
         nodes[index].w = end_index;
 
         // Leaves are identified by their indicies, which are >= n_nodes
-        // (and n_nodes = n_keys-1).
+        // (and n_nodes == n_keys-1).
         if (split_index == min(index, end_index)) {
             nodes[index].x += n_keys-1;
             leaf_parents[split_index] = index;
