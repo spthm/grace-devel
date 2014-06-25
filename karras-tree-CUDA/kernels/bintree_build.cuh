@@ -1,5 +1,7 @@
 #pragma once
 
+#include <assert.h>
+
 #include <thrust/device_vector.h>
 #include <thrust/transform_scan.h>
 

@@ -152,7 +152,7 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, 1);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
@@ -165,7 +165,7 @@ int main(int argc, char* argv[]) {
     h_nodes.level = d_nodes.level;
     h_nodes.AABB = d_nodes.AABB;
 
-    h_leaves.parent = d_leaves.parent;
+    h_leaves.indices = d_leaves.indices;
     h_leaves.AABB = d_leaves.AABB;
 
     if (save_out) {
@@ -206,14 +206,17 @@ int main(int argc, char* argv[]) {
 
         outfile.open("outdata/leaves.txt");
         for (unsigned int i=0; i<N; i++) {
-            outfile << "i:           " << i << std::endl;
-            outfile << "parent:      " << h_leaves.parent[i] << std::endl;
-            outfile << "AABB_bottom: " << h_leaves.AABB[i].bx << ", "
-                                       << h_leaves.AABB[i].by << ", "
-                                       << h_leaves.AABB[i].bz << std::endl;
-            outfile << "AABB_top:    " << h_leaves.AABB[i].tx << ", "
-                                       << h_leaves.AABB[i].ty << ", "
-                                       << h_leaves.AABB[i].tz << std::endl;
+            int4 leaf = h_leaves.indices[i];
+            outfile << "i:            " << i << std::endl;
+            outfile << "first sphere: " << leaf.x << std::endl;
+            outfile << "sphere count: " << leaf.y << std::endl;
+            outfile << "parent:       " << leaf.z << std::endl;
+            outfile << "AABB_bottom:  " << h_leaves.AABB[i].bx << ", "
+                                        << h_leaves.AABB[i].by << ", "
+                                        << h_leaves.AABB[i].bz << std::endl;
+            outfile << "AABB_top:     " << h_leaves.AABB[i].tx << ", "
+                                        << h_leaves.AABB[i].ty << ", "
+                                        << h_leaves.AABB[i].tz << std::endl;
             outfile << std::endl;
         }
     }
