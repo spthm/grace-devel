@@ -1,6 +1,7 @@
 #pragma once
 
 #include <thrust/device_vector.h>
+#include <thrust/transform_scan.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -20,7 +21,7 @@ struct flag_null_node
     {
         // node.y: index of right child (cannot be the root node)
         // leaf.y: spheres within leaf (cannot be < 1)
-        if node.y > 0
+        if (node.y > 0)
             return 0;
         else
             return 1;
@@ -102,7 +103,7 @@ __global__ void build_nodes_kernel(int4* nodes,
                                    int4* leaves,
                                    const unsigned int max_per_leaf,
                                    const UInteger* keys,
-                                   const size_t n_keys
+                                   const size_t n_keys)
 {
     int index, end_index, split_index, direction;
     int prefix_left, prefix_right, min_prefix;
@@ -204,10 +205,83 @@ __global__ void build_nodes_kernel(int4* nodes,
     return;
 }
 
+__global__ void shift_tree_indices(int4* nodes,
+                                   int4* leaves,
+                                   const unsigned int* leaf_shifts,
+                                   const size_t n_nodes,
+                                   const size_t n_removed)
+{
+    int4 node;
+    int tid;
+    unsigned int shift;
+    size_t n_prior;
+
+    tid = threadIdx.x + blockIdx.x * blockDim.x;
+    n_prior = n_nodes + n_removed;
+
+    while (tid < n_nodes)
+    {
+        node = nodes[tid];
+
+        if (node.x > n_prior) {
+            // A leaf is identified by an index > n_nodes.  Since n_nodes has
+            // been reduced, as additional shift is required.
+            shift = leaf_shifts[node.x-n_prior] + n_removed;
+            assert(node.x-shift > n_nodes);
+        }
+        else {
+            shift = leaf_shifts[node.x];
+            assert(node.x-shift < n_nodes);
+        }
+        node.x -= shift;
+
+        if (node.y > n_prior) {
+            shift = leaf_shifts[node.y-n_prior] + n_removed;
+            assert(node.y-shift > n_nodes);
+        }
+        else {
+            // For a right node, we use the shift for its left sibling.
+            // (right_index-1 == left_index)
+            shift = leaf_shifts[node.y-1];
+            assert(node.y-shift < n_nodes);
+        }
+        node.y -= shift;
+
+        nodes[tid].x = node.x;
+        nodes[tid].y = node.y;
+
+        // Do this near the top, when we read nodes[tid]?  May give slightly
+        // more coalesced memory accesses.
+        // Don't forget to change > n_nodes to > n_prior if moved!
+        // TODO: Wrap the asserts in an #ifndef NDEBUG, define some local
+        //       variables and tidy up the code.
+        if (node.x > n_nodes) {
+            // Current node can only have shifted by some distance >= 0.
+            assert(tid <= nodes[node.x-n_nodes].z);
+            // Current node cannot have shifted  by any distance > n_removed.
+            assert(nodes[node.x-n_nodes].z - tid <= n_removed);
+            // We do not know if the current node is a left or a right child,
+            // so OR the conditions for both possibilities, respectively.
+            assert(nodes[node.x-n_nodes].z - leaf_shifts[nodes[node.x-n_nodes].z] == tid ||
+                   nodes[node.x-n_nodes].z - leaf_shifts[nodes[node.x-n_nodes].z-1] == tid);
+            nodes[node.x-n_nodes].z = tid;
+        }
+        else {
+            assert(tid <= nodes[node.x].z);
+            assert(nodes[node.x].z - tid <= n_removed);
+            assert(nodes[node.x].z - leaf_shifts[nodes[node.x].z] == tid ||
+                   nodes[node.x].z - leaf_shifts[nodes[node.x].z-1] == tid);
+            nodes[node.x].z = tid;
+        }
+
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
 template <typename Float, typename Float4>
 __global__ void find_AABBs_kernel(const int4* nodes,
                                   volatile Box* node_AABBs,
-                                  const int* leaf_parents,
+                                  const int4* leaves,
                                   volatile Box* leaf_AABBs,
                                   const size_t n_leaves,
                                   const Float4* spheres,
@@ -259,7 +333,7 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             // Travel up the tree.  The second thread to reach a node writes
             // its AABB based on those of its children.  The first exits the
             // loop.
-            index = leaf_parents[tid];
+            index = leaves[tid].z;
             node = nodes[index]; // Left, right, parent, end.
             in_block = (min(node.w, index) >= block_lower &&
                         max(node.w, index) <= block_upper);
@@ -352,7 +426,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
 template <typename UInteger>
 void build_nodes(Nodes& d_nodes,
                  Leaves& d_leaves,
-                 const thrust::device_vector<UInteger>& d_keys)
+                 const thrust::device_vector<UInteger>& d_keys,
+                 const int max_per_leaf=12)
 {
     size_t n_keys = d_keys.size();
 
@@ -364,7 +439,8 @@ void build_nodes(Nodes& d_nodes,
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.level.data()),
-        thrust::raw_pointer_cast(d_leaves.parent.data()),
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        max_per_leaf,
         thrust::raw_pointer_cast(d_keys.data()),
         n_keys);
 }
@@ -372,27 +448,31 @@ void build_nodes(Nodes& d_nodes,
 void compact_nodes(Nodes& d_nodes,
                    Leaves& d_leaves)
 {
-    const size_t N_keys = d_leaves.indices.size();
-    thrust::device_vector<unsigned int> d_leaf_shifts(d_leaves.spheres.size());
-    thrust::transform_inclusive_scan(d_leaves.spheres.begin(),
-                                     d_leaves.spheres.end(),
+    thrust::device_vector<unsigned int> d_leaf_shifts(d_leaves.indices.size());
+    thrust::transform_inclusive_scan(d_leaves.indices.begin(),
+                                     d_leaves.indices.end(),
                                      d_leaf_shifts.begin(),
-                                     flag_null_leaf(),
+                                     flag_null_node(),
                                      thrust::plus<unsigned int>());
-    const size_t N_leaves = *(d_leaf_shifts.back());
+    const size_t N_removed = d_leaf_shifts.back();
+    const size_t N_nodes = d_leaves.indices.size() - 1 - N_removed;
     // Also try remove(_copy)_if with un-scanned flags as a stencil.
     // Then assert *(d_leaf_shifts.back()) == d_leaves.indices.size()
-    copy_valid_nodes(d_nodes.hierarchy, N_leaves-1);
-    copy_valid_nodes(d_leaves.indices, N_leaves);
-    copy_valid_levels(d_nodes.levels, N_leaves-1);
+    gpu::copy_valid_nodes(d_nodes.hierarchy, N_nodes);
+    gpu::copy_valid_nodes(d_leaves.indices, N_nodes+1);
+    gpu::copy_valid_levels(d_nodes.level, N_nodes);
     d_nodes.AABB.resize(d_nodes.hierarchy.size());
     d_leaves.AABB.resize(d_leaves.indices.size());
 
-    fix_node_indices(thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-                     thrust::raw_pointer_cast(d_leaves.indices.data()),
-                     thrust::raw_pointer_cast(d_leaf_shifts.data()),
-                     N_leaves-1,
-                     N_keys);
+    int blocks = min(MAX_BLOCKS, (int) ((N_nodes + SHIFTS_THREADS_PER_BLOCK-1)
+                                        / SHIFTS_THREADS_PER_BLOCK));
+
+    gpu::shift_tree_indices<<<blocks,SHIFTS_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_leaf_shifts.data()),
+        N_nodes,
+        N_removed);
 }
 
 template <typename Float4>
@@ -400,7 +480,7 @@ void find_AABBs(Nodes& d_nodes,
                 Leaves& d_leaves,
                 const thrust::device_vector<Float4>& d_spheres)
 {
-    size_t n_leaves = d_leaves.parent.size();
+    size_t n_leaves = d_leaves.indices.size();
 
     thrust::device_vector<unsigned int> d_AABB_flags(n_leaves-1);
 
@@ -410,7 +490,7 @@ void find_AABBs(Nodes& d_nodes,
     gpu::find_AABBs_kernel<float, Float4><<<blocks,AABB_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
-        thrust::raw_pointer_cast(d_leaves.parent.data()),
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
         thrust::raw_pointer_cast(d_leaves.AABB.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_spheres.data()),
