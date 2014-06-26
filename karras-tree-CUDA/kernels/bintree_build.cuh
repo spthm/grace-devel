@@ -429,7 +429,7 @@ template <typename UInteger>
 void build_nodes(Nodes& d_nodes,
                  Leaves& d_leaves,
                  const thrust::device_vector<UInteger>& d_keys,
-                 const int max_per_leaf=12)
+                 const int max_per_leaf=1)
 {
     size_t n_keys = d_keys.size();
 
