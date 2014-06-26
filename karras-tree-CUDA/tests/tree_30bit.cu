@@ -161,11 +161,12 @@ int main(int argc, char* argv[]) {
     grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
-
     /* Save node and leaf data. */
 
-    grace::H_Nodes h_nodes(N-1);
-    grace::H_Leaves h_leaves(N);
+    size_t N_leaves = d_leaves.indices.size();
+
+    grace::H_Nodes h_nodes(N_leaves-1);
+    grace::H_Leaves h_leaves(N_leaves);
 
     h_nodes.hierarchy = d_nodes.hierarchy;
     h_nodes.level = d_nodes.level;
@@ -176,23 +177,25 @@ int main(int argc, char* argv[]) {
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
-        for (unsigned int i=0; i<N-1; i++) {
+        for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
             outfile << "level:           " << h_nodes.level[i] << std::endl;
             int4 node = h_nodes.hierarchy[i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.
-            if (node.x > N-2) {
+            if (node.x > N_leaves-2) {
                 outfile << "left leaf flag:  True" << std::endl;
-                outfile << "left:            " << node.x - (N-1) << std::endl;
+                outfile << "left:            " << node.x - (N_leaves-1)
+                        << std::endl;
             }
             else {
                 outfile << "left leaf flag:  False" << std::endl;
                 outfile << "left:            " << node.x << std::endl;
             }
-            if (node.y > N-2) {
+            if (node.y > N_leaves-2) {
                 outfile << "right leaf flag: True" << std::endl;
-                outfile << "right:           " << node.y - (N-1) << std::endl;
+                outfile << "right:           " << node.y - (N_leaves-1)
+                        << std::endl;
             }
             else {
                 outfile << "right leaf flag: False" << std::endl;
@@ -213,7 +216,7 @@ int main(int argc, char* argv[]) {
         outfile.open("outdata/leaves.txt");
         outfile << "Max spheres per leaf: " << max_per_leaf << std::endl;
         outfile << std::endl;
-        for (unsigned int i=0; i<N; i++) {
+        for (unsigned int i=0; i<N_leaves; i++) {
             int4 leaf = h_leaves.indices[i];
             outfile << "i:            " << i << std::endl;
             outfile << "first sphere: " << leaf.x << std::endl;
