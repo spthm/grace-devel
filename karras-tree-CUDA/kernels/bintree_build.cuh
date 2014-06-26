@@ -264,14 +264,14 @@ __global__ void shift_tree_indices(int4* nodes,
         //       variables and tidy up the code.
         if (node.x >= n_nodes) {
             // Current node can only have shifted by some distance >= 0.
-            assert(tid <= nodes[node.x-n_nodes].z);
+            assert(tid <= leaves[node.x-n_nodes].z);
             // Current node cannot have shifted  by any distance > n_removed.
-            assert(nodes[node.x-n_nodes].z - tid <= n_removed);
+            assert(leaves[node.x-n_nodes].z - tid <= n_removed);
             // We do not know if the current node is a left or a right child,
             // so OR the conditions for both possibilities, respectively.
-            assert(nodes[node.x-n_nodes].z - leaf_shifts[nodes[node.x-n_nodes].z] == tid ||
-                   nodes[node.x-n_nodes].z - leaf_shifts[nodes[node.x-n_nodes].z-1] == tid);
-            nodes[node.x-n_nodes].z = tid;
+            assert(leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z] == tid ||
+                   leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z-1] == tid);
+            leaves[node.x-n_nodes].z = tid;
         }
         else {
             assert(tid <= nodes[node.x].z);
@@ -279,6 +279,21 @@ __global__ void shift_tree_indices(int4* nodes,
             assert(nodes[node.x].z - leaf_shifts[nodes[node.x].z] == tid ||
                    nodes[node.x].z - leaf_shifts[nodes[node.x].z-1] == tid);
             nodes[node.x].z = tid;
+        }
+
+        if (node.y >= n_nodes) {
+            assert(tid <= leaves[node.y-n_nodes].z);
+            assert(leaves[node.y-n_nodes].z - tid <= n_removed);
+            assert(leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z] == tid ||
+                   leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z-1] == tid);
+            leaves[node.y-n_nodes].z = tid;
+        }
+        else {
+            assert(tid <= nodes[node.y].z);
+            assert(nodes[node.y].z - tid <= n_removed);
+            assert(nodes[node.y].z - leaf_shifts[nodes[node.y].z] == tid ||
+                   nodes[node.y].z - leaf_shifts[nodes[node.y].z-1] == tid);
+            nodes[node.y].z = tid;
         }
 
         tid += blockDim.x * gridDim.x;
@@ -462,10 +477,7 @@ void compact_nodes(Nodes& d_nodes,
                                      flag_null_node(),
                                      thrust::plus<unsigned int>());
     const size_t N_removed = d_leaf_shifts.back();
-    std::cout << "Leaves removed: " << N_removed << std::endl;
     const size_t N_nodes = d_leaves.indices.size() - N_removed - 1;
-    std::cout << "N_nodes': " << N_nodes << ", N_nodes: " << d_nodes.hierarchy.size()
-              << std::endl;
     // Also try remove(_copy)_if with un-scanned flags as a stencil.
     // Then assert *(d_leaf_shifts.back()) == d_leaves.indices.size()
     gpu::copy_valid_nodes(d_nodes.hierarchy, N_nodes);
