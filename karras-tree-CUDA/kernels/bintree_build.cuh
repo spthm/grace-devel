@@ -311,9 +311,9 @@ __global__ void find_AABBs_kernel(const int4* nodes,
 {
     int tid, index, flag_index, block_lower, block_upper;
     int4 node;
+    Float4 sphere;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
-    Float r;
     volatile Box *left_AABB, *right_AABB;
     unsigned int* flags;
     bool first_arrival, in_block;
@@ -334,15 +334,31 @@ __global__ void find_AABBs_kernel(const int4* nodes,
     {
         if (tid < n_leaves)
         {
-            Float4 sphere = spheres[tid];
-            r = sphere.w;
-            x_min = sphere.x - r;
-            y_min = sphere.y - r;
-            z_min = sphere.z - r;
+            // nodes and leaves are both saved as int4's.
+            // .x: first sphere index; .y: sphere count; .z: parent index.
+            node = leaves[tid];
+            sphere = spheres[node.x];
 
-            x_max = x_min + 2*r;
-            y_max = y_min + 2*r;
-            z_max = z_min + 2*r;
+            // sphere.w == radius.
+            x_max = sphere.x + sphere.w;
+            y_max = sphere.y + sphere.w;
+            z_max = sphere.z + sphere.w;
+
+            x_min = sphere.x - sphere.w;
+            y_min = sphere.y - sphere.w;
+            z_min = sphere.z - sphere.w;
+
+            for (int i=node.x+1; i<node.y; i++) {
+                sphere = spheres[i];
+
+                x_max = max(x_max, sphere.x + sphere.w);
+                y_max = max(y_max, sphere.y + sphere.w);
+                z_max = max(z_max, sphere.z + sphere.w);
+
+                x_min = min(x_min, sphere.x - sphere.w);
+                y_min = min(y_min, sphere.y - sphere.w);
+                z_min = min(z_min, sphere.z - sphere.w);
+            }
 
             leaf_AABBs[tid].tx = x_max;
             leaf_AABBs[tid].ty = y_max;
@@ -355,8 +371,9 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             // Travel up the tree.  The second thread to reach a node writes
             // its AABB based on those of its children.  The first exits the
             // loop.
-            index = leaves[tid].z;
-            node = nodes[index]; // Left, right, parent, end.
+            index = node.z;
+            // .x/.y: left/right child index; .z: parent index; .w: end index.
+            node = nodes[index];
             in_block = (min(node.w, index) >= block_lower &&
                         max(node.w, index) <= block_upper);
 
