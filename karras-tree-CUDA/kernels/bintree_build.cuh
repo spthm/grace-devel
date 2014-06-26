@@ -1,6 +1,11 @@
 #pragma once
 
 #include <assert.h>
+// assert() is only supported for devices of compute capability 2.0 and higher.
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+#undef assert
+#define assert(arg)
+#endif
 
 #include <thrust/device_vector.h>
 #include <thrust/transform_scan.h>
@@ -216,20 +221,20 @@ __global__ void shift_tree_indices(int4* nodes,
     int4 node;
     int tid;
     unsigned int shift;
-    size_t n_prior;
+    size_t n_nodes_prior;
 
     tid = threadIdx.x + blockIdx.x * blockDim.x;
-    n_prior = n_nodes + n_removed;
+    n_nodes_prior = n_nodes + n_removed;
 
     while (tid < n_nodes)
     {
         node = nodes[tid];
 
-        if (node.x > n_prior) {
-            // A leaf is identified by an index > n_nodes.  Since n_nodes has
+        if (node.x >= n_nodes_prior) {
+            // A leaf is identified by an index >= n_nodes.  Since n_nodes has
             // been reduced, as additional shift is required.
-            shift = leaf_shifts[node.x-n_prior] + n_removed;
-            assert(node.x-shift > n_nodes);
+            shift = leaf_shifts[node.x-n_nodes_prior] + n_removed;
+            assert(node.x-shift >= n_nodes);
         }
         else {
             shift = leaf_shifts[node.x];
@@ -237,9 +242,9 @@ __global__ void shift_tree_indices(int4* nodes,
         }
         node.x -= shift;
 
-        if (node.y > n_prior) {
-            shift = leaf_shifts[node.y-n_prior] + n_removed;
-            assert(node.y-shift > n_nodes);
+        if (node.y >= n_nodes_prior) {
+            shift = leaf_shifts[node.y-n_nodes_prior] + n_removed;
+            assert(node.y-shift >= n_nodes);
         }
         else {
             // For a right node, we use the shift for its left sibling.
@@ -254,10 +259,10 @@ __global__ void shift_tree_indices(int4* nodes,
 
         // Do this near the top, when we read nodes[tid]?  May give slightly
         // more coalesced memory accesses.
-        // Don't forget to change > n_nodes to > n_prior if moved!
+        // Don't forget to change >= n_nodes to >= n_nodes_prior if moved!
         // TODO: Wrap the asserts in an #ifndef NDEBUG, define some local
         //       variables and tidy up the code.
-        if (node.x > n_nodes) {
+        if (node.x >= n_nodes) {
             // Current node can only have shifted by some distance >= 0.
             assert(tid <= nodes[node.x-n_nodes].z);
             // Current node cannot have shifted  by any distance > n_removed.
@@ -457,7 +462,10 @@ void compact_nodes(Nodes& d_nodes,
                                      flag_null_node(),
                                      thrust::plus<unsigned int>());
     const size_t N_removed = d_leaf_shifts.back();
-    const size_t N_nodes = d_leaves.indices.size() - 1 - N_removed;
+    std::cout << "Leaves removed: " << N_removed << std::endl;
+    const size_t N_nodes = d_leaves.indices.size() - N_removed - 1;
+    std::cout << "N_nodes': " << N_nodes << ", N_nodes: " << d_nodes.hierarchy.size()
+              << std::endl;
     // Also try remove(_copy)_if with un-scanned flags as a stencil.
     // Then assert *(d_leaf_shifts.back()) == d_leaves.indices.size()
     gpu::copy_valid_nodes(d_nodes.hierarchy, N_nodes);
