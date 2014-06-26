@@ -28,6 +28,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 100000;
+    unsigned int max_per_leaf = 1;
     bool save_in = false;
     bool save_out = false;
     unsigned int seed_factor = 1u;
@@ -36,18 +37,22 @@ int main(int argc, char* argv[]) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        if (strcmp("in", argv[2]) == 0)
-            save_in = true;
-        else if (strcmp("out", argv[2]) == 0)
-            save_out = true;
-        else if (strcmp("inout", argv[2]) == 0)
-            save_in = save_out = true;
+        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
-        seed_factor = (unsigned int) std::strtol(argv[3], NULL, 10);
+        if (strcmp("in", argv[3]) == 0)
+            save_in = true;
+        else if (strcmp("out", argv[3]) == 0)
+            save_out = true;
+        else if (strcmp("inout", argv[3]) == 0)
+            save_in = save_out = true;
+    }
+    if (argc > 4) {
+        seed_factor = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
 
-    std::cout << "Will generate " << N << " random points." << std::endl;
+    std::cout << "Will generate " << N << " random points, with up to "
+              << max_per_leaf << " point(s) per leaf." << std::endl;
     if (save_in == save_out) {
         if (save_in)
             std::cout << "Will save all data." << std::endl;
@@ -152,7 +157,8 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys, 1);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+    grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
@@ -185,12 +191,12 @@ int main(int argc, char* argv[]) {
                 outfile << "left:            " << node.x << std::endl;
             }
             if (node.y > N-2) {
-                outfile << "right leaf flag:  True" << std::endl;
-                outfile << "right:            " << node.y - (N-1) << std::endl;
+                outfile << "right leaf flag: True" << std::endl;
+                outfile << "right:           " << node.y - (N-1) << std::endl;
             }
             else {
-                outfile << "right leaf flag:  False" << std::endl;
-                outfile << "right:            " << node.y << std::endl;
+                outfile << "right leaf flag: False" << std::endl;
+                outfile << "right:           " << node.y << std::endl;
             }
             outfile << "parent:          " << node.z << std::endl;
             outfile << "AABB_bottom:     " << h_nodes.AABB[i].bx << ", "
@@ -205,6 +211,8 @@ int main(int argc, char* argv[]) {
         outfile.close();
 
         outfile.open("outdata/leaves.txt");
+        outfile << "Max spheres per leaf: " << max_per_leaf << std::endl;
+        outfile << std::endl;
         for (unsigned int i=0; i<N; i++) {
             int4 leaf = h_leaves.indices[i];
             outfile << "i:            " << i << std::endl;
