@@ -178,16 +178,17 @@ for (i, leaf) in enumerate(binary_tree.leaves):
         print "%d != %d" % (leaf.parent.index, leaf_parent_indices[i])
 
 binary_tree.find_AABBs()
+AABB_tolerance = 1E-6
 for (i, node) in enumerate(binary_tree.nodes):
     AABB_diffs = np.array(node.AABB.bottom) - np.array(node_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python node bottom AABB [%d] != CUDA node bottom AABB [%d]." \
               %(i, i)
         print "%r != \n%r" %(list(node.AABB.bottom), node_AABBs_bottom[i])
         print
 
     AABB_diffs = np.array(node.AABB.top) - np.array(node_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python node top AABB [%d] != CUDA node top AABB [%d]." \
               %(i, i)
         print "%r != \n%r" %(list(node.AABB.top), node_AABBs_top[i])
@@ -195,14 +196,14 @@ for (i, node) in enumerate(binary_tree.nodes):
 
 for (i, leaf) in enumerate(binary_tree.leaves):
     AABB_diffs = np.array(leaf.AABB.bottom) - np.array(leaf_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python leaf bottom AABB [%d] != CUDA leaf bottom AABB [%d]." \
               %(i, i)
         print "%r != \n%r" %(list(leaf.AABB.bottom), leaf_AABBs_bottom[i])
         print
 
     AABB_diffs = np.array(leaf.AABB.top) - np.array(leaf_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python leaf top AABB [%d] != CUDA leaf top AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(leaf.AABB.top), leaf_AABBs_top[i])
