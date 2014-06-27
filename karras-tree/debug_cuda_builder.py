@@ -55,13 +55,13 @@ leaf_parent_indices = []
 leaf_AABBs_bottom = []
 leaf_AABBs_top = []
 with open("../karras-tree-CUDA/tests/outdata/leaves.txt") as f:
-    max_per_leaf = int(f.readline().split()[1])
+    max_per_leaf = int(f.readline().split()[4])
     f.readline() # Blank
     line = f.readline()
     while line:
         leaf_indices.append(int(line.split()[1]))
-        leaf_start_indices.append(int(f.readline().split()[1]))
-        leaf_sphere_counts.append(int(f.readline().split()[1]))
+        leaf_start_indices.append(int(f.readline().split()[2]))
+        leaf_sphere_counts.append(int(f.readline().split()[2]))
         leaf_parent_indices.append(int(f.readline().split()[1]))
         leaf_AABBs_bottom.append([np.float32(float_string.rstrip(','))
                                   for float_string
@@ -161,10 +161,10 @@ for (i, leaf) in enumerate(binary_tree.leaves):
         print "%d != %d" %(leaf.index, leaf_indices[i])
         print
 
-    if leaf.start != leaf_start_indices[i]:
+    if leaf.start_index != leaf_start_indices[i]:
         print "Python leaf start index [%d] != CUDA leaf start index [%d]." \
               %(i, i)
-        print "%d != %d" %(leaf.start, leaf_start_indices[i])
+        print "%d != %d" %(leaf.start_index, leaf_start_indices[i])
         print
 
     if leaf.span != leaf_sphere_counts[i]:
