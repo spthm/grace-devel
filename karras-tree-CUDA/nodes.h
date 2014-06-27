@@ -21,7 +21,11 @@ public:
     // We could use uint and set the root node to 1.  Then common_prefix_length
     // may return 0 for out-of-range results, rather than -1.
     //
-    // int4.x .y .z .w are left, right, parent and end indices, respectively.
+    // int4.x: left child index.
+    //     .y: right child index.
+    //     .z: span (such that i + nodes[i].z == the last or first sphere in the
+    //         ith node for positive or negative span, respectively.
+    //     .w: parent index.
     thrust::device_vector<int4> hierarchy;
     // Equal to the common prefix of the keys which this node spans.
     // Currently used only when verifying correct construction.

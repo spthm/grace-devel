@@ -168,12 +168,12 @@ __global__ void build_nodes_kernel(int4* nodes,
         split_index = index + l*direction + min(direction, 0);
 
         // Check we have a valid node, i.e. its span is > max_per_leaf.
-        if (abs(index - end_index) + 1 > max_per_leaf)
+        if (abs(end_index - index) + 1 > max_per_leaf)
         {
             node_levels[index] = node_prefix;
             nodes[index].x = split_index;
             nodes[index].y = split_index+1;
-            nodes[index].w = end_index;
+            nodes[index].w = end_index - index;
 
             left.x = min(index, end_index); // start
             left.y = (split_index - left.x) + 1; // span
@@ -354,8 +354,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             y_min = sphere.y - sphere.w;
             z_min = sphere.z - sphere.w;
 
-            for (int i=node.x+1; i<node.y; i++) {
-                sphere = spheres[i];
+            for (int i=1; i<node.y; i++) {
+                sphere = spheres[node.x+i];
 
                 x_max = max(x_max, sphere.x + sphere.w);
                 y_max = max(y_max, sphere.y + sphere.w);
@@ -380,8 +380,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             index = node.z;
             // .x/.y: left/right child index; .z: parent index; .w: end index.
             node = nodes[index];
-            in_block = (min(node.w, index) >= block_lower &&
-                        max(node.w, index) <= block_upper);
+            in_block = (min(index, index + node.w) >= block_lower &&
+                        max(index, index + node.w) <= block_upper);
 
             if (in_block) {
                 flags = sm_flags;
@@ -397,16 +397,15 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             while (!first_arrival)
             {
-                if (node.x > n_leaves-2)
+                if (node.x >= n_leaves-1)
                     left_AABB = &leaf_AABBs[(node.x - (n_leaves-1))];
                 else
                     left_AABB = &node_AABBs[node.x];
 
-                if (node.y > n_leaves-2)
+                if (node.y >= n_leaves-1)
                     right_AABB = &leaf_AABBs[(node.y - (n_leaves-1))];
                 else
                     right_AABB = &node_AABBs[node.y];
-
 
                 x_max = max(left_AABB->tx, right_AABB->tx);
                 y_max = max(left_AABB->ty, right_AABB->ty);
@@ -432,8 +431,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
 
                 index = node.z;
                 node = nodes[index];
-                in_block = (min(node.w, index) >= block_lower &&
-                            max(node.w, index) <= block_upper);
+                in_block = (min(index, index + node.w) >= block_lower &&
+                            max(index, index + node.w) <= block_upper);
 
                 if (in_block) {
                     flags = sm_flags;
