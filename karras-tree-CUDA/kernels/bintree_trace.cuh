@@ -711,7 +711,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
-        thrust:raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
