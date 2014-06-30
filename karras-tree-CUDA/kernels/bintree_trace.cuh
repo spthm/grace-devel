@@ -671,7 +671,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     size_t n_nodes = d_nodes.hierarchy.size();
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_spheres);
+    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_leaves, d_spheres);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
