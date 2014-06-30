@@ -33,8 +33,9 @@ for ray_index in range(len(rays)):
                 node = trace_stack.pop()
 
         while (node.is_leaf() and not node.is_null()):
-            if ray.sphere_hit(*spheres[node.index]):
-                ray_hit_count += 1
+            for i in range(node.span):
+                if ray.sphere_hit(*spheres[node.start+i]):
+                    ray_hit_count += 1
             node = trace_stack.pop()
 
     hit_counts[ray_index] = ray_hit_count
