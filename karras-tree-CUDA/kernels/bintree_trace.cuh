@@ -319,7 +319,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const int4* nodes,
                                        const Box* node_AABBs,
                                        size_t n_nodes,
-                                       const Float4* spheres)
+                                       const int4* leaves,
+                                       const Float4* spheres,
+                                       const size_t n_spheres)
 {
     int node_index, ray_index, stack_index;
     unsigned int ray_hit_count;
@@ -366,13 +368,16 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     stack_index--;
                 }
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
             if (is_leaf && stack_index >= 0)
             {
-                node = nodes[node_index-n_nodes];
-                for (int i=0; i<node.y; i++) {
+                node = leaves[node_index-n_nodes];
+                for (int i=0; i<node.y; i++)
+                {
+                    assert(node.y > 0);
+                    assert(node.x+node.y-1 < n_spheres);
                     if (sphere_hit(ray, spheres[node.x+i], b, d))
                     {
                         ray_hit_count++;
@@ -382,7 +387,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
         }
@@ -398,6 +403,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const int4* nodes,
                                       const Box* node_AABBs,
                                       const size_t n_nodes,
+                                      const int4* leaves,
                                       const Float4* spheres,
                                       const Tin* p_data,
                                       const Float* b_integrals)
@@ -446,35 +452,39 @@ __global__ void trace_property_kernel(const Ray* rays,
                     stack_index--;
                 }
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
             if (is_leaf && stack_index >= 0)
             {
-                if (sphere_hit(ray, spheres[node_index-n_nodes], b, d))
+                node = leaves[node_index-n_nodes];
+                for (int i=0; i<node.y; i++)
                 {
-                    r = spheres[node_index-n_nodes].w;
-                    ir = 1.f / r;
-                    // Normalize impact parameter to size of lookup table and
-                    // interpolate.
-                    b = (N_table-1) * (b * ir);
-                    b_index = (int) b; // == floor(b)
-                    if (b_index > (N_table-1)) {
-                        b = 1.f;
-                        b_index = N_table-2;
+                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    {
+                        r = spheres[node.x+i].w;
+                        ir = 1.f / r;
+                        // Normalize impact parameter to size of lookup table and
+                        // interpolate.
+                        b = (N_table-1) * (b * ir);
+                        b_index = (int) b; // == floor(b)
+                        if (b_index > (N_table-1)) {
+                            b = 1.f;
+                            b_index = N_table-2;
+                        }
+                        Float kernel_fac =
+                            (b_integrals[b_index+1] - b_integrals[b_index])
+                            * (b - b_index)
+                            + b_integrals[b_index];
+                        // Re-scale integral (since we used a normalized b).
+                        kernel_fac *= (ir*ir);
+                        out += (Tout) (kernel_fac * p_data[node.x+i]);
                     }
-                    Float kernel_fac =
-                        (b_integrals[b_index+1] - b_integrals[b_index])
-                        * (b - b_index)
-                        + b_integrals[b_index];
-                    // Re-scale integral (since we used a normalized b).
-                    kernel_fac *= (ir*ir);
-                    out += (Tout) (kernel_fac * p_data[node_index-n_nodes]);
                 }
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
         }
@@ -493,6 +503,7 @@ __global__ void trace_kernel(const Ray* rays,
                              const int4* nodes,
                              const Box* node_AABBs,
                              const size_t n_nodes,
+                             const int4* leaves,
                              const Float4* spheres,
                              const Tin* p_data,
                              const Float* b_integrals)
@@ -538,36 +549,39 @@ __global__ void trace_kernel(const Ray* rays,
                     stack_index--;
                 }
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
             if (is_leaf && stack_index >= 0)
             {
-                if (sphere_hit(ray, spheres[node_index-n_nodes], b, d))
+                node = leaves[node_index-n_nodes];
+                for (int i=0; i<node.y; i++)
                 {
-                    r = spheres[node_index-n_nodes].w;
-                    ir = 1.f / r;
-                    b = (N_table-1) * (b * ir);
-                    b_index = (int) b;
-                    if (b_index > (N_table-1)) {
-                        b = 1.f;
-                        b_index = N_table-2;
+                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    {
+                        r = spheres[node.x+i].w;
+                        ir = 1.f / r;
+                        b = (N_table-1) * (b * ir);
+                        b_index = (int) b;
+                        if (b_index > (N_table-1)) {
+                            b = 1.f;
+                            b_index = N_table-2;
+                        }
+                        Float kernel_fac =
+                            (b_integrals[b_index+1] - b_integrals[b_index])
+                            * (b - b_index)
+                            + b_integrals[b_index];
+                        kernel_fac *= (ir*ir);
+                        out_data[out_index] =
+                            (Tout) (kernel_fac * p_data[node.x+i]);
+                        hit_indices[out_index] = node.x+i;
+                        hit_distances[out_index] = d;
+                        out_index++;
                     }
-                    Float kernel_fac =
-                        (b_integrals[b_index+1] - b_integrals[b_index])
-                        * (b - b_index)
-                        + b_integrals[b_index];
-                    kernel_fac *= (ir*ir);
-                    out_data[out_index] =
-                        (Tout) (kernel_fac * p_data[node_index-n_nodes]);
-                    hit_indices[out_index] = node_index-n_nodes;
-                    hit_distances[out_index] = d;
-                    out_index++;
-                }
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
-                is_leaf = node_index > n_nodes-1;
+                is_leaf = node_index >= n_nodes;
             }
 
         }
@@ -585,6 +599,7 @@ template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                      thrust::device_vector<unsigned int>& d_hit_counts,
                      const Nodes& d_nodes,
+                     const Leaves& d_leaves,
                      const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
@@ -600,13 +615,16 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
-        thrust::raw_pointer_cast(d_spheres.data()));
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size());
 }
 
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_property(const thrust::device_vector<Ray>& d_rays,
                     thrust::device_vector<Tout>& d_out_data,
                     const Nodes& d_nodes,
+                    const Leaves& d_leaves,
                     const thrust::device_vector<Float4>& d_spheres,
                     const thrust::device_vector<Tin>& d_in_data)
 {
@@ -631,6 +649,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
@@ -645,6 +664,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<unsigned int>& d_hit_indices,
            thrust::device_vector<Float>& d_hit_distances,
            const Nodes& d_nodes,
+           const Leaves& d_leaves,
            const thrust::device_vector<Float4>& d_spheres,
            const thrust::device_vector<Tin>& d_in_data)
 {
@@ -691,6 +711,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
+        thrust:raw_pointer_cast(d_leaves.indices.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
@@ -707,6 +728,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           thrust::device_vector<Float>& d_hit_distances,
                           const Float distance_sentinel,
                           const Nodes& d_nodes,
+                          const Leaves& d_leaves,
                           const thrust::device_vector<Float4>& d_spheres,
                           const thrust::device_vector<Tin>& d_in_data)
 {
@@ -768,6 +790,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         n_nodes,
+        thrust::raw_pointer_cast(d_leaves.indices.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
