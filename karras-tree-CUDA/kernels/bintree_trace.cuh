@@ -371,9 +371,12 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
             if (is_leaf && stack_index >= 0)
             {
-                if (sphere_hit(ray, spheres[node_index-n_nodes], b, d))
-                {
-                    ray_hit_count++;
+                node = nodes[node_index-n_nodes];
+                for (int i=0; i<node.y; i++) {
+                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    {
+                        ray_hit_count++;
+                    }
                 }
                 // Pop stack.
                 node_index = trace_stack[stack_index];
