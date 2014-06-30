@@ -37,7 +37,8 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "Testing " << N << " random points and " << N_rays
-              << " random rays, with up to " << max_per_leaf << " points in a "
+              << " random rays, with up to " << max_per_leaf << " point(s) per"
+              << std::endl
               << "leaf." << std::endl;
     std::cout << std::endl;
 

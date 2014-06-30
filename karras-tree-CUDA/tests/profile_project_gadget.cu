@@ -26,6 +26,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 250000;
+    unsigned int max_per_leaf = 10;
     unsigned int N_iter = 10;
 
     if (argc > 1) {
@@ -35,7 +36,10 @@ int main(int argc, char* argv[]) {
         N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
-        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+        max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
+    if (argc > 4) {
+        N_iter = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
 
     unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
@@ -79,6 +83,7 @@ int main(int argc, char* argv[]) {
     std::cout << "Gadget data file:           " << fname << std::endl;
     std::cout << "Number of gas particles:    " << N << std::endl;
     std::cout << "Number of rays:             " << N_rays << std::endl;
+    std::cout << "Max particles per leaf:     " << max_per_leaf << std::endl;
     std::cout << "Number of iterations:       " << N_iter << std::endl;
     std::cout << std::endl << std::endl;
 
@@ -98,7 +103,8 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+    grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
 
@@ -190,6 +196,7 @@ int main(int argc, char* argv[]) {
         grace::trace_property<float>(d_rays,
                                      d_traced_rho,
                                      d_nodes,
+                                     d_leaves,
                                      d_spheres_xyzr,
                                      d_rho);
         cudaEventRecord(part_stop);
@@ -210,13 +217,13 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_traced_rho.size() * sizeof(float);
             trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
             trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
+            trace_bytes += d_leaves.indices.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
-            unused_bytes += d_leaves.parent.size() * sizeof(int);
             unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 

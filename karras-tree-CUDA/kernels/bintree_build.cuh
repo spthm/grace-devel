@@ -8,6 +8,7 @@
 #endif
 
 #include <thrust/device_vector.h>
+#include <thrust/copy.h>
 #include <thrust/transform_scan.h>
 
 #include "../kernel_config.h"
@@ -359,7 +360,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             y_min = sphere.y - sphere.w;
             z_min = sphere.z - sphere.w;
 
-            for (int i=1; i<node.y; i++) {
+            for (int i=1; i<node.y; i++)
+            {
                 sphere = spheres[node.x+i];
 
                 x_max = max(x_max, sphere.x + sphere.w);
@@ -544,8 +546,7 @@ void find_AABBs(Nodes& d_nodes,
         thrust::raw_pointer_cast(d_leaves.AABB.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_spheres.data()),
-        thrust::raw_pointer_cast(d_AABB_flags.data())
-    );
+        thrust::raw_pointer_cast(d_AABB_flags.data()));
 }
 
 

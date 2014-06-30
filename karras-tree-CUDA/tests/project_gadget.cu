@@ -19,9 +19,12 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 250000;
+    unsigned int max_per_leaf = 10;
 
     if (argc > 1)
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
+    if (argc > 2)
+        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
 
     unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
 
@@ -48,7 +51,9 @@ int main(int argc, char* argv[]) {
 
     size_t N = h_spheres_xyzr.size();
     std::cout << "Will trace " << N_rays << " rays through " << N
-              << " particles..." << std::endl;
+              << " particles, with up to " << max_per_leaf << " particle(s)"
+              << std::endl
+              << "per leaf..." << std::endl;
     std::cout << std::endl;
 
     // Gadget IDs and masses unused.
@@ -89,7 +94,8 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+    grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
     // Keys no longer needed.
@@ -151,6 +157,7 @@ int main(int argc, char* argv[]) {
     grace::trace_property<float>(d_rays,
                                  d_traced_rho,
                                  d_nodes,
+                                 d_leaves,
                                  d_spheres_xyzr,
                                  d_rho);
 
@@ -162,11 +169,11 @@ int main(int argc, char* argv[]) {
                                     0.0f, thrust::plus<float>())
                      / d_traced_rho.size();
 
-    std::cout << "Number of rays:       " << N_rays << std::endl;
-    std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Mean output           " << mean_rho << std::endl;
-    std::cout << "Max output:           " << max_rho << std::endl;
-    std::cout << "Min output:           " << min_rho << std::endl;
+    std::cout << "Number of rays:         " << N_rays << std::endl;
+    std::cout << "Number of particles:    " << N << std::endl;
+    std::cout << "Mean output             " << mean_rho << std::endl;
+    std::cout << "Max output:             " << max_rho << std::endl;
+    std::cout << "Min output:             " << min_rho << std::endl;
     std::cout << std::endl;
 
 

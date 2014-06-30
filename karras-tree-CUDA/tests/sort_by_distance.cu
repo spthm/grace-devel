@@ -33,6 +33,7 @@ int main(int argc, char* argv[]) {
     unsigned int N = 100000;
     // Relatively few because the random spheres result in many hits per ray.
     unsigned int N_rays = 80000;
+    unsigned int max_per_leaf = 10;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -40,9 +41,14 @@ int main(int argc, char* argv[]) {
     if (argc > 2) {
         N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
+    if (argc > 3) {
+        max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
 
     std::cout << "Generating " << N << " random points and " << N_rays
-              << " random rays." << std::endl;
+              << " random rays, with up to " << max_per_leaf << " point(s) per"
+              << std::endl
+              << "leaf." << std::endl;
     std::cout << std::endl;
 
 
@@ -78,7 +84,8 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+    grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
     // Working arrays no longer needed.
@@ -110,6 +117,7 @@ int main(int argc, char* argv[]) {
                         d_hit_indices,
                         d_hit_distances,
                         d_nodes,
+                        d_leaves,
                         d_spheres_xyzr,
                         d_rho);
 
