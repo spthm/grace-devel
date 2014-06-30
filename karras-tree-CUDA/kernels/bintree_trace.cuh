@@ -486,7 +486,6 @@ __global__ void trace_property_kernel(const Ray* rays,
 
                 is_leaf = node_index >= n_nodes;
             }
-
         }
         out_data[ray_index] = out;
         ray_index += blockDim.x * gridDim.x;
@@ -578,12 +577,12 @@ __global__ void trace_kernel(const Ray* rays,
                         hit_distances[out_index] = d;
                         out_index++;
                     }
+                }
                 node_index = trace_stack[stack_index];
                 stack_index--;
 
                 is_leaf = node_index >= n_nodes;
             }
-
         }
         ray_index += blockDim.x * gridDim.x;
     }
