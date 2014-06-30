@@ -248,7 +248,12 @@ __global__ void shift_tree_indices(int4* nodes,
         }
         else {
             // For a right node, we use the shift for its left sibling.
-            // (right_index-1 == left_index)
+            // NB: right_index-1 == left_index.
+            // (We have shifts for the leaf indices.  A left node index marks,
+            // conceptually, the end point in the node, so the shift works.
+            // A right node marks the start of a node, so we must shift by a
+            // distance equal to the number of leaves removed up to *but not
+            // including* this point, i.e. shift the same as the left sibling.)
             shift = leaf_shifts[node.y-1];
             assert(node.y-shift < n_nodes);
         }
