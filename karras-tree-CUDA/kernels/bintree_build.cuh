@@ -176,7 +176,7 @@ __global__ void build_nodes_kernel(int4* nodes,
             nodes[index].w = end_index - index;
 
             left.x = min(index, end_index); // start
-            left.y = (split_index - left.x) + 1; // span
+            left.y = (split_index - left.x) + 1; // primitives count
             right.x = left.x + left.y;
             right.y = max(index, end_index) - split_index;
 
@@ -473,13 +473,13 @@ void build_nodes(Nodes& d_nodes,
                  const thrust::device_vector<UInteger>& d_keys,
                  const int max_per_leaf=1)
 {
+    // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
+    // TODO: Error if max_per_leaf >= n_keys
+
     size_t n_keys = d_keys.size();
 
     int blocks = min(MAX_BLOCKS, (int) ((n_keys + BUILD_THREADS_PER_BLOCK-1)
                                         / BUILD_THREADS_PER_BLOCK));
-
-    // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
-    // TODO: Error if max_per_leaf >= n_keys
 
     gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
