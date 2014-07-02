@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int N = 100000;
     unsigned int N_rays = 10000;
-    unsigned int max_per_leaf = 10;
+    unsigned int max_per_leaf = 32;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);

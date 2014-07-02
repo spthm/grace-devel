@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 145000;
-    unsigned int max_per_leaf = 10;
+    unsigned int max_per_leaf = 100;
     unsigned int N_iter = 2;
 
     if (argc > 1) {

@@ -19,7 +19,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 250000;
-    unsigned int max_per_leaf = 10;
+    unsigned int max_per_leaf = 32;
 
     if (argc > 1)
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);

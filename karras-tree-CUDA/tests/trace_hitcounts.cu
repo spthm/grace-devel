@@ -30,7 +30,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int N = 1000000;
     unsigned int N_rays = 100000;
-    unsigned int max_per_leaf = 10;
+    unsigned int max_per_leaf = 32;
     bool save_data = false;
 
     if (argc > 1) {

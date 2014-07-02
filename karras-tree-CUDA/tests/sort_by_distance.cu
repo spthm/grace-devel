@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     unsigned int N = 100000;
     // Relatively few because the random spheres result in many hits per ray.
     unsigned int N_rays = 80000;
-    unsigned int max_per_leaf = 10;
+    unsigned int max_per_leaf = 100;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
