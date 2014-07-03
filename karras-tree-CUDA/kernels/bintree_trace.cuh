@@ -1,5 +1,12 @@
 #pragma once
 
+#include <assert.h>
+// assert() is only supported for devices of compute capability 2.0 and higher.
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+#undef assert
+#define assert(arg)
+#endif
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>

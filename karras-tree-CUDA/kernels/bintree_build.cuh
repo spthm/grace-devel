@@ -277,34 +277,26 @@ __global__ void shift_tree_indices(int4* nodes,
             // so OR the conditions for both possibilities, respectively.
             // The root node is technically a right child, but cannot be shifted
             // so is a special case.
-            assert(tid == 0 ||
-                   leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z] == tid ||
-                   leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z-1] == tid);
+            assert(tid == 0 || leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z] == tid || leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z-1] == tid);
             leaves[node.x-n_nodes].z = tid;
         }
         else {
             assert(tid <= nodes[node.x].z);
             assert(nodes[node.x].z - tid <= n_removed);
-            assert(tid == 0 ||
-                   nodes[node.x].z - leaf_shifts[nodes[node.x].z] == tid ||
-                   nodes[node.x].z - leaf_shifts[nodes[node.x].z-1] == tid);
+            assert(tid == 0 || nodes[node.x].z - leaf_shifts[nodes[node.x].z] == tid || nodes[node.x].z - leaf_shifts[nodes[node.x].z-1] == tid);
             nodes[node.x].z = tid;
         }
 
         if (node.y >= n_nodes) {
             assert(tid <= leaves[node.y-n_nodes].z);
             assert(leaves[node.y-n_nodes].z - tid <= n_removed);
-            assert(tid == 0 ||
-                   leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z] == tid ||
-                   leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z-1] == tid);
+            assert(tid == 0 || leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z] == tid || leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z-1] == tid);
             leaves[node.y-n_nodes].z = tid;
         }
         else {
             assert(tid <= nodes[node.y].z);
             assert(nodes[node.y].z - tid <= n_removed);
-            assert(tid == 0 ||
-                   nodes[node.y].z - leaf_shifts[nodes[node.y].z] == tid ||
-                   nodes[node.y].z - leaf_shifts[nodes[node.y].z-1] == tid);
+            assert(tid == 0 || nodes[node.y].z - leaf_shifts[nodes[node.y].z] == tid || nodes[node.y].z - leaf_shifts[nodes[node.y].z-1] == tid);
             nodes[node.y].z = tid;
         }
 
