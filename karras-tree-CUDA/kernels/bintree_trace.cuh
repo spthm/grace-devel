@@ -395,7 +395,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)
@@ -498,7 +498,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)
@@ -613,7 +613,7 @@ __global__ void trace_kernel(const Ray* rays,
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)
