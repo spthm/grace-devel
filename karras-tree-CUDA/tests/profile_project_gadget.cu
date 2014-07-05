@@ -216,7 +216,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_traced_rho.size() * sizeof(float);
             trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
-            trace_bytes += d_nodes.AABB.size() * sizeof(grace::Box);
+            trace_bytes += d_nodes.AABB.size() * 3*sizeof(float4);
             trace_bytes += d_leaves.indices.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
@@ -224,7 +224,6 @@ int main(int argc, char* argv[]) {
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
             unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
-            unused_bytes += d_leaves.AABB.size() * sizeof(grace::Box);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 
             std::cout << "Total memory for property trace kernel:    "

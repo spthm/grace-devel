@@ -170,10 +170,66 @@ int main(int argc, char* argv[]) {
 
     h_nodes.hierarchy = d_nodes.hierarchy;
     h_nodes.level = d_nodes.level;
-    h_nodes.AABB = d_nodes.AABB;
 
     h_leaves.indices = d_leaves.indices;
-    h_leaves.AABB = d_leaves.AABB;
+
+    // Copy AABBs into a more output-friendly format.
+    // AABB[2*i+0] = (bx, by, bz) of the ith node.
+    // AABB[2*i+1] = (tx, ty, tz) of the ith node.
+    thrust::host_vector<float3> node_AABBs(2*(N_leaves-1));
+    thrust::host_vector<float3> leaf_AABBs(2*N_leaves);
+    for (int i=0; i<N_leaves-1; i++) {
+        int left_i = h_nodes.hierarchy[i].x;
+        int right_i = h_nodes.hierarchy[i].y;
+        
+        // Left child's AABB.
+        // NB: bot and top defined as float3s above.
+        bot.x = h_nodes.AABB[3*i+0].x;
+        bot.y = h_nodes.AABB[3*i+1].x;
+        bot.z = h_nodes.AABB[3*i+2].x;
+        top.x = h_nodes.AABB[3*i+0].y;
+        top.y = h_nodes.AABB[3*i+1].y;
+        top.z = h_nodes.AABB[3*i+2].y;
+        if (left_i <= N_leaves-1) {
+            // Left is a node.
+            node_AABBs[2*left_i+0] = bot;
+            node_AABBs[2*left_i+1] = top;
+        }
+        else {
+            // Left is a leaf.
+            left_i -= (N_leaves-1);
+            leaf_AABBs[2*left_i+0] = bot;
+            leaf_AABBs[2*left_i+1] = top;
+        }
+
+        // Right child's AABB.
+        bot.x = h_nodes.AABB[3*i+0].z;
+        bot.y = h_nodes.AABB[3*i+1].z;
+        bot.z = h_nodes.AABB[3*i+2].z;
+        top.x = h_nodes.AABB[3*i+0].w;
+        top.y = h_nodes.AABB[3*i+1].w;
+        top.z = h_nodes.AABB[3*i+2].w;
+        if (right_i <= N_leaves-1) {
+            // Right is a node.
+            node_AABBs[2*right_i+0] = bot;
+            node_AABBs[2*right_i+1] = top;
+        }
+        else {
+            // Right is a leaf.
+            leaf_AABBs[2*right_i+0] = bot;
+            leaf_AABBs[2*right_i+1] = top;
+        }
+    }
+
+    // The root node's AABB is implicit.  Compute it.
+    bot.x = min(h_nodes.AABB[0].x, h_nodes.AABB[0].z);
+    bot.y = min(h_nodes.AABB[1].x, h_nodes.AABB[1].z);
+    bot.z = min(h_nodes.AABB[2].x, h_nodes.AABB[2].z);
+    top.x = max(h_nodes.AABB[0].y, h_nodes.AABB[0].w);
+    top.y = max(h_nodes.AABB[1].y, h_nodes.AABB[1].w);
+    top.z = max(h_nodes.AABB[2].y, h_nodes.AABB[2].w);
+    node_AABBs[0] = bot;
+    node_AABBs[1] = top;
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
@@ -202,13 +258,13 @@ int main(int argc, char* argv[]) {
                 outfile << "right:           " << node.y << std::endl;
             }
             outfile << "parent:          " << node.z << std::endl;
-            outfile << "AABB_bottom:     " << h_nodes.AABB[i].bx << ", "
-                                           << h_nodes.AABB[i].by << ", "
-                                           << h_nodes.AABB[i].bz
+            outfile << "AABB_bottom:     " << node_AABBs[2*i+0].x << ", "
+                                           << node_AABBs[2*i+0].y << ", "
+                                           << node_AABBs[2*i+0].z
                                            << std::endl;
-            outfile << "AABB_top:        " << h_nodes.AABB[i].tx << ", "
-                                           << h_nodes.AABB[i].ty << ", "
-                                           << h_nodes.AABB[i].tz << std::endl;
+            outfile << "AABB_top:        " << node_AABBs[2*i+1].x << ", "
+                                           << node_AABBs[2*i+1].y << ", "
+                                           << node_AABBs[2*i+1].z << std::endl;
             outfile << std::endl;
         }
         outfile.close();
@@ -222,12 +278,12 @@ int main(int argc, char* argv[]) {
             outfile << "first sphere: " << leaf.x << std::endl;
             outfile << "sphere count: " << leaf.y << std::endl;
             outfile << "parent:       " << leaf.z << std::endl;
-            outfile << "AABB_bottom:  " << h_leaves.AABB[i].bx << ", "
-                                        << h_leaves.AABB[i].by << ", "
-                                        << h_leaves.AABB[i].bz << std::endl;
-            outfile << "AABB_top:     " << h_leaves.AABB[i].tx << ", "
-                                        << h_leaves.AABB[i].ty << ", "
-                                        << h_leaves.AABB[i].tz << std::endl;
+            outfile << "AABB_bottom:  " << leaf_AABBs[2*i+0].x << ", "
+                                        << leaf_AABBs[2*i+0].y << ", "
+                                        << leaf_AABBs[2*i+0].z << std::endl;
+            outfile << "AABB_top:     " << leaf_AABBs[2*i+1].x << ", "
+                                        << leaf_AABBs[2*i+1].y << ", "
+                                        << leaf_AABBs[2*i+1].z << std::endl;
             outfile << std::endl;
         }
     }

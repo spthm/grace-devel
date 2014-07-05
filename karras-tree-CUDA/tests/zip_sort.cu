@@ -43,10 +43,8 @@ public:
 
 int main(int argc, char* argv[]) {
 
-    typedef grace::Vector3<float> Vector3f;
     cudaEvent_t start, stop;
     float elapsed_time;
-    float total_time_vector3 = 0;
     float total_time_float4 = 0;
     float total_time_zip = 0;
     float total_time_gather = 0;
@@ -54,19 +52,17 @@ int main(int argc, char* argv[]) {
 
     /* Generate N random positions, i.e. 3*N random floats in [0,1) */
 
-    unsigned int N;
-    unsigned int Niter;
+    unsigned int N = 1000000;
+    unsigned int Niter = 100;
     if (argc > 1)
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
-    else
-        N = 1000000;
     if (argc > 2)
         Niter = (unsigned int) std::strtol(argv[2], NULL, 10);
-    else
-        Niter = 10000;
+    
     std::cout << "Will generate " << N << " random points for " << Niter
-              << " iteration" << ((Niter > 1) ? "s" : "") << "...\n"
+              << " iteration" << ((Niter > 1) ? "s" : "") << "..."
               << std::endl;
+    std::cout << std::endl;
 
     thrust::host_vector<float> h_x_centres(N);
     thrust::host_vector<float> h_y_centres(N);
@@ -86,16 +82,6 @@ int main(int argc, char* argv[]) {
                       random_pos_functor(2) );
 
 
-    /* Copy centres into a host vector of Vector3s. */
-
-    thrust::host_vector<Vector3f> h_centres3(N);
-    for (int i=0; i<N; i++) {
-        h_centres3[i].x = h_x_centres[i];
-        h_centres3[i].y = h_y_centres[i];
-        h_centres3[i].z = h_z_centres[i];
-    }
-
-
     /* Copy centres into a host vector of float4s. */
 
     thrust::host_vector<float4> h_centres4(N);
@@ -109,15 +95,12 @@ int main(int argc, char* argv[]) {
 
     /* Generate the Morton key of each position. */
 
-    thrust::device_vector<float> d_x_centres = h_x_centres;
-    thrust::device_vector<float> d_y_centres = h_y_centres;
-    thrust::device_vector<float> d_z_centres = h_z_centres;
+    thrust::device_vector<float4> d_centres4 = h_centres4;
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    Vector3f bottom(0., 0., 0.);
-    Vector3f top(1., 1., 1.);
+    float3 bottom = make_float3(0., 0., 0.);
+    float3 top = make_float3(1., 1., 1.);
 
-    grace::morton_keys(d_x_centres, d_y_centres, d_z_centres,
-                       d_keys, bottom, top);
+    grace::morton_keys(d_keys, d_centres4, top, bottom);
 
     thrust::host_vector<float> h_keys = d_keys;
 
@@ -128,34 +111,8 @@ int main(int argc, char* argv[]) {
      */
 
 
-    /* Measure time for sorting the Vector3. */
-
-    thrust::device_vector<Vector3f> d_centres3 = h_centres3;
-    std::cout << "Running Vector3 sort iterations..." << std::endl;
-    for (int i=0; i<Niter; i++) {
-        cudaEventCreate(&start);
-        cudaEventCreate(&stop);
-        cudaEventRecord(start, 0);
-
-        thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_centres3.begin());
-
-        cudaEventRecord(stop, 0);
-        cudaEventSynchronize(stop);
-
-        cudaEventElapsedTime(&elapsed_time, start, stop);
-        total_time_vector3 += elapsed_time;
-
-        cudaEventDestroy(start);
-        cudaEventDestroy(stop);
-
-        d_centres3 = h_centres3;
-        d_keys = h_keys;
-    }
-
-
     /* Measure time for sorting the float4. */
 
-    thrust::device_vector<float4> d_centres4 = h_centres4;
     std::cout << "Running float4 sort iterations..." << std::endl;
     for (int i=0; i<Niter; i++) {
         cudaEventCreate(&start);
@@ -180,6 +137,9 @@ int main(int argc, char* argv[]) {
 
     /* Measure time for sorting the  zip iterator. */
 
+    thrust::device_vector<float> d_x_centres = h_x_centres;
+    thrust::device_vector<float> d_y_centres = h_y_centres;
+    thrust::device_vector<float> d_z_centres = h_z_centres;
     std::cout << "Running zip iterator sort iterations..." << std::endl;
     for (int i=0; i<Niter; i++) {
         cudaEventCreate(&start);
@@ -257,8 +217,6 @@ int main(int argc, char* argv[]) {
         d_keys = h_keys;
     }
 
-    std::cout << "Mean time taken for Vector3:            "
-              << total_time_vector3 / (float) Niter << " ms." << std::endl;
     std::cout << "Mean time taken for float4:             "
               << total_time_float4 / (float) Niter << " ms." << std::endl;
     std::cout << "Mean time taken for zip iterator:       "
