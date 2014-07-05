@@ -62,12 +62,24 @@ void sort_map(thrust::device_vector<T>& d_unsorted,
     thrust::sort_by_key(d_tmp.begin(), d_tmp.end(), d_map.begin());
 }
 
-template <typename UInteger, typename Ta, typename Tb>
-void sort_by_key(thrust::device_vector<UInteger>& d_keys,
+template <typename T_key, typename Ta, typename Tb>
+void sort_by_key(thrust::host_vector<T_key>& h_keys,
+                 thrust::host_vector<Ta>& h_a,
+                 thrust::host_vector<Tb>& h_b)
+{
+    thrust::host_vector<T_key> h_keys2 = h_keys;
+
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_a.begin());
+
+    thrust::sort_by_key(h_keys2.begin(), h_keys2.end(), h_b.begin());
+}
+
+template <typename T_key, typename Ta, typename Tb>
+void sort_by_key(thrust::device_vector<T_key>& d_keys,
                  thrust::device_vector<Ta>& d_a,
                  thrust::device_vector<Tb>& d_b)
 {
-    thrust::device_vector<UInteger> d_keys2 = d_keys;
+    thrust::device_vector<T_key> d_keys2 = d_keys;
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_a.begin());
 

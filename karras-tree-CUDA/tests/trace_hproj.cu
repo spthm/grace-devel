@@ -18,9 +18,12 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 250000;
+    unsigned int max_per_leaf = 32;
 
     if (argc > 1)
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
+    if (argc > 2)
+        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
 
     unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
 
@@ -48,7 +51,7 @@ int main(int argc, char* argv[]) {
     }
 
     std::cout << "Will trace " << N_rays << " rays through " << N
-              << " particles..." << std::endl;
+              << " particles." << std::endl;
     std::cout << std::endl;
 
 { // Device code.
@@ -73,7 +76,8 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys);
+    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+    grace::compact_nodes(d_nodes, d_leaves);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
     /* Generate the rays, all emitted in +z direction from a box side. */
@@ -129,6 +133,7 @@ int main(int argc, char* argv[]) {
     grace::trace_property<float>(d_rays,
                                  d_traced_pmass,
                                  d_nodes,
+                                 d_leaves,
                                  d_spheres_xyzr,
                                  d_pmasses);
 

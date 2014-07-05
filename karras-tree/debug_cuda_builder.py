@@ -49,13 +49,19 @@ with open("../karras-tree-CUDA/tests/outdata/nodes.txt") as f:
         line = f.readline() # Next index if it exists, otherwise blank.
 
 leaf_indices = []
+leaf_start_indices = []
+leaf_sphere_counts = []
 leaf_parent_indices = []
 leaf_AABBs_bottom = []
 leaf_AABBs_top = []
 with open("../karras-tree-CUDA/tests/outdata/leaves.txt") as f:
+    max_per_leaf = int(f.readline().split()[4])
+    f.readline() # Blank
     line = f.readline()
     while line:
         leaf_indices.append(int(line.split()[1]))
+        leaf_start_indices.append(int(f.readline().split()[2]))
+        leaf_sphere_counts.append(int(f.readline().split()[2]))
         leaf_parent_indices.append(int(f.readline().split()[1]))
         leaf_AABBs_bottom.append([np.float32(float_string.rstrip(','))
                                   for float_string
@@ -74,10 +80,11 @@ print "Number of unsorted keys:         %d" % (len(unsorted_keys), )
 print "Number of sorted keys:           %d" % (len(sorted_keys), )
 print "Number of nodes:                 %d" % (len(node_indices), )
 print "Number of leaves:                %d" % (len(leaf_indices), )
+print "Max. spheres per leaf:           %d" % (max_per_leaf, )
 print
 
 
-binary_tree = BinRadixTree(spheres)
+binary_tree = BinRadixTree(spheres, max_per_leaf)
 
 for (i, key) in enumerate(binary_tree.keys):
     cuda_key = unsorted_keys[i]
@@ -86,7 +93,7 @@ for (i, key) in enumerate(binary_tree.keys):
         print "{0:032b}".format(key) + " != {0:032b}".format(cuda_key)
         print "Differ at bit %d." %(common_prefix(key, cuda_key),)
         print "(x, y, z): (%.9f, %.9f, %.9f)" \
-            %(spheres[i][0], spheres[i][1], spheres[i][2])
+              %(spheres[i][0], spheres[i][1], spheres[i][2])
         print
 
 binary_tree.sort_primitives_by_keys()
@@ -99,6 +106,8 @@ for (i, key) in enumerate(binary_tree.keys):
         print
 
 binary_tree.build()
+if max_per_leaf > 1:
+    binary_tree.compact()
 for (i, node) in enumerate(binary_tree.nodes):
     if node.index != node_indices[i]:
         print "Python node index [%d] != CUDA node index [%d]." %(i, i)
@@ -116,7 +125,7 @@ for (i, node) in enumerate(binary_tree.nodes):
         # We should be at the root node.
         if node_parent_indices[i] != 0:
             print "Python (root) node [%d].  CUDA node parent [%d] %d != 0." \
-                %(i, node_parent_indices[i], i)
+                  %(i, node_parent_indices[i], i)
             print
     else:
         if node.parent.index != node_parent_indices[i]:
@@ -152,38 +161,50 @@ for (i, leaf) in enumerate(binary_tree.leaves):
         print "%d != %d" %(leaf.index, leaf_indices[i])
         print
 
+    if leaf.start_index != leaf_start_indices[i]:
+        print "Python leaf start index [%d] != CUDA leaf start index [%d]." \
+              %(i, i)
+        print "%d != %d" %(leaf.start_index, leaf_start_indices[i])
+        print
+
+    if leaf.span != leaf_sphere_counts[i]:
+        print "Python leaf span [%d] != CUDA leaf span [%d]." % (i, i)
+        print "%d != %d" % (leaf.span, leaf_sphere_counts[i])
+        print
+
     if leaf.parent.index != leaf_parent_indices[i]:
         print "Python leaf parent index [%d] != CUDA leaf parent index [%d]." \
-            %(i, i)
+              %(i, i)
         print "%d != %d" % (leaf.parent.index, leaf_parent_indices[i])
 
 binary_tree.find_AABBs()
+AABB_tolerance = 1E-6
 for (i, node) in enumerate(binary_tree.nodes):
-    AABB_diffs = np.array(node.AABB.bottom) - np.array(node_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-6:
-        print "Python node bottom AABB [%d] != CUDA node bottom AABB [%d]." \
-            %(i, i)
-        print "%r != \n%r" %(list(node.AABB.bottom), node_AABBs_bottom[i])
-        print
-
     AABB_diffs = np.array(node.AABB.top) - np.array(node_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python node top AABB [%d] != CUDA node top AABB [%d]." \
-            %(i, i)
+              %(i, i)
         print "%r != \n%r" %(list(node.AABB.top), node_AABBs_top[i])
         print
 
-for (i, leaf) in enumerate(binary_tree.leaves):
-    AABB_diffs = np.array(leaf.AABB.bottom) - np.array(leaf_AABBs_bottom[i])
-    if max(abs(AABB_diffs)) > 1E-6:
-        print "Python leaf bottom AABB [%d] != CUDA leaf bottom AABB [%d]." \
-            %(i, i)
-        print "%r != \n%r" %(list(leaf.AABB.bottom), leaf_AABBs_bottom[i])
+    AABB_diffs = np.array(node.AABB.bottom) - np.array(node_AABBs_bottom[i])
+    if max(abs(AABB_diffs)) > AABB_tolerance:
+        print "Python node bottom AABB [%d] != CUDA node bottom AABB [%d]." \
+              %(i, i)
+        print "%r != \n%r" %(list(node.AABB.bottom), node_AABBs_bottom[i])
         print
 
+for (i, leaf) in enumerate(binary_tree.leaves):
     AABB_diffs = np.array(leaf.AABB.top) - np.array(leaf_AABBs_top[i])
-    if max(abs(AABB_diffs)) > 1E-6:
+    if max(abs(AABB_diffs)) > AABB_tolerance:
         print "Python leaf top AABB [%d] != CUDA leaf top AABB [%d]." \
             %(i, i)
         print "%r != \n%r" %(list(leaf.AABB.top), leaf_AABBs_top[i])
+        print
+
+    AABB_diffs = np.array(leaf.AABB.bottom) - np.array(leaf_AABBs_bottom[i])
+    if max(abs(AABB_diffs)) > AABB_tolerance:
+        print "Python leaf bottom AABB [%d] != CUDA leaf bottom AABB [%d]." \
+              %(i, i)
+        print "%r != \n%r" %(list(leaf.AABB.bottom), leaf_AABBs_bottom[i])
         print

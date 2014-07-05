@@ -321,7 +321,7 @@ class BinRadixTree(object):
 
             right_index = node.right.index
             if node.right.is_leaf():
-                new_index = right_index -leaf_shifts[right_index]
+                new_index = right_index - leaf_shifts[right_index]
                 assert(node.right is self.leaves[new_index])
             else:
                 # NB: right_index-1 == left_index.

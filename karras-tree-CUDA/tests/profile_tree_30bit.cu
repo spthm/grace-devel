@@ -21,6 +21,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int device_ID = 0;
+    unsigned int max_per_leaf = 100;
     unsigned int N_iter = 100;
     unsigned int start = 20;
     unsigned int end = 20;
@@ -30,23 +31,26 @@ int main(int argc, char* argv[]) {
         device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_iter = (unsigned int) std::strtol(argv[2], NULL, 10);
+        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
-        end = (unsigned int) std::strtol(argv[3], NULL, 10);
+        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+    }
+    if (argc > 4) {
+        end = (unsigned int) std::strtol(argv[4], NULL, 10);
         end = min(28, max(5, end));
         if (end < start)
             start = end;
     }
-    if (argc > 4) {
-        end = (unsigned int) std::strtol(argv[4], NULL, 10);
+    if (argc > 5) {
+        end = (unsigned int) std::strtol(argv[5], NULL, 10);
         // Keep levels in [5, 28].
         end = min(28, max(5, end));
-        start = (unsigned int) std::strtol(argv[3], NULL, 10);
+        start = (unsigned int) std::strtol(argv[4], NULL, 10);
         start = min(28, max(5, start));
     }
-    if (argc > 5) {
-        seed_factor = (unsigned int) std::strtol(argv[5], NULL, 10);
+    if (argc > 6) {
+        seed_factor = (unsigned int) std::strtol(argv[6], NULL, 10);
     }
 
 
@@ -66,6 +70,7 @@ int main(int argc, char* argv[]) {
     std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
     std::cout << "Starting tree depth:        " << start << std::endl;
     std::cout << "Finishing tree depth:       " << end << std::endl;
+    std::cout << "Max points per leaf:        " << max_per_leaf << std::endl;
     std::cout << "Iterations per tree:        " << N_iter << std::endl;
     std::cout << "Random points' seed factor: " << seed_factor << std::endl;
     std::cout << std::endl << std::endl;
@@ -98,7 +103,7 @@ int main(int argc, char* argv[]) {
         cudaEvent_t part_start, part_stop;
         cudaEvent_t tot_start, tot_stop;
         float part_elapsed;
-        double all_tot, morton_tot, sort_tot, tree_tot, aabb_tot;
+        double all_tot, morton_tot, sort_tot, tree_tot, compact_tot, aabb_tot;
         cudaEventCreate(&part_start);
         cudaEventCreate(&part_stop);
         cudaEventCreate(&tot_start);
@@ -130,11 +135,18 @@ int main(int argc, char* argv[]) {
             grace::Leaves d_leaves(N);
 
             cudaEventRecord(part_start);
-            grace::build_nodes(d_nodes, d_leaves, d_keys);
+            grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             tree_tot += part_elapsed;
+
+            cudaEventRecord(part_start);
+            grace::compact_nodes(d_nodes, d_leaves);
+            cudaEventRecord(part_stop);
+            cudaEventSynchronize(part_stop);
+            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+            compact_tot += part_elapsed;
 
             cudaEventRecord(part_start);
             grace::find_AABBs(d_nodes, d_leaves,
@@ -152,9 +164,10 @@ int main(int argc, char* argv[]) {
         }
 
         std::cout << "Will generate:" << std::endl;
-        std::cout << "    i)  A tree from " << N << " random points." << std::endl;
-        std::cout << "    ii) A fully-balanced tree with " << levels
-                << " levels and " << N << " leaves." << std::endl;
+        std::cout << "    i)  A tree from " << N << " random points."
+                  << std::endl;
+        std::cout << "    ii) AABBs for a fully-balanced tree with " << levels
+                  << " levels and " << N << " leaves." << std::endl;
 
         std::cout << std::endl;
 
@@ -169,6 +182,10 @@ int main(int argc, char* argv[]) {
         std::cout << "Time for hierarchy generation:    ";
         std::cout.width(7);
         std::cout << tree_tot/N_iter << " ms." << std::endl;
+
+        std::cout << "Time for hierarchy compaction:    ";
+        std::cout.width(7);
+        std::cout << compact_tot/N_iter << " ms." << std::endl;
 
         std::cout << "Time for calculating AABBs:       ";
         std::cout.width(7);
@@ -194,11 +211,24 @@ int main(int argc, char* argv[]) {
             h_nodes.hierarchy[i_left].w = i_left - 1;
 
             h_nodes.hierarchy[i_right].x = i_right + N-1;
-            h_nodes.hierarchy[i_right].y = i_right + 1 +N-1;
+            h_nodes.hierarchy[i_right].y = i_right + 1 + N-1;
             h_nodes.hierarchy[i_right].w = i_right + 1;
 
-            h_leaves.parent[i_left-1] = h_leaves.parent[i_left] = i_left;
-            h_leaves.parent[i_right] = h_leaves.parent[i_right+1] = i_right;
+            h_leaves.indices[i_left-1].x = i_left-1;
+            h_leaves.indices[i_left-1].y = 1;
+            h_leaves.indices[i_left-1].z = i_left;
+
+            h_leaves.indices[i_left].x = i_left;
+            h_leaves.indices[i_left].y = 1;
+            h_leaves.indices[i_left].z = i_left;
+
+            h_leaves.indices[i_right].x = i_right;
+            h_leaves.indices[i_right].y = 1;
+            h_leaves.indices[i_right].z = i_right;
+
+            h_leaves.indices[i_right+1].x = i_right+1;
+            h_leaves.indices[i_right+1].y = 1;
+            h_leaves.indices[i_right+1].z = i_right;
         }
 
         // Set up all except bottom and top levels, starting at bottom-but-one.
