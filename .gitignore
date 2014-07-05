@@ -1,6 +1,5 @@
 *.o
 *.mod
-ray_test
-ray_test_float
+*.out
 *.pyc
 *.DS_Store
