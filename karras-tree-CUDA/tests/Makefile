@@ -58,3 +58,6 @@ $(OUT_DIR):
 
 clean:
 	-rm -r bin/*.out
+
+distclean: clean
+	-rm -r bin
