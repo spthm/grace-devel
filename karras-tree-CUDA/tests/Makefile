@@ -2,6 +2,7 @@ NVCC= nvcc
 CUDARCH= -arch=sm_20
 NVCCFLAGS= $(CUDARCH)
 NVCCLIBS= -L /home/spth/usr/local/cuda/lib64 -lcuda -lcurand
+#NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
 
 OUT_DIR= bin
 
