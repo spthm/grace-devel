@@ -4,13 +4,13 @@ from builder import BinRadixTree
 from Nodes import Node
 from trace import Ray
 
-with open("../karras-tree-CUDA/tests/indata/spheredata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/spheredata.txt") as f:
     spheres = [[float(n) for n in line.split()] for line in f]
 
-with open("../karras-tree-CUDA/tests/indata/raydata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/raydata.txt") as f:
     rays = [Ray(*[float(n) for n in line.split()]) for line in f]
 
-with open("../karras-tree-CUDA/tests/outdata/hitdata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/outdata/hitdata.txt") as f:
     hitdata = [float(line) for line in f]
 
 binary_tree = BinRadixTree.from_primitives(spheres)

@@ -5,18 +5,12 @@
 
 namespace grace {
 
-struct Box
-{
-    float tx, ty, tz;
-    float bx, by, bz;
-};
-
 class Nodes
 {
 public:
     // A 32-bit int allows for up to indices up to +2,147,483,647 > 1024^3.
-    // Since we likely can't fit more than 1024^3 particles on the GPU, int
-    // - which is 32-bit on relevant platforms - should be sufficient for the
+    // Since we likely can't fit more than 1024^3 particles on the GPU, int ---
+    // which is 32-bit on relevant platforms --- should be sufficient for the
     // indices.
     // We could use uint and set the root node to 1.  Then common_prefix_length
     // may return 0 for out-of-range results, rather than -1.
@@ -31,10 +25,22 @@ public:
     // Currently used only when verifying correct construction.
     thrust::device_vector<unsigned int> level;
 
-    thrust::device_vector<Box> AABB;
+    // AABB[3*node_ID + 0].x = left_bx
+    //                    .y = left_tx
+    //                    .z = right_bx
+    //                    .w = right_tx
+    // AABB[3*node_ID + 1].x = left_by
+    //                    .y = left_ty
+    //                    .z = right_by
+    //                    .w = right_ty
+    // AABB[3*node_ID + 2].x = left_bz
+    //                    .y = left_tz
+    //                    .z = right_bz
+    //                    .w = right_tz
+    thrust::device_vector<float4> AABB;
 
     Nodes(unsigned int N_nodes) : hierarchy(N_nodes), level(N_nodes),
-                                  AABB(N_nodes) {}
+                                  AABB(3*N_nodes) {}
 };
 
 class Leaves
@@ -43,9 +49,7 @@ public:
     // indices.x = first; indices.y = span; indices.z = parent; indices.w = pad.
     thrust::device_vector<int4> indices;
 
-    thrust::device_vector<Box> AABB;
-
-    Leaves(unsigned int N_leaves) : indices(N_leaves), AABB(N_leaves) {}
+    Leaves(unsigned int N_leaves) : indices(N_leaves) {}
 };
 
 class H_Nodes
@@ -53,19 +57,18 @@ class H_Nodes
 public:
     thrust::host_vector<int4> hierarchy;
     thrust::host_vector<unsigned int> level;
-    thrust::host_vector<Box> AABB;
+    thrust::host_vector<float4> AABB;
 
     H_Nodes(unsigned int N_nodes) : hierarchy(N_nodes), level(N_nodes),
-                                    AABB(N_nodes) {}
+                                    AABB(3*N_nodes) {}
 };
 
 class H_Leaves
 {
 public:
     thrust::host_vector<int4> indices;
-    thrust::host_vector<Box> AABB;
 
-    H_Leaves(unsigned int N_leaves) : indices(N_leaves), AABB(N_leaves) {}
+    H_Leaves(unsigned int N_leaves) : indices(N_leaves) {}
 };
 
 } //namespace grace

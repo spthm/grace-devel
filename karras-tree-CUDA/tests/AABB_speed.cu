@@ -13,7 +13,12 @@
 #include "../kernel_config.h"
 
 __host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
-                                          const grace::Box& AABB)
+                                          const float bx,
+                                          const float by,
+                                          const float bz,
+                                          const float tx,
+                                          const float ty,
+                                          const float tz)
 {
     float rx = ray.dx;
     float ry = ray.dy;
@@ -23,13 +28,13 @@ __host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
     float s2bx, s2by, s2bz; // Vector from ray start to lower cell corner.
     float s2tx, s2ty, s2tz; // Vector from ray start to upper cell corner.
 
-    s2bx = AABB.bx - ray.ox;
-    s2by = AABB.by - ray.oy;
-    s2bz = AABB.bz - ray.oz;
+    s2bx = bx - ray.ox;
+    s2by = by - ray.oy;
+    s2bz = bz - ray.oz;
 
-    s2tx = AABB.tx - ray.ox;
-    s2ty = AABB.ty - ray.oy;
-    s2tz = AABB.tz - ray.oz;
+    s2tx = tx - ray.ox;
+    s2ty = ty - ray.oy;
+    s2tz = tz - ray.oz;
 
     switch(ray.dclass)
     {
@@ -176,11 +181,12 @@ __host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
 }
 
 __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
-                                         const grace::Box* AABBs,
+                                         const float4* AABBs,
                                          const int N_rays,
                                          const int N_AABBs,
                                          unsigned int* ray_hits)
 {
+    float4 AABBb, AABBt;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_rays)
@@ -189,7 +195,11 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
         grace::RaySlope slope = grace::ray_slope(ray);
 
         for (int i=0; i<N_AABBs; i++) {
-            if (grace::AABB_hit_eisemann(ray, slope, AABBs[i]))
+            AABBb = AABBs[3*i + 0];
+            AABBt = AABBs[3*i + 1];
+            if (grace::AABB_hit_eisemann(ray, slope,
+                                         AABBb.x, AABBb.y, AABBb.z,
+                                         AABBt.x, AABBt.y, AABBt.z))
                 ray_hits[tid]++;
         }
 
@@ -198,11 +208,12 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
 }
 
 __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
-                                        const grace::Box* AABBs,
+                                        const float4* AABBs,
                                         const int N_rays,
                                         const int N_AABBs,
                                         unsigned int* ray_hits)
 {
+    float4 AABBb, AABBt;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_rays)
@@ -210,7 +221,11 @@ __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
         grace::Ray ray = rays[tid];
 
         for (int i=0; i<N_AABBs; i++) {
-            if (AABB_hit_plucker(ray, AABBs[i]))
+            AABBb = AABBs[3*i + 0];
+            AABBt = AABBs[3*i + 1];
+            if (AABB_hit_plucker(ray,
+                                 AABBb.x, AABBb.y, AABBb.z,
+                                 AABBt.x, AABBt.y, AABBt.z))
                 ray_hits[tid]++;
         }
 
@@ -237,7 +252,7 @@ int main(int argc, char* argv[]) {
      */
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<grace::Box> h_AABBs(N_AABBs);
+    thrust::host_vector<float4> h_AABBs(N_AABBs);
     thrust::host_vector<unsigned int> h_keys(N_rays);
 
     grace::random_float_functor rng(-1.0f, 1.0f);
@@ -288,17 +303,17 @@ int main(int argc, char* argv[]) {
         z0 = rng(3*N_rays + 6*i+4);
         z1 = rng(3*N_rays + 6*i+5);
 
-        h_AABBs[i].tx = max(x0, x1);
-        h_AABBs[i].ty = max(y0, y1);
-        h_AABBs[i].tz = max(z0, z1);
+        h_AABBs[2*i +0].x = min(x0, x1);
+        h_AABBs[2*i +0].y = min(y0, y1);
+        h_AABBs[2*i +0].z = min(z0, z1);
 
-        h_AABBs[i].bx = min(x0, x1);
-        h_AABBs[i].by = min(y0, y1);
-        h_AABBs[i].bz = min(z0, z1);
+        h_AABBs[2*i +1].x = max(x0, x1);
+        h_AABBs[2*i +1].y = max(y0, y1);
+        h_AABBs[2*i +1].z = max(z0, z1);
     }
 
     thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<grace::Box> d_AABBs = h_AABBs;
+    thrust::device_vector<float4> d_AABBs = h_AABBs;
     thrust::device_vector<unsigned int> d_ray_hits(N_rays);
     thrust::host_vector<unsigned int> h_ray_hits(N_rays);
 
@@ -333,7 +348,11 @@ int main(int argc, char* argv[]) {
         grace::RaySlope slope = grace::ray_slope(ray);
 
         for (int j=0; j<N_AABBs; j++) {
-            if (AABB_hit_eisemann(ray, slope, h_AABBs[j]))
+            float4 AABBb = h_AABBs[2*i + 0];
+            float4 AABBt = h_AABBs[2*i + 1];
+            if (AABB_hit_eisemann(ray, slope,
+                                  AABBb.x, AABBb.y, AABBb.z,
+                                  AABBt.x, AABBt.y, AABBt.z))
                 h_ray_hits[i]++;
         }
     }
@@ -370,7 +389,11 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_rays; i++) {
         grace::Ray ray = h_rays[i];
         for (int j=0; j<N_AABBs; j++) {
-            if (AABB_hit_plucker(ray, h_AABBs[j]))
+            float4 AABBb = h_AABBs[2*i + 0];
+            float4 AABBt = h_AABBs[2*i + 1];
+            if (AABB_hit_plucker(ray,
+                                 AABBb.x, AABBb.y, AABBb.z,
+                                 AABBt.x, AABBt.y, AABBt.z))
                 h_ray_hits[i]++;
         }
     }

@@ -77,9 +77,13 @@ __host__ __device__ RaySlope ray_slope(const Ray& ray)
 
 __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
                                            const RaySlope& slope,
-                                           const Box& node_AABB)
+                                           const float bx,
+                                           const float by,
+                                           const float bz,
+                                           const float tx,
+                                           const float ty,
+                                           const float tz)
 {
-
     float ox = ray.ox;
     float oy = ray.oy;
     float oz = ray.oz;
@@ -89,13 +93,6 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
     float dz = ray.dz;
 
     float l = ray.length;
-
-    float tx = node_AABB.tx;
-    float ty = node_AABB.ty;
-    float tz = node_AABB.tz;
-    float bx = node_AABB.bx;
-    float by = node_AABB.by;
-    float bz = node_AABB.bz;
 
     float xbyy = slope.xbyy;
     float ybyx = slope.ybyx;
@@ -324,7 +321,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_rays,
                                        unsigned int* hit_counts,
                                        const int4* nodes,
-                                       const Box* node_AABBs,
+                                       const float4* node_AABBs,
                                        size_t n_nodes,
                                        const int4* leaves,
                                        const Float4* spheres,
@@ -333,7 +330,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     int node_index, ray_index, stack_index;
     unsigned int ray_hit_count;
     int4 node;
-    bool is_leaf;
+    float4 AABBx, AABBy, AABBz;
+    bool is_leaf, l_hit, r_hit;
     // Unused in this kernel.
     float b, d;
     // Including leaves there are 31 levels for 30-bit keys.
@@ -357,28 +355,47 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                if (AABB_hit_eisemann(ray, slope,
-                                      node_AABBs[node_index]))
+                node = nodes[node_index];
+                AABBx = node_AABBs[3*node_index + 0];
+                AABBy = node_AABBs[3*node_index + 1];
+                AABBz = node_AABBs[3*node_index + 2];
+                l_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.x, AABBy.x, AABBz.x,
+                                          AABBx.y, AABBy.y, AABBz.y);
+                r_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.z, AABBy.z, AABBz.z,
+                                          AABBx.w, AABBy.w, AABBz.w);
+
+                // Likely results will be the same.
+                if (l_hit == r_hit)
                 {
-                    // Hit.  Traverse to left child and push right to stack.
-                    node = nodes[node_index];
-                    stack_index++;
-                    trace_stack[stack_index] = node.y;
-
-                    node_index = node.x;
-
+                    if (l_hit)
+                    {
+                        // Traverse to left child and push right to stack.
+                        node_index = node.x;
+                        stack_index++;
+                        trace_stack[stack_index] = node.y;
+                    }
+                    else
+                    {
+                        // Neither hit.  Pop stack.
+                        node_index = trace_stack[stack_index];
+                        stack_index--;
+                    }
                 }
                 else
                 {
-                    // Missed.  Pop stack.
-                    node_index = trace_stack[stack_index];
-                    stack_index--;
+                    // Traverse to the only node that was hit.
+                    if (l_hit)
+                        node_index = node.x;
+                    else
+                        node_index = node.y;
                 }
 
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)
@@ -408,7 +425,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const size_t n_rays,
                                       Tout* out_data,
                                       const int4* nodes,
-                                      const Box* node_AABBs,
+                                      const float4* node_AABBs,
                                       const size_t n_nodes,
                                       const int4* leaves,
                                       const Float4* spheres,
@@ -417,7 +434,8 @@ __global__ void trace_property_kernel(const Ray* rays,
 {
     int node_index, ray_index, stack_index, b_index;
     int4 node;
-    bool is_leaf;
+    float4 AABBx, AABBy, AABBz;
+    bool is_leaf, l_hit, r_hit;
     // Impact parameter and distance to intersection.
     float b, d;
     // Sphere radius and 1/radius.
@@ -443,26 +461,44 @@ __global__ void trace_property_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                if (AABB_hit_eisemann(ray, slope,
-                                      node_AABBs[node_index]))
+                node = nodes[node_index];
+                AABBx = node_AABBs[3*node_index + 0];
+                AABBy = node_AABBs[3*node_index + 1];
+                AABBz = node_AABBs[3*node_index + 2];
+                l_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.x, AABBy.x, AABBz.x,
+                                          AABBx.y, AABBy.y, AABBz.y);
+                r_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.z, AABBy.z, AABBz.z,
+                                          AABBx.w, AABBy.w, AABBz.w);
+
+                if (l_hit == r_hit)
                 {
-                    node = nodes[node_index];
-                    stack_index++;
-                    trace_stack[stack_index] = node.y;
-
-                    node_index = node.x;
-
+                    if (l_hit)
+                    {
+                        node_index = node.x;
+                        stack_index++;
+                        trace_stack[stack_index] = node.y;
+                    }
+                    else
+                    {
+                        // Neither hit.  Pop stack.
+                        node_index = trace_stack[stack_index];
+                        stack_index--;
+                    }
                 }
                 else
                 {
-                    node_index = trace_stack[stack_index];
-                    stack_index--;
+                    if (l_hit)
+                        node_index = node.x;
+                    else
+                        node_index = node.y;
                 }
 
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)
@@ -507,7 +543,7 @@ __global__ void trace_kernel(const Ray* rays,
                              Float* hit_distances,
                              const unsigned int* ray_offsets,
                              const int4* nodes,
-                             const Box* node_AABBs,
+                             const float4* node_AABBs,
                              const size_t n_nodes,
                              const int4* leaves,
                              const Float4* spheres,
@@ -517,7 +553,8 @@ __global__ void trace_kernel(const Ray* rays,
     int node_index, ray_index, stack_index, b_index;
     unsigned int out_index;
     int4 node;
-    bool is_leaf;
+    float4 AABBx, AABBy, AABBz;
+    bool is_leaf, l_hit, r_hit;
     float b, d;
     float r, ir;
     int trace_stack[31];
@@ -539,26 +576,44 @@ __global__ void trace_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                if (AABB_hit_eisemann(ray, slope,
-                                      node_AABBs[node_index]))
+                node = nodes[node_index];
+                AABBx = node_AABBs[3*node_index + 0];
+                AABBy = node_AABBs[3*node_index + 1];
+                AABBz = node_AABBs[3*node_index + 2];
+                l_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.x, AABBy.x, AABBz.x,
+                                          AABBx.y, AABBy.y, AABBz.y);
+                r_hit = AABB_hit_eisemann(ray, slope,
+                                          AABBx.z, AABBy.z, AABBz.z,
+                                          AABBx.w, AABBy.w, AABBz.w);
+
+                if (l_hit == r_hit)
                 {
-                    node = nodes[node_index];
-                    stack_index++;
-                    trace_stack[stack_index] = node.y;
-
-                    node_index = node.x;
-
+                    if (l_hit)
+                    {
+                        node_index = node.x;
+                        stack_index++;
+                        trace_stack[stack_index] = node.y;
+                    }
+                    else
+                    {
+                        // Neither hit.  Pop stack.
+                        node_index = trace_stack[stack_index];
+                        stack_index--;
+                    }
                 }
                 else
                 {
-                    node_index = trace_stack[stack_index];
-                    stack_index--;
+                    if (l_hit)
+                        node_index = node.x;
+                    else
+                        node_index = node.y;
                 }
 
                 is_leaf = node_index >= n_nodes;
             }
 
-            if (is_leaf && stack_index >= 0)
+            while (is_leaf && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
                 for (int i=0; i<node.y; i++)

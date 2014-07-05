@@ -306,27 +306,28 @@ __global__ void shift_tree_indices(int4* nodes,
 
 template <typename Float, typename Float4>
 __global__ void find_AABBs_kernel(const int4* nodes,
-                                  volatile Box* node_AABBs,
+                                  volatile float4* AABBs,
                                   const int4* leaves,
-                                  volatile Box* leaf_AABBs,
                                   const size_t n_leaves,
                                   const Float4* spheres,
                                   unsigned int* g_flags)
 {
-    int tid, index, flag_index, block_lower, block_upper;
+    int tid, node_index, flag_index, block_lower, block_upper;
     int4 node;
     Float4 sphere;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
-    volatile Box *left_AABB, *right_AABB;
+    //volatile Box *left_AABB, *right_AABB;
     unsigned int* flags;
     bool first_arrival, in_block;
 
     // Use shared memory for the N-accessed flags when all children of a node
     // have been processed in the same block.
+    // NB: Shared memory must be initialized.
     __shared__ unsigned int sm_flags[AABB_THREADS_PER_BLOCK];
     sm_flags[threadIdx.x] = 0;
     __syncthreads();
+
     block_lower = blockIdx.x * AABB_THREADS_PER_BLOCK;
     block_upper = block_lower + AABB_THREADS_PER_BLOCK - 1;
 
@@ -338,12 +339,10 @@ __global__ void find_AABBs_kernel(const int4* nodes,
     {
         if (tid < n_leaves)
         {
-            // nodes and leaves are both saved as int4's.
-            // .x: first sphere index; .y: sphere count; .z: parent index.
             node = leaves[tid];
+            // Leaf => node.x = first sphere index.
             sphere = spheres[node.x];
 
-            // sphere.w == radius.
             x_max = sphere.x + sphere.w;
             y_max = sphere.y + sphere.w;
             z_max = sphere.z + sphere.w;
@@ -365,82 +364,108 @@ __global__ void find_AABBs_kernel(const int4* nodes,
                 z_min = min(z_min, sphere.z - sphere.w);
             }
 
-            leaf_AABBs[tid].tx = x_max;
-            leaf_AABBs[tid].ty = y_max;
-            leaf_AABBs[tid].tz = z_max;
-
-            leaf_AABBs[tid].bx = x_min;
-            leaf_AABBs[tid].by = y_min;
-            leaf_AABBs[tid].bz = z_min;
+            node_index = node.z;
+            node = nodes[node.z];
+            // Write the leaf's AABB to its *parent*.
+            // Would be simpler if e.g. node.w => leaf is a left child.
+            if (tid == node.x-(n_leaves-1))
+            {
+                // leaves[tid] is a left child; write left AABB.
+                AABBs[3*node_index + 0].x = x_min;
+                AABBs[3*node_index + 0].y = x_max;
+                AABBs[3*node_index + 1].x = y_min;
+                AABBs[3*node_index + 1].y = y_max;
+                AABBs[3*node_index + 2].x = z_min;
+                AABBs[3*node_index + 2].y = z_max;
+            }
+            else
+            {
+                // leaves[tid] is a right child; write right AABB.
+                AABBs[3*node_index + 0].z = x_min;
+                AABBs[3*node_index + 0].w = x_max;
+                AABBs[3*node_index + 1].z = y_min;
+                AABBs[3*node_index + 1].w = y_max;
+                AABBs[3*node_index + 2].z = z_min;
+                AABBs[3*node_index + 2].w = z_max;
+            }
 
             // Travel up the tree.  The second thread to reach a node writes
-            // its AABB based on those of its children.  The first exits the
-            // loop.
-            index = node.z;
-            // .x/.y: left/right child index; .z: parent index; .w: end index.
-            node = nodes[index];
-            in_block = (min(index, index + node.w) >= block_lower &&
-                        max(index, index + node.w) <= block_upper);
+            // its AABB to its parent.  The first exits the loop.
+            in_block = (min(node_index, node_index + node.w) >= block_lower &&
+                        max(node_index, node_index + node.w) <= block_upper);
 
             if (in_block) {
                 flags = sm_flags;
-                flag_index = index % AABB_THREADS_PER_BLOCK;
+                flag_index = node_index % AABB_THREADS_PER_BLOCK;
                 __threadfence_block();
             }
             else {
                 flags = g_flags;
-                flag_index = index;
+                flag_index = node_index;
                 __threadfence();
             }
 
             first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
             while (!first_arrival)
             {
-                if (node.x >= n_leaves-1)
-                    left_AABB = &leaf_AABBs[(node.x - (n_leaves-1))];
+                // Compute AABB of current node from AABBs of child nodes, i.e.
+                //   AABB.min = min(left_AABB.min, right_AABB.min)
+                //   AABB.max = max(left_AABB.max, right_AABB.max)
+                x_min = min(AABBs[3*node_index + 0].x,
+                            AABBs[3*node_index + 0].z);
+                x_max = max(AABBs[3*node_index + 0].y,
+                            AABBs[3*node_index + 0].w);
+                y_min = min(AABBs[3*node_index + 1].x,
+                            AABBs[3*node_index + 1].z);
+                y_max = max(AABBs[3*node_index + 1].y,
+                            AABBs[3*node_index + 1].w);
+                z_min = min(AABBs[3*node_index + 2].x,
+                            AABBs[3*node_index + 2].z);
+                z_max = max(AABBs[3*node_index + 2].y,
+                            AABBs[3*node_index + 2].w);
+
+                // Write the node's AABB to its *parent*.
+                if (node.w < 0)
+                {
+                    // Current node is a left child; write left AABB.
+                    AABBs[3*node.z + 0].x = x_min;
+                    AABBs[3*node.z + 0].y = x_max;
+                    AABBs[3*node.z + 1].x = y_min;
+                    AABBs[3*node.z + 1].y = y_max;
+                    AABBs[3*node.z + 2].x = z_min;
+                    AABBs[3*node.z + 2].y = z_max;
+                }
                 else
-                    left_AABB = &node_AABBs[node.x];
+                {
+                    // Current node is a right child; write right AABB.
+                    AABBs[3*node.z + 0].z = x_min;
+                    AABBs[3*node.z + 0].w = x_max;
+                    AABBs[3*node.z + 1].z = y_min;
+                    AABBs[3*node.z + 1].w = y_max;
+                    AABBs[3*node.z + 2].z = z_min;
+                    AABBs[3*node.z + 2].w = z_max;
+                }
 
-                if (node.y >= n_leaves-1)
-                    right_AABB = &leaf_AABBs[(node.y - (n_leaves-1))];
-                else
-                    right_AABB = &node_AABBs[node.y];
-
-                x_max = max(left_AABB->tx, right_AABB->tx);
-                y_max = max(left_AABB->ty, right_AABB->ty);
-                z_max = max(left_AABB->tz, right_AABB->tz);
-
-                x_min = min(left_AABB->bx, right_AABB->bx);
-                y_min = min(left_AABB->by, right_AABB->by);
-                z_min = min(left_AABB->bz, right_AABB->bz);
-
-                node_AABBs[index].tx = x_max;
-                node_AABBs[index].ty = y_max;
-                node_AABBs[index].tz = z_max;
-
-                node_AABBs[index].bx = x_min;
-                node_AABBs[index].by = y_min;
-                node_AABBs[index].bz = z_min;
-
-                if (index == 0) {
-                    // Root node processed, so all nodes processed.
-                    // Break rather than return because of the __syncthreads();
+                if (node.z == 0) {
+                    // Second and final AABB written for root node, so all
+                    // nodes processed.
+                    // Break rather than return because of the __syncthreads()
                     break;
                 }
 
-                index = node.z;
-                node = nodes[index];
-                in_block = (min(index, index + node.w) >= block_lower &&
-                            max(index, index + node.w) <= block_upper);
+                node_index = node.z;
+                node = nodes[node.z];
+                in_block = (min(node_index, node_index + node.w) >= block_lower &&
+                            max(node_index, node_index + node.w) <= block_upper);
 
                 if (in_block) {
                     flags = sm_flags;
-                    flag_index = index % AABB_THREADS_PER_BLOCK;
+                    flag_index = node_index % AABB_THREADS_PER_BLOCK;
                     __threadfence_block();
                 }
                 else {
                     flags = g_flags;
-                    flag_index = index;
+                    flag_index = node_index;
                     __threadfence();
                 }
 
@@ -506,7 +531,6 @@ void compact_nodes(Nodes& d_nodes,
     gpu::copy_valid_nodes(d_leaves.indices, N_nodes+1);
     gpu::copy_valid_levels(d_nodes.level, N_nodes);
     d_nodes.AABB.resize(d_nodes.hierarchy.size());
-    d_leaves.AABB.resize(d_leaves.indices.size());
 
     int blocks = min(MAX_BLOCKS, (int) ((N_nodes + SHIFTS_THREADS_PER_BLOCK-1)
                                         / SHIFTS_THREADS_PER_BLOCK));
@@ -535,7 +559,6 @@ void find_AABBs(Nodes& d_nodes,
         thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
         thrust::raw_pointer_cast(d_nodes.AABB.data()),
         thrust::raw_pointer_cast(d_leaves.indices.data()),
-        thrust::raw_pointer_cast(d_leaves.AABB.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_AABB_flags.data()));
