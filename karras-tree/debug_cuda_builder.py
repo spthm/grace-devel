@@ -4,20 +4,20 @@ import morton_keys
 from builder import BinRadixTree, LeafNode
 from bits import common_prefix
 
-with open("../karras-tree-CUDA/tests/indata/x_fdata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/x_fdata.txt") as f:
     xdata = [np.float32(line.strip()) for line in f]
-with open("../karras-tree-CUDA/tests/indata/y_fdata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/y_fdata.txt") as f:
     ydata = [np.float32(line.strip()) for line in f]
-with open("../karras-tree-CUDA/tests/indata/z_fdata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/z_fdata.txt") as f:
     zdata = [np.float32(line.strip()) for line in f]
-with open("../karras-tree-CUDA/tests/indata/r_fdata.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/indata/r_fdata.txt") as f:
     rdata = [np.float32(line.strip()) for line in f]
 
 spheres = np.array(zip(xdata, ydata, zdata, rdata), dtype=np.float32)
 
-with open("../karras-tree-CUDA/tests/outdata/unsorted_keys_base10.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/outdata/unsorted_keys_base10.txt") as f:
     unsorted_keys = [int(line.strip()) for line in f]
-with open("../karras-tree-CUDA/tests/outdata/sorted_keys_base10.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/outdata/sorted_keys_base10.txt") as f:
     sorted_keys = [int(line.strip()) for line in f]
 
 node_indices = []
@@ -29,7 +29,7 @@ right_indices = []
 node_parent_indices = []
 node_AABBs_bottom = []
 node_AABBs_top = []
-with open("../karras-tree-CUDA/tests/outdata/nodes.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/outdata/nodes.txt") as f:
     line = f.readline()
     while line:
         node_indices.append(int(line.split()[1]))
@@ -54,7 +54,7 @@ leaf_sphere_counts = []
 leaf_parent_indices = []
 leaf_AABBs_bottom = []
 leaf_AABBs_top = []
-with open("../karras-tree-CUDA/tests/outdata/leaves.txt") as f:
+with open("../karras-tree-CUDA/tests/bin/outdata/leaves.txt") as f:
     max_per_leaf = int(f.readline().split()[4])
     f.readline() # Blank
     line = f.readline()
