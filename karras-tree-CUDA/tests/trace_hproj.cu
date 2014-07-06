@@ -18,12 +18,9 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 250000;
-    unsigned int max_per_leaf = 32;
 
     if (argc > 1)
         N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
-    if (argc > 2)
-        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
 
     unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
 
@@ -76,8 +73,7 @@ int main(int argc, char* argv[]) {
     grace::Nodes d_nodes(N-1);
     grace::Leaves d_leaves(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
-    grace::compact_nodes(d_nodes, d_leaves);
+    grace::build_nodes(d_nodes, d_leaves, d_keys);
     grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
 
     /* Generate the rays, all emitted in +z direction from a box side. */
