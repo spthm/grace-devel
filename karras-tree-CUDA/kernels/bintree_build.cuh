@@ -530,7 +530,7 @@ void compact_nodes(Nodes& d_nodes,
     gpu::copy_valid_nodes(d_nodes.hierarchy, N_nodes);
     gpu::copy_valid_nodes(d_leaves.indices, N_nodes+1);
     gpu::copy_valid_levels(d_nodes.level, N_nodes);
-    d_nodes.AABB.resize(d_nodes.hierarchy.size());
+    d_nodes.AABB.resize(3*d_nodes.hierarchy.size());
 
     int blocks = min(MAX_BLOCKS, (int) ((N_nodes + SHIFTS_THREADS_PER_BLOCK-1)
                                         / SHIFTS_THREADS_PER_BLOCK));
