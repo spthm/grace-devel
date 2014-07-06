@@ -170,6 +170,7 @@ int main(int argc, char* argv[]) {
 
     h_nodes.hierarchy = d_nodes.hierarchy;
     h_nodes.level = d_nodes.level;
+    h_nodes.AABB = d_nodes.AABB;
 
     h_leaves.indices = d_leaves.indices;
 
@@ -181,7 +182,7 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_leaves-1; i++) {
         int left_i = h_nodes.hierarchy[i].x;
         int right_i = h_nodes.hierarchy[i].y;
-        
+
         // Left child's AABB.
         // NB: bot and top defined as float3s above.
         bot.x = h_nodes.AABB[3*i+0].x;
@@ -190,7 +191,7 @@ int main(int argc, char* argv[]) {
         top.x = h_nodes.AABB[3*i+0].y;
         top.y = h_nodes.AABB[3*i+1].y;
         top.z = h_nodes.AABB[3*i+2].y;
-        if (left_i <= N_leaves-1) {
+        if (left_i < N_leaves-1) {
             // Left is a node.
             node_AABBs[2*left_i+0] = bot;
             node_AABBs[2*left_i+1] = top;
@@ -209,13 +210,14 @@ int main(int argc, char* argv[]) {
         top.x = h_nodes.AABB[3*i+0].w;
         top.y = h_nodes.AABB[3*i+1].w;
         top.z = h_nodes.AABB[3*i+2].w;
-        if (right_i <= N_leaves-1) {
+        if (right_i < N_leaves-1) {
             // Right is a node.
             node_AABBs[2*right_i+0] = bot;
             node_AABBs[2*right_i+1] = top;
         }
         else {
             // Right is a leaf.
+            right_i -= (N_leaves-1);
             leaf_AABBs[2*right_i+0] = bot;
             leaf_AABBs[2*right_i+1] = top;
         }
