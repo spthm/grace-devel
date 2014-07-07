@@ -195,8 +195,8 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
         grace::RaySlope slope = grace::ray_slope(ray);
 
         for (int i=0; i<N_AABBs; i++) {
-            AABBb = AABBs[3*i + 0];
-            AABBt = AABBs[3*i + 1];
+            AABBb = AABBs[2*i + 0];
+            AABBt = AABBs[2*i + 1];
             if (grace::AABB_hit_eisemann(ray, slope,
                                          AABBb.x, AABBb.y, AABBb.z,
                                          AABBt.x, AABBt.y, AABBt.z))
@@ -221,8 +221,8 @@ __global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
         grace::Ray ray = rays[tid];
 
         for (int i=0; i<N_AABBs; i++) {
-            AABBb = AABBs[3*i + 0];
-            AABBt = AABBs[3*i + 1];
+            AABBb = AABBs[2*i + 0];
+            AABBt = AABBs[2*i + 1];
             if (AABB_hit_plucker(ray,
                                  AABBb.x, AABBb.y, AABBb.z,
                                  AABBt.x, AABBt.y, AABBt.z))
@@ -252,7 +252,7 @@ int main(int argc, char* argv[]) {
      */
 
     thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<float4> h_AABBs(N_AABBs);
+    thrust::host_vector<float4> h_AABBs(2*N_AABBs);
     thrust::host_vector<unsigned int> h_keys(N_rays);
 
     grace::random_float_functor rng(-1.0f, 1.0f);
@@ -348,8 +348,8 @@ int main(int argc, char* argv[]) {
         grace::RaySlope slope = grace::ray_slope(ray);
 
         for (int j=0; j<N_AABBs; j++) {
-            float4 AABBb = h_AABBs[2*i + 0];
-            float4 AABBt = h_AABBs[2*i + 1];
+            float4 AABBb = h_AABBs[2*j + 0];
+            float4 AABBt = h_AABBs[2*j + 1];
             if (AABB_hit_eisemann(ray, slope,
                                   AABBb.x, AABBb.y, AABBb.z,
                                   AABBt.x, AABBt.y, AABBt.z))
@@ -389,8 +389,8 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_rays; i++) {
         grace::Ray ray = h_rays[i];
         for (int j=0; j<N_AABBs; j++) {
-            float4 AABBb = h_AABBs[2*i + 0];
-            float4 AABBt = h_AABBs[2*i + 1];
+            float4 AABBb = h_AABBs[2*j + 0];
+            float4 AABBt = h_AABBs[2*j + 1];
             if (AABB_hit_plucker(ray,
                                  AABBb.x, AABBb.y, AABBb.z,
                                  AABBt.x, AABBt.y, AABBt.z))
@@ -426,8 +426,6 @@ int main(int argc, char* argv[]) {
             std::cout << std::endl;
         }
     }
-
-    std::cout << std::endl;
 
     return 0;
 
