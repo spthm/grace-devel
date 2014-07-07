@@ -320,8 +320,7 @@ template <typename Float4>
 __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_rays,
                                        unsigned int* hit_counts,
-                                       const int4* nodes,
-                                       const float4* node_AABBs,
+                                       const float4* nodes,
                                        size_t n_nodes,
                                        const int4* leaves,
                                        const Float4* spheres,
@@ -355,10 +354,11 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                node = nodes[node_index];
-                AABBx = node_AABBs[3*node_index + 0];
-                AABBy = node_AABBs[3*node_index + 1];
-                AABBz = node_AABBs[3*node_index + 2];
+                assert(4*node_index + 3 < 4*n_nodes);
+                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
+                AABBx = nodes[4*node_index + 1];
+                AABBy = nodes[4*node_index + 2];
+                AABBz = nodes[4*node_index + 3];
                 l_hit = AABB_hit_eisemann(ray, slope,
                                           AABBx.x, AABBy.x, AABBz.x,
                                           AABBx.y, AABBy.y, AABBz.y);
@@ -424,8 +424,7 @@ template <typename Tout, typename Float4, typename Tin, typename Float>
 __global__ void trace_property_kernel(const Ray* rays,
                                       const size_t n_rays,
                                       Tout* out_data,
-                                      const int4* nodes,
-                                      const float4* node_AABBs,
+                                      const float4* nodes,
                                       const size_t n_nodes,
                                       const int4* leaves,
                                       const Float4* spheres,
@@ -461,10 +460,10 @@ __global__ void trace_property_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                node = nodes[node_index];
-                AABBx = node_AABBs[3*node_index + 0];
-                AABBy = node_AABBs[3*node_index + 1];
-                AABBz = node_AABBs[3*node_index + 2];
+                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
+                AABBx = nodes[4*node_index + 1];
+                AABBy = nodes[4*node_index + 2];
+                AABBz = nodes[4*node_index + 3];
                 l_hit = AABB_hit_eisemann(ray, slope,
                                           AABBx.x, AABBy.x, AABBz.x,
                                           AABBx.y, AABBy.y, AABBz.y);
@@ -542,8 +541,7 @@ __global__ void trace_kernel(const Ray* rays,
                              unsigned int* hit_indices,
                              Float* hit_distances,
                              const unsigned int* ray_offsets,
-                             const int4* nodes,
-                             const float4* node_AABBs,
+                             const float4* nodes,
                              const size_t n_nodes,
                              const int4* leaves,
                              const Float4* spheres,
@@ -576,10 +574,10 @@ __global__ void trace_kernel(const Ray* rays,
         {
             while (!is_leaf && stack_index >= 0)
             {
-                node = nodes[node_index];
-                AABBx = node_AABBs[3*node_index + 0];
-                AABBy = node_AABBs[3*node_index + 1];
-                AABBz = node_AABBs[3*node_index + 2];
+                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
+                AABBx = nodes[4*node_index + 1];
+                AABBy = nodes[4*node_index + 2];
+                AABBz = nodes[4*node_index + 3];
                 l_hit = AABB_hit_eisemann(ray, slope,
                                           AABBx.x, AABBy.x, AABBz.x,
                                           AABBx.y, AABBy.y, AABBz.y);
@@ -659,12 +657,11 @@ __global__ void trace_kernel(const Ray* rays,
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                      thrust::device_vector<unsigned int>& d_hit_counts,
-                     const Nodes& d_nodes,
-                     const Leaves& d_leaves,
+                     const Tree& d_tree,
                      const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
-    size_t n_nodes = d_nodes.hierarchy.size();
+    size_t n_nodes = d_tree.leaves.size() - 1;
 
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
@@ -673,10 +670,9 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
-        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size());
 }
@@ -684,13 +680,12 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_property(const thrust::device_vector<Ray>& d_rays,
                     thrust::device_vector<Tout>& d_out_data,
-                    const Nodes& d_nodes,
-                    const Leaves& d_leaves,
+                    const Tree& d_tree,
                     const thrust::device_vector<Float4>& d_spheres,
                     const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
-    size_t n_nodes = d_nodes.hierarchy.size();
+    size_t n_nodes = d_tree.leaves.size() - 1;
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
@@ -707,10 +702,9 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
-        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
@@ -724,16 +718,15 @@ void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<unsigned int>& d_ray_offsets,
            thrust::device_vector<unsigned int>& d_hit_indices,
            thrust::device_vector<Float>& d_hit_distances,
-           const Nodes& d_nodes,
-           const Leaves& d_leaves,
+           const Tree& d_tree,
            const thrust::device_vector<Float4>& d_spheres,
            const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
-    size_t n_nodes = d_nodes.hierarchy.size();
+    size_t n_nodes = d_tree.leaves.size() - 1;
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_leaves, d_spheres);
+    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
@@ -769,10 +762,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_hit_indices.data()),
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
-        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
@@ -788,16 +780,15 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           const unsigned int hit_sentinel,
                           thrust::device_vector<Float>& d_hit_distances,
                           const Float distance_sentinel,
-                          const Nodes& d_nodes,
-                          const Leaves& d_leaves,
+                          const Tree& d_tree,
                           const thrust::device_vector<Float4>& d_spheres,
                           const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
-    size_t n_nodes = d_nodes.hierarchy.size();
+    size_t n_nodes = d_tree.leaves.size() - 1;
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_nodes, d_spheres);
+    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
@@ -848,10 +839,9 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_hit_indices.data()),
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
-        thrust::raw_pointer_cast(d_nodes.hierarchy.data()),
-        thrust::raw_pointer_cast(d_nodes.AABB.data()),
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
-        thrust::raw_pointer_cast(d_leaves.indices.data()),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
