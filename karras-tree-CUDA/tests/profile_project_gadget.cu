@@ -213,7 +213,7 @@ int main(int argc, char* argv[]) {
             float unused_bytes = 0.0;
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_traced_rho.size() * sizeof(float);
-            trace_bytes += d_tree.nodes.size() * 4*sizeof(int4);
+            trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);

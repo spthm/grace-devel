@@ -223,7 +223,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_traced_rho.size() * sizeof(float);
             trace_bytes += d_ray_offsets.size() * sizeof(float);
             trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
-            trace_bytes += d_tree.nodes.size() * 4*sizeof(int4);
+            trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
