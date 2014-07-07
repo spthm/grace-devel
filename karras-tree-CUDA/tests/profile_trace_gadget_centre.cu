@@ -136,7 +136,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
     double gen_ray_tot, sort_rho_dists_tot;
-    double trace_rho_tot, trace_full_tot;
+    double trace_rho_tot, trace_full_tot, trace_hit_tot;
     double all_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
@@ -147,8 +147,6 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(tot_start);
 
         thrust::device_vector<grace::Ray> d_rays(N_rays);
-        thrust::device_vector<float> d_traced_rho(N_rays);
-
         cudaEventRecord(part_start);
         grace::uniform_random_rays(d_rays,
                                    x_centre, y_centre, z_centre, length);
@@ -156,6 +154,9 @@ int main(int argc, char* argv[]) {
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         gen_ray_tot += elapsed;
+
+        // The cumulated, integrated density for each ray.
+        thrust::device_vector<float> d_traced_rho(N_rays);
 
         cudaEventRecord(part_start);
         grace::trace_property<float>(d_rays,
@@ -209,6 +210,18 @@ int main(int argc, char* argv[]) {
 
         /* End of full trace. */
 
+        // Also profile the pure hit-count tracing.  Useful for optimizing the
+        // pure tracing performance.
+        cudaEventRecord(part_start);
+        grace::trace_hitcounts(d_rays,
+                               d_ray_offsets,
+                               d_tree,
+                               d_spheres_xyzr);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&elapsed, part_start, part_stop);
+        trace_hit_tot += elapsed;
+
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
         cudaEventElapsedTime(&elapsed, tot_start, tot_stop);
@@ -257,7 +270,11 @@ int main(int argc, char* argv[]) {
     std::cout.width(8);
     std::cout << gen_ray_tot / N_iter << " ms" << std::endl;
 
-    std::cout << "Time for cummulative density tracing:   ";
+    std::cout << "Time for hit count tracing:             ";
+    std::cout.width(8);
+    std::cout << trace_hit_tot / N_iter << " ms" << std::endl;
+
+    std::cout << "Time for cumulative density tracing:    ";
     std::cout.width(8);
     std::cout << trace_rho_tot / N_iter << " ms" << std::endl;
 
