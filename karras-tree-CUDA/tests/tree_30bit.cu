@@ -154,25 +154,21 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
-    grace::Nodes d_nodes(N-1);
-    grace::Leaves d_leaves(N);
+    grace::Tree d_tree(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
-    grace::compact_nodes(d_nodes, d_leaves);
-    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, max_per_leaf);
+    grace::compact_tree(d_tree);
+    grace::find_AABBs(d_tree, d_spheres_xyzr);
 
     /* Save node and leaf data. */
 
-    size_t N_leaves = d_leaves.indices.size();
+    size_t N_leaves = d_tree.leaves.size();
 
-    grace::H_Nodes h_nodes(N_leaves-1);
-    grace::H_Leaves h_leaves(N_leaves);
+    grace::H_Tree h_tree(N_leaves);
 
-    h_nodes.hierarchy = d_nodes.hierarchy;
-    h_nodes.level = d_nodes.level;
-    h_nodes.AABB = d_nodes.AABB;
-
-    h_leaves.indices = d_leaves.indices;
+    h_tree.nodes = d_tree.nodes;
+    h_tree.levels = d_tree.levels;
+    h_tree.leaves = d_tree.leaves;
 
     // Copy AABBs into a more output-friendly format.
     // AABB[2*i+0] = (bx, by, bz) of the ith node.
@@ -180,17 +176,17 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<float3> node_AABBs(2*(N_leaves-1));
     thrust::host_vector<float3> leaf_AABBs(2*N_leaves);
     for (int i=0; i<N_leaves-1; i++) {
-        int left_i = h_nodes.hierarchy[i].x;
-        int right_i = h_nodes.hierarchy[i].y;
+        int left_i = h_tree.nodes[4*i+0].x;
+        int right_i = h_tree.nodes[4*i+0].y;
 
         // Left child's AABB.
         // NB: bot and top defined as float3s above.
-        bot.x = h_nodes.AABB[3*i+0].x;
-        bot.y = h_nodes.AABB[3*i+1].x;
-        bot.z = h_nodes.AABB[3*i+2].x;
-        top.x = h_nodes.AABB[3*i+0].y;
-        top.y = h_nodes.AABB[3*i+1].y;
-        top.z = h_nodes.AABB[3*i+2].y;
+        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].x);
+        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].x);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].x);
+        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].y);
+        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].y);
+        top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].y);
         if (left_i < N_leaves-1) {
             // Left is a node.
             node_AABBs[2*left_i+0] = bot;
@@ -204,12 +200,12 @@ int main(int argc, char* argv[]) {
         }
 
         // Right child's AABB.
-        bot.x = h_nodes.AABB[3*i+0].z;
-        bot.y = h_nodes.AABB[3*i+1].z;
-        bot.z = h_nodes.AABB[3*i+2].z;
-        top.x = h_nodes.AABB[3*i+0].w;
-        top.y = h_nodes.AABB[3*i+1].w;
-        top.z = h_nodes.AABB[3*i+2].w;
+        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].z);
+        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].z);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].z);
+        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].w);
+        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].w);
+        top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].w);
         if (right_i < N_leaves-1) {
             // Right is a node.
             node_AABBs[2*right_i+0] = bot;
@@ -224,12 +220,18 @@ int main(int argc, char* argv[]) {
     }
 
     // The root node's AABB is implicit.  Compute it.
-    bot.x = min(h_nodes.AABB[0].x, h_nodes.AABB[0].z);
-    bot.y = min(h_nodes.AABB[1].x, h_nodes.AABB[1].z);
-    bot.z = min(h_nodes.AABB[2].x, h_nodes.AABB[2].z);
-    top.x = max(h_nodes.AABB[0].y, h_nodes.AABB[0].w);
-    top.y = max(h_nodes.AABB[1].y, h_nodes.AABB[1].w);
-    top.z = max(h_nodes.AABB[2].y, h_nodes.AABB[2].w);
+    bot.x = min(*reinterpret_cast<float*>(&h_tree.nodes[1].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[1].z));
+    bot.y = min(*reinterpret_cast<float*>(&h_tree.nodes[2].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[2].z));
+    bot.z = min(*reinterpret_cast<float*>(&h_tree.nodes[3].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[3].z));
+    top.x = max(*reinterpret_cast<float*>(&h_tree.nodes[1].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[1].w));
+    top.y = max(*reinterpret_cast<float*>(&h_tree.nodes[2].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[2].w));
+    top.z = max(*reinterpret_cast<float*>(&h_tree.nodes[3].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[3].w));
     node_AABBs[0] = bot;
     node_AABBs[1] = top;
 
@@ -237,8 +239,8 @@ int main(int argc, char* argv[]) {
         outfile.open("outdata/nodes.txt");
         for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
-            outfile << "level:           " << h_nodes.level[i] << std::endl;
-            int4 node = h_nodes.hierarchy[i];
+            outfile << "level:           " << h_tree.levels[i] << std::endl;
+            int4 node = h_tree.nodes[4*i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.
             if (node.x > N_leaves-2) {
@@ -275,7 +277,7 @@ int main(int argc, char* argv[]) {
         outfile << "Max spheres per leaf: " << max_per_leaf << std::endl;
         outfile << std::endl;
         for (unsigned int i=0; i<N_leaves; i++) {
-            int4 leaf = h_leaves.indices[i];
+            int4 leaf = h_tree.leaves[i];
             outfile << "i:            " << i << std::endl;
             outfile << "first sphere: " << leaf.x << std::endl;
             outfile << "sphere count: " << leaf.y << std::endl;

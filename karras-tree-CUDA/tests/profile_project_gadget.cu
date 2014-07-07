@@ -100,12 +100,11 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
-    grace::Nodes d_nodes(N-1);
-    grace::Leaves d_leaves(N);
+    grace::Tree d_tree(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
-    grace::compact_nodes(d_nodes, d_leaves);
-    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, max_per_leaf);
+    grace::compact_tree(d_tree);
+    grace::find_AABBs(d_tree, d_spheres_xyzr);
 
 
     /* Generate the rays, all emitted in +z direction from a box side. */
@@ -195,8 +194,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_start);
         grace::trace_property<float>(d_rays,
                                      d_traced_rho,
-                                     d_nodes,
-                                     d_leaves,
+                                     d_tree,
                                      d_spheres_xyzr,
                                      d_rho);
         cudaEventRecord(part_stop);
@@ -215,15 +213,14 @@ int main(int argc, char* argv[]) {
             float unused_bytes = 0.0;
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_traced_rho.size() * sizeof(float);
-            trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
-            trace_bytes += d_nodes.AABB.size() * 3*sizeof(float4);
-            trace_bytes += d_leaves.indices.size() * sizeof(int4);
+            trace_bytes += d_tree.nodes.size() * 4*sizeof(int4);
+            trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
-            unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
+            unused_bytes += d_tree.levels.size() * sizeof(unsigned int);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 
             std::cout << "Total memory for property trace kernel:    "
