@@ -114,25 +114,24 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         sort_tot += part_elapsed;
 
-        grace::Nodes d_nodes(N-1);
-        grace::Leaves d_leaves(N);
+        grace::Tree d_tree(N);
 
         cudaEventRecord(part_start);
-        grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+        grace::build_tree(d_tree, d_keys, max_per_leaf);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         tree_tot += part_elapsed;
 
         cudaEventRecord(part_start);
-        grace::compact_nodes(d_nodes, d_leaves);
+        grace::compact_tree(d_tree);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         compact_tot += part_elapsed;
 
         cudaEventRecord(part_start);
-        grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+        grace::find_AABBs(d_tree, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

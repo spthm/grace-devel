@@ -131,26 +131,24 @@ int main(int argc, char* argv[]) {
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             sort_tot += part_elapsed;
 
-            grace::Nodes d_nodes(N-1);
-            grace::Leaves d_leaves(N);
+            grace::Tree d_tree(N);
 
             cudaEventRecord(part_start);
-            grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
+            grace::build_tree(d_tree, d_keys, max_per_leaf);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             tree_tot += part_elapsed;
 
             cudaEventRecord(part_start);
-            grace::compact_nodes(d_nodes, d_leaves);
+            grace::compact_tree(d_tree);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             compact_tot += part_elapsed;
 
             cudaEventRecord(part_start);
-            grace::find_AABBs(d_nodes, d_leaves,
-                              d_spheres_xyzr);
+            grace::find_AABBs(d_tree, d_spheres_xyzr);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -198,37 +196,36 @@ int main(int argc, char* argv[]) {
 
         /* Build fully-balanced tree on host. */
 
-        grace::H_Nodes h_nodes(N-1);
-        grace::H_Leaves h_leaves(N);
+        grace::H_Tree h_tree(N);
 
         // Set up bottom level (where all nodes connect to leaves).
         for (unsigned int i_left=1; i_left<N-1; i_left+=4)
         {
             unsigned int i_right = i_left + 1;
 
-            h_nodes.hierarchy[i_left].x = i_left - 1 + N-1;
-            h_nodes.hierarchy[i_left].y = i_left + N-1;
-            h_nodes.hierarchy[i_left].w = i_left - 1;
+            h_tree.nodes[4*i_left].x = i_left - 1 + N-1;
+            h_tree.nodes[4*i_left].y = i_left + N-1;
+            h_tree.nodes[4*i_left].w = i_left - 1;
 
-            h_nodes.hierarchy[i_right].x = i_right + N-1;
-            h_nodes.hierarchy[i_right].y = i_right + 1 + N-1;
-            h_nodes.hierarchy[i_right].w = i_right + 1;
+            h_tree.nodes[4*i_right].x = i_right + N-1;
+            h_tree.nodes[4*i_right].y = i_right + 1 + N-1;
+            h_tree.nodes[4*i_right].w = i_right + 1;
 
-            h_leaves.indices[i_left-1].x = i_left-1;
-            h_leaves.indices[i_left-1].y = 1;
-            h_leaves.indices[i_left-1].z = i_left;
+            h_tree.leaves[i_left-1].x = i_left-1;
+            h_tree.leaves[i_left-1].y = 1;
+            h_tree.leaves[i_left-1].z = i_left;
 
-            h_leaves.indices[i_left].x = i_left;
-            h_leaves.indices[i_left].y = 1;
-            h_leaves.indices[i_left].z = i_left;
+            h_tree.leaves[i_left].x = i_left;
+            h_tree.leaves[i_left].y = 1;
+            h_tree.leaves[i_left].z = i_left;
 
-            h_leaves.indices[i_right].x = i_right;
-            h_leaves.indices[i_right].y = 1;
-            h_leaves.indices[i_right].z = i_right;
+            h_tree.leaves[i_right].x = i_right;
+            h_tree.leaves[i_right].y = 1;
+            h_tree.leaves[i_right].z = i_right;
 
-            h_leaves.indices[i_right+1].x = i_right+1;
-            h_leaves.indices[i_right+1].y = 1;
-            h_leaves.indices[i_right+1].z = i_right;
+            h_tree.leaves[i_right+1].x = i_right+1;
+            h_tree.leaves[i_right+1].y = 1;
+            h_tree.leaves[i_right+1].z = i_right;
         }
 
         // Set up all except bottom and top levels, starting at bottom-but-one.
@@ -242,43 +239,42 @@ int main(int argc, char* argv[]) {
                 unsigned int i_left_split = (2*i_left - (1u<<height)) / 2;
                 unsigned int i_right_split = i_left_split + (1u<<height);
 
-                h_nodes.hierarchy[i_left].x = i_left_split;
-                h_nodes.hierarchy[i_left].y = i_left_split + 1;
-                h_nodes.hierarchy[i_left].w = i_left - (1u<<height) + 1;
+                h_tree.nodes[4*i_left].x = i_left_split;
+                h_tree.nodes[4*i_left].y = i_left_split + 1;
+                h_tree.nodes[4*i_left].w = i_left - (1u<<height) + 1;
 
-                h_nodes.hierarchy[i_right].x = i_right_split;
-                h_nodes.hierarchy[i_right].y = i_right_split + 1;
-                h_nodes.hierarchy[i_right].w = i_right + (1u<<height) - 1;
+                h_tree.nodes[4*i_right].x = i_right_split;
+                h_tree.nodes[4*i_right].y = i_right_split + 1;
+                h_tree.nodes[4*i_right].w = i_right + (1u<<height) - 1;
 
-                h_nodes.hierarchy[i_left_split].z =
-                    h_nodes.hierarchy[i_left_split+1].z = i_left;
-                h_nodes.hierarchy[i_right_split].z =
-                    h_nodes.hierarchy[i_right_split+1].z = i_right;
+                h_tree.nodes[4*i_left_split].z =
+                    h_tree.nodes[4*(i_left_split+1)].z = i_left;
+                h_tree.nodes[4*i_right_split].z =
+                    h_tree.nodes[4*(i_right_split+1)].z = i_right;
             }
         }
 
         // Set up root node and link children to it.
-        h_nodes.hierarchy[0].x = N/2 - 1;
-        h_nodes.hierarchy[0].y = N/2;
-        h_nodes.hierarchy[N/2 - 1].z = h_nodes.hierarchy[N/2].z = 0;
-        h_nodes.hierarchy[0].w = N - 1;
+        h_tree.nodes[0].x = N/2 - 1;
+        h_tree.nodes[0].y = N/2;
+        h_tree.nodes[4*(N/2 - 1)].z = h_tree.nodes[4*(N/2)].z = 0;
+        h_tree.nodes[0].w = N - 1;
 
 
         /* Profile the fully-balanced tree. */
 
-        grace::Nodes d_nodes(N-1);
-        grace::Leaves d_leaves(N);
+        grace::Tree d_tree(N);
         part_elapsed = 0;
         aabb_tot = 0;
         for (int i=0; i<N_iter; i++)
         {
             // NB: Levels and AABBs do not need copying: we don't build them on
             // the host.
-            d_nodes.hierarchy = h_nodes.hierarchy;
+            d_tree.nodes = h_tree.nodes;
             thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
 
             cudaEventRecord(part_start);
-            grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+            grace::find_AABBs(d_tree, d_spheres_xyzr);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

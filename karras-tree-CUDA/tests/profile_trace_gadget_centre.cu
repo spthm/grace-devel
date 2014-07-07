@@ -107,12 +107,11 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
-    grace::Nodes d_nodes(N-1);
-    grace::Leaves d_leaves(N);
+    grace::Tree d_tree(N);
 
-    grace::build_nodes(d_nodes, d_leaves, d_keys, max_per_leaf);
-    grace::compact_nodes(d_nodes, d_leaves);
-    grace::find_AABBs(d_nodes, d_leaves, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, max_per_leaf);
+    grace::compact_tree(d_tree);
+    grace::find_AABBs(d_tree, d_spheres_xyzr);
 
 
     /* Compute information needed for ray generation; rays are emitted from the
@@ -161,8 +160,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(part_start);
         grace::trace_property<float>(d_rays,
                                      d_traced_rho,
-                                     d_nodes,
-                                     d_leaves,
+                                     d_tree,
                                      d_spheres_xyzr,
                                      d_rho);
         cudaEventRecord(part_stop);
@@ -186,8 +184,7 @@ int main(int argc, char* argv[]) {
                             d_ray_offsets,
                             d_hit_indices,
                             d_hit_distances,
-                            d_nodes,
-                            d_leaves,
+                            d_tree,
                             d_spheres_xyzr,
                             d_rho); // For RT, we'd pass ~number counts.
         cudaEventRecord(part_stop);
@@ -226,9 +223,8 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_traced_rho.size() * sizeof(float);
             trace_bytes += d_ray_offsets.size() * sizeof(float);
             trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
-            trace_bytes += d_nodes.hierarchy.size() * sizeof(int4);
-            trace_bytes += d_nodes.AABB.size() * 3*sizeof(float4);
-            trace_bytes += d_leaves.indices.size() * sizeof(int4);
+            trace_bytes += d_tree.nodes.size() * 4*sizeof(int4);
+            trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
             // Integral lookup.
@@ -236,7 +232,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
-            unused_bytes += d_nodes.level.size() * sizeof(unsigned int);
+            unused_bytes += d_tree.levels.size() * sizeof(unsigned int);
             // Ray keys, used when generating rays.
             unused_bytes += d_rays.size() * sizeof(unsigned int);
 
