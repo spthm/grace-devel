@@ -46,9 +46,6 @@ dump: $(TEST_DUMP_BIN) $(DEPS)
 
 profile: $(PROFILER_BIN) $(DEPS)
 
-directories:
-	mkdir -p $(OUT_DIR)
-
 $(OUT_DIR)/%.out: %.cu $(DEPS) | $(OUT_DIR)
 	$(NVCC) $(NVCCFLAGS) $(NVCCLIBS) $< -o $@
 
@@ -59,7 +56,7 @@ $(OUT_DIR):
 .PHONY: clean
 
 clean:
-	-rm -r bin/*.out
+	-rm -r $(OUT_DIR)/*.out
 
 distclean: clean
-	-rm -r bin
+	-rm -r $(OUT_DIR)
