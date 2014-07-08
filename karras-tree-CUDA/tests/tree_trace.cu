@@ -102,7 +102,6 @@ int main(int argc, char* argv[]) {
     for (unsigned int i=0; i<N_rays; i++)
     {
         grace::Ray ray = h_rays[i];
-        grace::RaySlope slope = ray_slope(ray);
         // We use doubles to force the host to make double-precision floating-
         // point calculations in sphere_hit().
         //
