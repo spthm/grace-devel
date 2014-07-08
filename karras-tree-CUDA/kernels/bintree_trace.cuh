@@ -51,219 +51,83 @@ template <typename Float>
     0.000000000000000E+000
     };
 
-enum DIR_CLASS
-{ MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
-
-__host__ __device__ RaySlope ray_slope(const Ray& ray)
-{
-    RaySlope slope;
-
-    slope.xbyy = ray.dx / ray.dy;
-    slope.ybyx = 1.0f / slope.xbyy;
-    slope.ybyz = ray.dy / ray.dz;
-    slope.zbyy = 1.0f / slope.ybyz;
-    slope.xbyz = ray.dx / ray.dz;
-    slope.zbyx = 1.0f / slope.xbyz;
-
-    slope.c_xy = ray.oy - slope.ybyx*ray.ox;
-    slope.c_xz = ray.oz - slope.zbyx*ray.ox;
-    slope.c_yx = ray.ox - slope.xbyy*ray.oy;
-    slope.c_yz = ray.oz - slope.zbyy*ray.oy;
-    slope.c_zx = ray.ox - slope.xbyz*ray.oz;
-    slope.c_zy = ray.oy - slope.ybyz*ray.oz;
-
-    return slope;
+// min(min(a, b), c)
+__device__ __inline__ int min_vmin (int a, int b, int c) {
+    int mvm;
+    asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// max(max(a, b), c)
+__device__ __inline__ int max_vmax (int a, int b, int c) {
+    int mvm;
+    asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// max(min(a, b), c)
+__device__ __inline__ int max_vmin (int a, int b, int c) {
+    int mvm;
+    asm("vmin.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// min(max(a, b), c)
+__device__ __inline__ int min_vmax (int a, int b, int c) {
+    int mvm;
+    asm("vmax.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
 }
 
-__host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
-                                           const RaySlope& slope,
-                                           const float bx,
-                                           const float by,
-                                           const float bz,
-                                           const float tx,
-                                           const float ty,
-                                           const float tz)
+__device__ __inline__ float minf_vminf (float f1, float f2, float f3) {
+    return __int_as_float(min_vmin(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float maxf_vmaxf (float f1, float f2, float f3) {
+    return __int_as_float(max_vmax(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float minf_vmaxf (float f1, float f2, float f3) {
+    return __int_as_float(min_vmax(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float maxf_vminf (float f1, float f2, float f3) {
+    return __int_as_float(max_vmin(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+
+__device__ int AABBs_hit(const float3 invd, const float3 ood, const float len,
+                         const float4 AABBx,
+                         const float4 AABBy,
+                         const float4 AABBz)
 {
-    float ox = ray.ox;
-    float oy = ray.oy;
-    float oz = ray.oz;
+    float bx, tx, by, ty, bz, tz;
+    float tmin, tmax;
+    unsigned int hits = 0;
 
-    float dx = ray.dx;
-    float dy = ray.dy;
-    float dz = ray.dz;
+    // FMA.
+    bx = AABBx.x * invd.x - ood.x;
+    tx = AABBx.y * invd.x - ood.x;
+    by = AABBy.x * invd.y - ood.y;
+    ty = AABBy.y * invd.y - ood.y;
+    bz = AABBz.x * invd.z - ood.z;
+    tz = AABBz.y * invd.z - ood.z;
+    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, len) );
+    hits += (int)(tmax >= tmin);
 
-    float l = ray.length;
+    bx = AABBx.z * invd.x - ood.x;
+    tx = AABBx.w * invd.x - ood.x;
+    by = AABBy.z * invd.y - ood.y;
+    ty = AABBy.w * invd.y - ood.y;
+    bz = AABBz.z * invd.z - ood.z;
+    tz = AABBz.w * invd.z - ood.z;
+    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, len) );
+    hits += 2*((int)(tmax >= tmin));
 
-    float xbyy = slope.xbyy;
-    float ybyx = slope.ybyx;
-    float ybyz = slope.ybyz;
-    float zbyy = slope.zbyy;
-    float xbyz = slope.xbyz;
-    float zbyx = slope.zbyx;
-    float c_xy = slope.c_xy;
-    float c_xz = slope.c_xz;
-    float c_yx = slope.c_yx;
-    float c_yz = slope.c_yz;
-    float c_zx = slope.c_zx;
-    float c_zy = slope.c_zy;
-
-    switch(ray.dclass)
-    {
-    case MMM:
-
-        if ((ox < bx) || (oy < by) || (oz < bz))
-            return false; // AABB entirely in wrong octant wrt ray origin.
-
-        else if (tx - ox - dx*l < 0.0f ||
-                 ty - oy - dy*l < 0.0f ||
-                 tz - oz - dz*l < 0.0f)
-            return false; // Past length of ray.
-
-        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
-                 (xbyy * by - tx + c_yx > 0.0f) ||
-                 (ybyz * bz - ty + c_zy > 0.0f) ||
-                 (zbyy * by - tz + c_yz > 0.0f) ||
-                 (zbyx * bx - tz + c_xz > 0.0f) ||
-                 (xbyz * bz - tx + c_zx > 0.0f))
-            return false;
-
-        return true;
-
-    case PMM:
-
-        if ((ox > tx) || (oy < by) || (oz < bz))
-            return false;
-
-        else if (bx - ox - dx*l > 0.0f ||
-                 ty - oy - dy*l < 0.0f ||
-                 tz - oz - dz*l < 0.0f)
-            return false;
-        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
-                 (xbyy * by - bx + c_yx < 0.0f) ||
-                 (ybyz * bz - ty + c_zy > 0.0f) ||
-                 (zbyy * by - tz + c_yz > 0.0f) ||
-                 (zbyx * tx - tz + c_xz > 0.0f) ||
-                 (xbyz * bz - bx + c_zx < 0.0f))
-            return false;
-
-        return true;
-
-    case MPM:
-
-        if ((ox < bx) || (oy > ty) || (oz < bz))
-            return false;
-
-        else if (tx - ox - dx*l < 0.0f ||
-                 by - oy - dy*l > 0.0f ||
-                 tz - oz - dz*l < 0.0f)
-            return false;
-        else if ((ybyx * bx - by + c_xy < 0.0f) ||
-                 (xbyy * ty - tx + c_yx > 0.0f) ||
-                 (ybyz * bz - by + c_zy < 0.0f) ||
-                 (zbyy * ty - tz + c_yz > 0.0f) ||
-                 (zbyx * bx - tz + c_xz > 0.0f) ||
-                 (xbyz * bz - tx + c_zx > 0.0f))
-            return false;
-
-        return true;
-
-    case PPM:
-
-        if ((ox > tx) || (oy > ty) || (oz < bz))
-            return false;
-
-        else if (bx - ox - dx*l > 0.0f ||
-                 by - oy - dy*l > 0.0f ||
-                 tz - oz - dz*l < 0.0f)
-            return false;
-        else if ((ybyx * tx - by + c_xy < 0.0f) ||
-                 (xbyy * ty - bx + c_yx < 0.0f) ||
-                 (ybyz * bz - by + c_zy < 0.0f) ||
-                 (zbyy * ty - tz + c_yz > 0.0f) ||
-                 (zbyx * tx - tz + c_xz > 0.0f) ||
-                 (xbyz * bz - bx + c_zx < 0.0f))
-            return false;
-
-        return true;
-
-    case MMP:
-
-        if ((ox < bx) || (oy < by) || (oz > tz))
-            return false;
-
-        else if (tx - ox - dx*l < 0.0f ||
-                 ty - oy - dy*l < 0.0f ||
-                 bz - oz - dz*l > 0.0f)
-            return false;
-        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
-                 (xbyy * by - tx + c_yx > 0.0f) ||
-                 (ybyz * tz - ty + c_zy > 0.0f) ||
-                 (zbyy * by - bz + c_yz < 0.0f) ||
-                 (zbyx * bx - bz + c_xz < 0.0f) ||
-                 (xbyz * tz - tx + c_zx > 0.0f))
-            return false;
-
-        return true;
-
-    case PMP:
-
-        if ((ox > tx) || (oy < by) || (oz > tz))
-            return false;
-
-        else if (bx - ox - dx*l > 0.0f ||
-                 ty - oy - dy*l < 0.0f ||
-                 bz - oz - dz*l > 0.0f)
-            return false;
-        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
-                 (xbyy * by - bx + c_yx < 0.0f) ||
-                 (ybyz * tz - ty + c_zy > 0.0f) ||
-                 (zbyy * by - bz + c_yz < 0.0f) ||
-                 (zbyx * tx - bz + c_xz < 0.0f) ||
-                 (xbyz * tz - bx + c_zx < 0.0f))
-            return false;
-
-        return true;
-
-    case MPP:
-
-        if ((ox < bx) || (oy > ty) || (oz > tz))
-            return false;
-
-        else if (tx - ox - dx*l < 0.0f ||
-                 by - oy - dy*l > 0.0f ||
-                 bz - oz - dz*l > 0.0f)
-            return false;
-        else if ((ybyx * bx - by + c_xy < 0.0f) ||
-                 (xbyy * ty - tx + c_yx > 0.0f) ||
-                 (ybyz * tz - by + c_zy < 0.0f) ||
-                 (zbyy * ty - bz + c_yz < 0.0f) ||
-                 (zbyx * bx - bz + c_xz < 0.0f) ||
-                 (xbyz * tz - tx + c_zx > 0.0f))
-            return false;
-
-        return true;
-
-    case PPP:
-
-        if ((ox > tx) || (oy > ty) || (oz > tz))
-            return false;
-
-        else if (bx - ox - dx*l > 0.0f ||
-                 by - oy - dy*l > 0.0f ||
-                 bz - oz - dz*l > 0.0f)
-            return false;
-        else if ((ybyx * tx - by + c_xy < 0.0f) ||
-                 (xbyy * ty - bx + c_yx < 0.0f) ||
-                 (ybyz * tz - by + c_zy < 0.0f) ||
-                 (zbyy * ty - bz + c_yz < 0.0f) ||
-                 (zbyx * tx - bz + c_xz < 0.0f) ||
-                 (xbyz * tz - bx + c_zx < 0.0f))
-            return false;
-
-        return true;
-    }
-
-    return false;
+    return hits;
 }
 
 template <typename Float4, typename Float>
@@ -329,6 +193,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     int node_index, ray_index, stack_index, lr_hit;
     unsigned int ray_hit_count;
     int4 node;
+    Ray ray;
+    float3 invd, ood;
     float4 AABBx, AABBy, AABBz;
     // Unused in this kernel.
     float b, d;
@@ -340,8 +206,14 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        Ray ray = rays[ray_index];
-        RaySlope slope = ray_slope(ray);
+        ray = rays[ray_index];
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        ood.x = ray.ox * invd.x;
+        ood.y = ray.oy * invd.y;
+        ood.z = ray.oz * invd.z;
+
         ray_hit_count = 0;
 
         // Always start at the bottom of the stack (the root node).
@@ -357,13 +229,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 AABBx = nodes[4*node_index + 1];
                 AABBy = nodes[4*node_index + 2];
                 AABBz = nodes[4*node_index + 3];
-                lr_hit = 0;
-                lr_hit += AABB_hit_eisemann(ray, slope,
-                                            AABBx.x, AABBy.x, AABBz.x,
-                                            AABBx.y, AABBy.y, AABBz.y);
-                lr_hit += 2*AABB_hit_eisemann(ray, slope,
-                                              AABBx.z, AABBy.z, AABBz.z,
-                                              AABBx.w, AABBy.w, AABBz.w);
+                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
                 // Most likely to hit both.
                 if (lr_hit == 3)
                 {
@@ -428,6 +294,8 @@ __global__ void trace_property_kernel(const Ray* rays,
 {
     int node_index, ray_index, stack_index, lr_hit, b_index;
     int4 node;
+    Ray ray;
+    float3 invd, ood;
     float4 AABBx, AABBy, AABBz;
     // Impact parameter and distance to intersection.
     float b, d;
@@ -442,8 +310,13 @@ __global__ void trace_property_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        Ray ray = rays[ray_index];
-        RaySlope slope = ray_slope(ray);
+        ray = rays[ray_index];
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        ood.x = ray.ox * invd.x;
+        ood.y = ray.oy * invd.y;
+        ood.z = ray.oz * invd.z;
 
         stack_index = 0;
         node_index = 0;
@@ -457,13 +330,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                 AABBx = nodes[4*node_index + 1];
                 AABBy = nodes[4*node_index + 2];
                 AABBz = nodes[4*node_index + 3];
-                lr_hit = 0;
-                lr_hit += AABB_hit_eisemann(ray, slope,
-                                            AABBx.x, AABBy.x, AABBz.x,
-                                            AABBx.y, AABBy.y, AABBz.y);
-                lr_hit += 2*AABB_hit_eisemann(ray, slope,
-                                              AABBx.z, AABBy.z, AABBz.z,
-                                              AABBx.w, AABBy.w, AABBz.w);
+                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
                 if (lr_hit == 3)
                 {
                     node_index = node.x;
@@ -539,6 +406,8 @@ __global__ void trace_kernel(const Ray* rays,
     int node_index, ray_index, stack_index, lr_hit, b_index;
     unsigned int out_index;
     int4 node;
+    Ray ray;
+    float3 invd, ood;
     float4 AABBx, AABBy, AABBz;
     float b, d;
     float r, ir;
@@ -550,8 +419,13 @@ __global__ void trace_kernel(const Ray* rays,
     while (ray_index < n_rays)
     {
         out_index = ray_offsets[ray_index];
-        Ray ray = rays[ray_index];
-        RaySlope slope = ray_slope(ray);
+        ray = rays[ray_index];
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        ood.x = ray.ox * invd.x;
+        ood.y = ray.oy * invd.y;
+        ood.z = ray.oz * invd.z;
 
         stack_index = 0;
         node_index = 0;
@@ -564,13 +438,7 @@ __global__ void trace_kernel(const Ray* rays,
                 AABBx = nodes[4*node_index + 1];
                 AABBy = nodes[4*node_index + 2];
                 AABBz = nodes[4*node_index + 3];
-                lr_hit = 0;
-                lr_hit += AABB_hit_eisemann(ray, slope,
-                                            AABBx.x, AABBy.x, AABBz.x,
-                                            AABBx.y, AABBy.y, AABBz.y);
-                lr_hit += 2*AABB_hit_eisemann(ray, slope,
-                                              AABBx.z, AABBy.z, AABBz.z,
-                                              AABBx.w, AABBy.w, AABBz.w);
+                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
                 if (lr_hit == 3)
                 {
                     node_index = node.x;

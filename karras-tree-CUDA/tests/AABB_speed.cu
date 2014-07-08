@@ -1,6 +1,8 @@
 #include <sstream>
 #include <cmath>
 
+#include <assert.h>
+
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
@@ -8,48 +10,404 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernel_config.h"
 
-__device__ __inline__ int   min_min   (int a, int b, int c) { int v; asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ int   min_max   (int a, int b, int c) { int v; asm("vmin.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ int   max_min   (int a, int b, int c) { int v; asm("vmax.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ int   max_max   (int a, int b, int c) { int v; asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(v) : "r"(a), "r"(b), "r"(c)); return v; }
-__device__ __inline__ float fmin_fmin (float a, float b, float c) { return __int_as_float(min_min(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
-__device__ __inline__ float fmin_fmax (float a, float b, float c) { return __int_as_float(min_max(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
-__device__ __inline__ float fmax_fmin (float a, float b, float c) { return __int_as_float(max_min(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
-__device__ __inline__ float fmax_fmax (float a, float b, float c) { return __int_as_float(max_max(__float_as_int(a), __float_as_int(b), __float_as_int(c))); }
+enum DIR_CLASS
+{ MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };
 
-__device__ __inline__ float spanBeginKepler(float a0, float a1, float b0, float b1, float c0, float c1, float d){ return fmax_fmax( fminf(a0,a1), fminf(b0,b1), fmin_fmax(c0, c1, d)); }
-__device__ __inline__ float spanEndKepler(float a0, float a1, float b0, float b1, float c0, float c1, float d)  { return fmin_fmin( fmaxf(a0,a1), fmaxf(b0,b1), fmax_fmin(c0, c1, d)); }
-
-__device__ int AABB_hit_Aila_Laine(const float3 invd, const float4 ood,
-                                   const float4 AABBx,
-                                   const float4 AABBy,
-                                   const float4 AABBz)
+struct Ray
 {
-    float c0lox = AABBx.x * invd.x - ood.x;
-    float c0hix = AABBx.y * invd.x - ood.x;
-    float c0loy = AABBy.x * invd.y - ood.y;
-    float c0hiy = AABBy.y * invd.y - ood.y;
-    float c0loz = AABBz.x * invd.z - ood.z;
-    float c0hiz = AABBz.y * invd.z - ood.z;
-    float c1loz = AABBz.z * invd.z - ood.z;
-    float c1hiz = AABBz.w * invd.z - ood.z;
-    float c0min = spanBeginKepler(c0lox, c0hix, c0loy, c0hiy, c0loz, c0hiz, 0);
-    float c0max = spanEndKepler  (c0lox, c0hix, c0loy, c0hiy, c0loz, c0hiz, ood.w);
-    float c1lox = AABBx.z * invd.x - ood.x;
-    float c1hix = AABBx.w * invd.x - ood.x;
-    float c1loy = AABBy.z * invd.y - ood.y;
-    float c1hiy = AABBy.w * invd.y - ood.y;
-    float c1min = spanBeginKepler(c1lox, c1hix, c1loy, c1hiy, c1loz, c1hiz, 0);
-    float c1max = spanEndKepler  (c1lox, c1hix, c1loy, c1hiy, c1loz, c1hiz, ood.w);
+    float dx, dy, dz;
+    float ox, oy, oz;
+    float length;
+    unsigned int dclass;
+};
 
-    return (int)(c0max >= c0min) + (int)(c1max >= c1min);
+struct RaySlope
+{
+    float xbyy, ybyx, ybyz, zbyy, xbyz, zbyx;
+    float c_xy, c_xz, c_yx, c_yz, c_zx, c_zy;
+};
+
+__host__ __device__ RaySlope ray_slope(const Ray& ray)
+{
+    RaySlope slope;
+
+    slope.xbyy = ray.dx / ray.dy;
+    slope.ybyx = 1.0f / slope.xbyy;
+    slope.ybyz = ray.dy / ray.dz;
+    slope.zbyy = 1.0f / slope.ybyz;
+    slope.xbyz = ray.dx / ray.dz;
+    slope.zbyx = 1.0f / slope.xbyz;
+
+    slope.c_xy = ray.oy - slope.ybyx*ray.ox;
+    slope.c_xz = ray.oz - slope.zbyx*ray.ox;
+    slope.c_yx = ray.ox - slope.xbyy*ray.oy;
+    slope.c_yz = ray.oz - slope.zbyy*ray.oy;
+    slope.c_zx = ray.ox - slope.xbyz*ray.oz;
+    slope.c_zy = ray.oy - slope.ybyz*ray.oz;
+
+    return slope;
 }
 
-__host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
+// min(min(a, b), c)
+__device__ __inline__ int min_vmin (int a, int b, int c) {
+    int mvm;
+    asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// max(max(a, b), c)
+__device__ __inline__ int max_vmax (int a, int b, int c) {
+    int mvm;
+    asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// max(min(a, b), c)
+__device__ __inline__ int max_vmin (int a, int b, int c) {
+    int mvm;
+    asm("vmin.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+// min(max(a, b), c)
+__device__ __inline__ int min_vmax (int a, int b, int c) {
+    int mvm;
+    asm("vmax.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
+    return mvm;
+}
+
+__device__ __inline__ float minf_vminf (float f1, float f2, float f3) {
+    return __int_as_float(min_vmin(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float maxf_vmaxf (float f1, float f2, float f3) {
+    return __int_as_float(max_vmax(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float minf_vmaxf (float f1, float f2, float f3) {
+    return __int_as_float(min_vmax(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+__device__ __inline__ float maxf_vminf (float f1, float f2, float f3) {
+    return __int_as_float(max_vmin(__float_as_int(f1),
+                                   __float_as_int(f2),
+                                   __float_as_int(f3)));
+}
+
+__device__ int AABB_hit_Aila_Laine_Karras(const float3 invd, const float4 ood,
+                                          const float4 AABBx,
+                                          const float4 AABBy,
+                                          const float4 AABBz)
+{
+    float bx, tx, by, ty, bz, tz;
+    float tmin, tmax;
+    unsigned int hits = 0;
+
+    // FMA.
+    bx = AABBx.x * invd.x - ood.x;
+    tx = AABBx.y * invd.x - ood.x;
+    by = AABBy.x * invd.y - ood.y;
+    ty = AABBy.y * invd.y - ood.y;
+    bz = AABBz.x * invd.z - ood.z;
+    tz = AABBz.y * invd.z - ood.z;
+    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ood.w) );
+    hits += (int)(tmax >= tmin);
+
+    bx = AABBx.z * invd.x - ood.x;
+    tx = AABBx.w * invd.x - ood.x;
+    by = AABBy.z * invd.y - ood.y;
+    ty = AABBy.w * invd.y - ood.y;
+    bz = AABBz.z * invd.z - ood.z;
+    tz = AABBz.w * invd.z - ood.z;
+    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ood.w) );
+    hits += (int)(tmax >= tmin);
+
+    return hits;
+}
+
+__device__ int AABB_hit_williams(const float3 invd, const float4 ood,
+                                 const float4 AABBx,
+                                 const float4 AABBy,
+                                 const float4 AABBz)
+{
+    float Lbx, Ltx, Lby, Lty, Lbz, Ltz;
+    float Rbx, Rtx, Rby, Rty, Rbz, Rtz;
+    float L_tmin, L_tmax, R_tmin, R_tmax;
+
+    if (invd.x >= 0) {
+        // FMA.
+        Lbx = AABBx.x * invd.x - ood.x;
+        Ltx = AABBx.y * invd.x - ood.x;
+        Rbx = AABBx.z * invd.x - ood.x;
+        Rtx = AABBx.w * invd.x - ood.x;
+    }
+    else {
+        Lbx = AABBx.y * invd.x - ood.x;
+        Ltx = AABBx.x * invd.x - ood.x;
+        Rbx = AABBx.w * invd.x - ood.x;
+        Rtx = AABBx.z * invd.x - ood.x;
+    }
+    if (invd.y >= 0) {
+        Lby = AABBy.x * invd.y - ood.y;
+        Lty = AABBy.y * invd.y - ood.y;
+        Rby = AABBy.z * invd.y - ood.y;
+        Rty = AABBy.w * invd.y - ood.y;
+    }
+    else {
+        Lby = AABBy.y * invd.y - ood.y;
+        Lty = AABBy.x * invd.y - ood.y;
+        Rby = AABBy.w * invd.y - ood.y;
+        Rty = AABBy.z * invd.y - ood.y;
+    }
+    if (invd.z >= 0) {
+        Lbz = AABBz.x * invd.z - ood.z;
+        Ltz = AABBz.y * invd.z - ood.z;
+        Rbz = AABBz.z * invd.z - ood.z;
+        Rtz = AABBz.w * invd.z - ood.z;
+    }
+    else {
+        Lbz = AABBz.y * invd.z - ood.z;
+        Ltz = AABBz.x * invd.z - ood.z;
+        Rbz = AABBz.w * invd.z - ood.z;
+        Rtz = AABBz.z * invd.z - ood.z;
+    }
+
+    L_tmin = fmax( fmax(Lbx, Lby), fmax(Lbz, 0) );
+    L_tmax = fmin( fmin(Ltx, Lty), fmin(Ltz, ood.w) );
+    R_tmin = fmax( fmax(Rbx, Rby), fmax(Rbz, 0) );
+    R_tmax = fmin( fmin(Rtx, Rty), fmin(Rtz, ood.w) );
+
+    return (int)(L_tmax >= L_tmin) + (int)(R_tmax >= R_tmin);
+}
+
+__device__ int AABB_hit_williams_noif(const float3 invd, const float4 ood,
+                                      const float4 AABBx,
+                                      const float4 AABBy,
+                                      const float4 AABBz)
+{
+    float Lbx, Ltx, Lby, Lty, Lbz, Ltz;
+    float Rbx, Rtx, Rby, Rty, Rbz, Rtz;
+    float L_tmin, L_tmax, R_tmin, R_tmax;
+
+    // FMA.
+    Lbx = AABBx.x * invd.x - ood.x;
+    Ltx = AABBx.y * invd.x - ood.x;
+    Lby = AABBy.x * invd.y - ood.y;
+    Lty = AABBy.y * invd.y - ood.y;
+    Lbz = AABBz.x * invd.z - ood.z;
+    Ltz = AABBz.y * invd.z - ood.z;
+    Rbx = AABBx.z * invd.x - ood.x;
+    Rtx = AABBx.w * invd.x - ood.x;
+    Rby = AABBy.z * invd.y - ood.y;
+    Rty = AABBy.w * invd.y - ood.y;
+    Rbz = AABBz.z * invd.z - ood.z;
+    Rtz = AABBz.w * invd.z - ood.z;
+
+    L_tmin = fmax( fmax(fmin(Lbx, Ltx), fmin(Lby, Lty)), fmax(fmin(Lbz, Ltz), 0) );
+    L_tmax = fmin( fmin(fmax(Lbx, Ltx), fmax(Lby, Lty)), fmin(fmax(Lbz, Ltz), ood.w) );
+    R_tmin = fmax( fmax(fmin(Rbx, Rtx), fmin(Rby, Rty)), fmax(fmin(Rbz, Rtz), 0) );
+    R_tmax = fmin( fmin(fmax(Rbx, Rtx), fmax(Rby, Rty)), fmin(fmax(Rbz, Rtz), ood.w) );
+
+    return (int)(L_tmax >= L_tmin) + (int)(R_tmax >= R_tmin);
+}
+
+__host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
+                                           const RaySlope& slope,
+                                           const float bx,
+                                           const float by,
+                                           const float bz,
+                                           const float tx,
+                                           const float ty,
+                                           const float tz)
+{
+    float ox = ray.ox;
+    float oy = ray.oy;
+    float oz = ray.oz;
+
+    float dx = ray.dx;
+    float dy = ray.dy;
+    float dz = ray.dz;
+
+    float l = ray.length;
+
+    float xbyy = slope.xbyy;
+    float ybyx = slope.ybyx;
+    float ybyz = slope.ybyz;
+    float zbyy = slope.zbyy;
+    float xbyz = slope.xbyz;
+    float zbyx = slope.zbyx;
+    float c_xy = slope.c_xy;
+    float c_xz = slope.c_xz;
+    float c_yx = slope.c_yx;
+    float c_yz = slope.c_yz;
+    float c_zx = slope.c_zx;
+    float c_zy = slope.c_zy;
+
+    switch(ray.dclass)
+    {
+    case MMM:
+
+        if ((ox < bx) || (oy < by) || (oz < bz))
+            return false; // AABB entirely in wrong octant wrt ray origin.
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false; // Past length of ray.
+
+        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - tx + c_yx > 0.0f) ||
+                 (ybyz * bz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - tz + c_yz > 0.0f) ||
+                 (zbyx * bx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - tx + c_zx > 0.0f))
+            return false;
+
+        return true;
+
+    case PMM:
+
+        if ((ox > tx) || (oy < by) || (oz < bz))
+            return false;
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false;
+        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - bx + c_yx < 0.0f) ||
+                 (ybyz * bz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - tz + c_yz > 0.0f) ||
+                 (zbyx * tx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+
+    case MPM:
+
+        if ((ox < bx) || (oy > ty) || (oz < bz))
+            return false;
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false;
+        else if ((ybyx * bx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - tx + c_yx > 0.0f) ||
+                 (ybyz * bz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - tz + c_yz > 0.0f) ||
+                 (zbyx * bx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - tx + c_zx > 0.0f))
+            return false;
+
+        return true;
+
+    case PPM:
+
+        if ((ox > tx) || (oy > ty) || (oz < bz))
+            return false;
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 tz - oz - dz*l < 0.0f)
+            return false;
+        else if ((ybyx * tx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - bx + c_yx < 0.0f) ||
+                 (ybyz * bz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - tz + c_yz > 0.0f) ||
+                 (zbyx * tx - tz + c_xz > 0.0f) ||
+                 (xbyz * bz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+
+    case MMP:
+
+        if ((ox < bx) || (oy < by) || (oz > tz))
+            return false;
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false;
+        else if ((ybyx * bx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - tx + c_yx > 0.0f) ||
+                 (ybyz * tz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - bz + c_yz < 0.0f) ||
+                 (zbyx * bx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - tx + c_zx > 0.0f))
+            return false;
+
+        return true;
+
+    case PMP:
+
+        if ((ox > tx) || (oy < by) || (oz > tz))
+            return false;
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 ty - oy - dy*l < 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false;
+        else if ((ybyx * tx - ty + c_xy > 0.0f) ||
+                 (xbyy * by - bx + c_yx < 0.0f) ||
+                 (ybyz * tz - ty + c_zy > 0.0f) ||
+                 (zbyy * by - bz + c_yz < 0.0f) ||
+                 (zbyx * tx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+
+    case MPP:
+
+        if ((ox < bx) || (oy > ty) || (oz > tz))
+            return false;
+
+        else if (tx - ox - dx*l < 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false;
+        else if ((ybyx * bx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - tx + c_yx > 0.0f) ||
+                 (ybyz * tz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - bz + c_yz < 0.0f) ||
+                 (zbyx * bx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - tx + c_zx > 0.0f))
+            return false;
+
+        return true;
+
+    case PPP:
+
+        if ((ox > tx) || (oy > ty) || (oz > tz))
+            return false;
+
+        else if (bx - ox - dx*l > 0.0f ||
+                 by - oy - dy*l > 0.0f ||
+                 bz - oz - dz*l > 0.0f)
+            return false;
+        else if ((ybyx * tx - by + c_xy < 0.0f) ||
+                 (xbyy * ty - bx + c_yx < 0.0f) ||
+                 (ybyz * tz - by + c_zy < 0.0f) ||
+                 (zbyy * ty - bz + c_yz < 0.0f) ||
+                 (zbyx * tx - bz + c_xz < 0.0f) ||
+                 (xbyz * tz - bx + c_zx < 0.0f))
+            return false;
+
+        return true;
+    }
+
+    return false;
+}
+
+__host__ __device__ bool AABB_hit_plucker(const Ray& ray,
                                           const float bx,
                                           const float by,
                                           const float bz,
@@ -217,14 +575,14 @@ __host__ __device__ bool AABB_hit_plucker(const grace::Ray& ray,
 
 }
 
-__global__ void AABB_hit_Aila_Laine_kernel(const grace::Ray* rays,
+__global__ void AABB_hit_Aila_Laine_Karras_kernel(const Ray* rays,
                                            const float4* AABBs,
                                            const int N_rays,
                                            const int N_AABBs,
                                            unsigned int* ray_hits)
 {
     float4 AABBx, AABBy, AABBz, ood;
-    grace::Ray ray;
+    Ray ray;
     float3 invd;
     float ooeps = exp2f(-80.0f);
     unsigned int hit_count;
@@ -249,7 +607,7 @@ __global__ void AABB_hit_Aila_Laine_kernel(const grace::Ray* rays,
             AABBx = AABBs[3*i + 0];
             AABBy = AABBs[3*i + 1];
             AABBz = AABBs[3*i + 2];
-            hit_count += AABB_hit_Aila_Laine(invd, ood, AABBx, AABBy, AABBz);
+            hit_count += AABB_hit_Aila_Laine_Karras(invd, ood, AABBx, AABBy, AABBz);
         }
 
         ray_hits[tid] = hit_count;
@@ -258,35 +616,118 @@ __global__ void AABB_hit_Aila_Laine_kernel(const grace::Ray* rays,
     }
 }
 
-__global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
+__global__ void AABB_hit_williams_kernel(const Ray* rays,
                                          const float4* AABBs,
                                          const int N_rays,
                                          const int N_AABBs,
                                          unsigned int* ray_hits)
 {
-    float4 AABBx, AABBy, AABBz;
-    grace::Ray ray;
-    grace::RaySlope slope;
+    float4 AABBx, AABBy, AABBz, ood;
+    Ray ray;
+    float3 invd;
+    float ooeps = exp2f(-80.0f);
     unsigned int hit_count;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_rays)
     {
         ray = rays[tid];
-        slope = grace::ray_slope(ray);
+        hit_count = 0;
+
+        // Avoid div by zero.
+        invd.x = 1.0f / (fabsf(ray.dx) > ooeps ? ray.dx : copysignf(ooeps, ray.dx));
+        invd.y = 1.0f / (fabsf(ray.dy) > ooeps ? ray.dy : copysignf(ooeps, ray.dy));
+        invd.z = 1.0f / (fabsf(ray.dz) > ooeps ? ray.dz : copysignf(ooeps, ray.dz));
+        ood.x = ray.ox * invd.x;
+        ood.y = ray.oy * invd.y;
+        ood.z = ray.oz * invd.z;
+        ood.w = ray.length;
+
+        for (int i=0; i<N_AABBs/2; i++)
+        {
+            AABBx = AABBs[3*i + 0];
+            AABBy = AABBs[3*i + 1];
+            AABBz = AABBs[3*i + 2];
+            hit_count += AABB_hit_williams(invd, ood, AABBx, AABBy, AABBz);
+        }
+
+        ray_hits[tid] = hit_count;
+
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void AABB_hit_williams_noif_kernel(const Ray* rays,
+                                              const float4* AABBs,
+                                              const int N_rays,
+                                              const int N_AABBs,
+                                              unsigned int* ray_hits)
+{
+    float4 AABBx, AABBy, AABBz, ood;
+    Ray ray;
+    float3 invd;
+    float ooeps = exp2f(-80.0f);
+    unsigned int hit_count;
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < N_rays)
+    {
+        ray = rays[tid];
+        hit_count = 0;
+
+        // Avoid div by zero.
+        invd.x = 1.0f / (fabsf(ray.dx) > ooeps ? ray.dx : copysignf(ooeps, ray.dx));
+        invd.y = 1.0f / (fabsf(ray.dy) > ooeps ? ray.dy : copysignf(ooeps, ray.dy));
+        invd.z = 1.0f / (fabsf(ray.dz) > ooeps ? ray.dz : copysignf(ooeps, ray.dz));
+        ood.x = ray.ox * invd.x;
+        ood.y = ray.oy * invd.y;
+        ood.z = ray.oz * invd.z;
+        ood.w = ray.length;
+
+        for (int i=0; i<N_AABBs/2; i++)
+        {
+            AABBx = AABBs[3*i + 0];
+            AABBy = AABBs[3*i + 1];
+            AABBz = AABBs[3*i + 2];
+
+            hit_count += AABB_hit_williams_noif(invd, ood, AABBx, AABBy, AABBz);
+        }
+
+        ray_hits[tid] = hit_count;
+
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+__global__ void AABB_hit_eisemann_kernel(const Ray* rays,
+                                         const float4* AABBs,
+                                         const int N_rays,
+                                         const int N_AABBs,
+                                         unsigned int* ray_hits)
+{
+    float4 AABBx, AABBy, AABBz;
+    Ray ray;
+    RaySlope slope;
+    unsigned int hit_count;
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < N_rays)
+    {
+        ray = rays[tid];
+        slope = ray_slope(ray);
         hit_count = 0;
 
         for (int i=0; i<N_AABBs/2; i++) {
             AABBx = AABBs[3*i + 0];
             AABBy = AABBs[3*i + 1];
             AABBz = AABBs[3*i + 2];
-            if (grace::AABB_hit_eisemann(ray, slope,
-                                         AABBx.x, AABBy.x, AABBz.x,
-                                         AABBx.y, AABBy.y, AABBz.y))
+            if (AABB_hit_eisemann(ray, slope,
+                                  AABBx.x, AABBy.x, AABBz.x,
+                                  AABBx.y, AABBy.y, AABBz.y))
                 hit_count++;
-            if (grace::AABB_hit_eisemann(ray, slope,
-                                         AABBx.z, AABBy.z, AABBz.z,
-                                         AABBx.w, AABBy.w, AABBz.w))
+            if (AABB_hit_eisemann(ray, slope,
+                                  AABBx.z, AABBy.z, AABBz.z,
+                                  AABBx.w, AABBy.w, AABBz.w))
                 hit_count++;
         }
 
@@ -296,14 +737,14 @@ __global__ void AABB_hit_eisemann_kernel(const grace::Ray* rays,
     }
 }
 
-__global__ void AABB_hit_plucker_kernel(const grace::Ray* rays,
+__global__ void AABB_hit_plucker_kernel(const Ray* rays,
                                         const float4* AABBs,
                                         const int N_rays,
                                         const int N_AABBs,
                                         unsigned int* ray_hits)
 {
     float4 AABBx, AABBy, AABBz;
-    grace::Ray ray;
+    Ray ray;
     unsigned int hit_count;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -354,7 +795,7 @@ int main(int argc, char* argv[]) {
      * NB: *Not* uniform random on surface of sphere.
      */
 
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
+    thrust::host_vector<Ray> h_rays(N_rays);
     thrust::host_vector<float4> h_AABBs(3*(N_AABBs/2));
     thrust::host_vector<unsigned int> h_keys(N_rays);
 
@@ -389,7 +830,8 @@ int main(int argc, char* argv[]) {
                                       (h_rays[i].dy+1)/2.f,
                                       (h_rays[i].dz+1)/2.f);
     }
-    // Sort rays by Morton key.
+    // Sort rays by Morton key.  This has a ~4--5x performance impact on Kepler
+    // for the Plucker and Eisemann kernels.
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     h_keys.clear();
     h_keys.shrink_to_fit();
@@ -432,7 +874,7 @@ int main(int argc, char* argv[]) {
         h_AABBs[3*i + 2].w = max(bz, tz);
     }
 
-    thrust::device_vector<grace::Ray> d_rays = h_rays;
+    thrust::device_vector<Ray> d_rays = h_rays;
     thrust::device_vector<float4> d_AABBs = h_AABBs;
     thrust::device_vector<unsigned int> d_ray_hits(N_rays);
     thrust::host_vector<unsigned int> h_ray_hits(N_rays);
@@ -447,7 +889,7 @@ int main(int argc, char* argv[]) {
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
     cudaEventRecord(start);
-    AABB_hit_Aila_Laine_kernel<<<48, 512>>>(
+    AABB_hit_Aila_Laine_Karras_kernel<<<48, 512>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         thrust::raw_pointer_cast(d_AABBs.data()),
         N_rays,
@@ -462,7 +904,57 @@ int main(int argc, char* argv[]) {
     thrust::host_vector<unsigned int> h_aila_laine_ray_hits = d_ray_hits;
 
     // Print results.
-    std::cout << "Aila and Laine:" << std::endl;
+    std::cout << "Aila, Laine and Karras:" << std::endl;
+    std::cout << "    GPU: " << elapsed << " ms." << std::endl;
+
+
+    /* Profile Williams. */
+
+    // On GPU only.
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    AABB_hit_williams_kernel<<<48, 512>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        thrust::raw_pointer_cast(d_AABBs.data()),
+        N_rays,
+        N_AABBs,
+        thrust::raw_pointer_cast(d_ray_hits.data()));
+    cudaEventRecord(stop);
+    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
+    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&elapsed, start, stop);
+    thrust::host_vector<unsigned int> h_williams_ray_hits = d_ray_hits;
+
+    // Print results.
+    std::cout << "Williams:" << std::endl;
+    std::cout << "    GPU: " << elapsed << " ms." << std::endl;
+
+
+    /* Profile Williams with no ifs. */
+
+    // On GPU only.
+    cudaEventCreate(&start);
+    cudaEventCreate(&stop);
+    cudaEventRecord(start);
+    AABB_hit_williams_noif_kernel<<<48, 512>>>(
+        thrust::raw_pointer_cast(d_rays.data()),
+        thrust::raw_pointer_cast(d_AABBs.data()),
+        N_rays,
+        N_AABBs,
+        thrust::raw_pointer_cast(d_ray_hits.data()));
+    cudaEventRecord(stop);
+    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
+    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    cudaEventSynchronize(stop);
+
+    cudaEventElapsedTime(&elapsed, start, stop);
+    thrust::host_vector<unsigned int> h_williams_noif_ray_hits = d_ray_hits;
+
+    // Print results.
+    std::cout << "Williams (no if):" << std::endl;
     std::cout << "    GPU: " << elapsed << " ms." << std::endl;
 
 
@@ -489,8 +981,8 @@ int main(int argc, char* argv[]) {
     // On CPU.
     double t = (double)clock() / CLOCKS_PER_SEC;
     for (int i=0; i<N_rays; i++) {
-        grace::Ray ray = h_rays[i];
-        grace::RaySlope slope = grace::ray_slope(ray);
+        Ray ray = h_rays[i];
+        RaySlope slope = ray_slope(ray);
         unsigned int hit_count = 0;
 
         for (int j=0; j<N_AABBs/2; j++) {
@@ -537,7 +1029,7 @@ int main(int argc, char* argv[]) {
     thrust::fill(h_ray_hits.begin(), h_ray_hits.end(), 0u);
     t = (double)clock() / CLOCKS_PER_SEC;
     for (int i=0; i<N_rays; i++) {
-        grace::Ray ray = h_rays[i];
+        Ray ray = h_rays[i];
         unsigned int hit_count = 0;
 
         for (int j=0; j<N_AABBs/2; j++) {
@@ -591,6 +1083,46 @@ int main(int argc, char* argv[]) {
         if (h_aila_laine_ray_hits[i] != h_plucker_ray_hits[i])
         {
             std::cout << "Ray " << i << ": Aila (" << h_aila_laine_ray_hits[i]
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << std::endl;
+            std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
+            std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
+                      << h_rays[i].oy << ", " << h_rays[i].oz << ")."
+                      << std::endl;
+            std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
+                      << h_rays[i].dy << ", " << h_rays[i].dz << ")."
+                      << std::endl;
+            std::cout << std::endl;
+        }
+    }
+
+    /* Check Williams and Plucker intersection results match. */
+
+    for (int i=0; i<N_rays; i++)
+    {
+        if (h_williams_ray_hits[i] != h_plucker_ray_hits[i])
+        {
+            std::cout << "Ray " << i << ": Williams (" << h_williams_ray_hits[i]
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << std::endl;
+            std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
+            std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
+                      << h_rays[i].oy << ", " << h_rays[i].oz << ")."
+                      << std::endl;
+            std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
+                      << h_rays[i].dy << ", " << h_rays[i].dz << ")."
+                      << std::endl;
+            std::cout << std::endl;
+        }
+    }
+
+    /* Check Williams (no ifs) and Plucker intersection results match. */
+
+    for (int i=0; i<N_rays; i++)
+    {
+        if (h_williams_noif_ray_hits[i] != h_plucker_ray_hits[i])
+        {
+            std::cout << "Ray " << i << ": Williams no ifs (" << h_williams_noif_ray_hits[i]
                       << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
                       << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;

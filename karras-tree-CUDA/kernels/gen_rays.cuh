@@ -69,7 +69,7 @@ __global__ void gen_uniform_rays(Ray* rays,
         dx = curand_normal(&x_state);
         dy = curand_normal(&y_state);
         dz = curand_normal(&z_state);
-        invR = 1. / sqrt(dx*dx + dy*dy + dz*dz);
+        invR = 1.f / sqrt(dx*dx + dy*dy + dz*dz);
 
         ray.dx = dx*invR;
         ray.dy = dy*invR;
@@ -82,15 +82,6 @@ __global__ void gen_uniform_rays(Ray* rays,
         ray.oy = ol.y;
         ray.oz = ol.z;
         ray.length = ol.w;
-
-        unsigned int dclass = 0;
-        if (dx >= 0)
-            dclass += 1;
-        if (dy >= 0)
-            dclass += 2;
-        if (dz >= 0)
-            dclass += 4;
-        ray.dclass = dclass;
 
         rays[tid] = ray;
         tid += stride;
@@ -111,6 +102,7 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
 
     // We launch exactly enough blocks to fill the hardware for both of
     // these kernels, or fewer if there are not sufficient rays).
+    // It is much more efficient to reuse qrng states than to generate new ones.
     // On Tesla M2090, there are 16MPs, so se have a maxiumum of 16 blocks.
     // On GTX 670, there are 7MPs, so we have a maximum of 7 blocks.
     int blocks = min(16, (int) ((N_rays + RAYS_THREADS_PER_BLOCK-1)
