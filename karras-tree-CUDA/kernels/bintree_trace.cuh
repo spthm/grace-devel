@@ -20,6 +20,15 @@
 namespace grace {
 
 //-----------------------------------------------------------------------------
+// Textures for tree access within trace kernels.
+//-----------------------------------------------------------------------------
+
+// float4 since it contains hierarchy (1 x int4) and AABB (3 x float4) data;
+// easier to treat as float and reinterpret as int when necessary.
+texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
+texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
+
+//-----------------------------------------------------------------------------
 // Helper functions for tracing kernels.
 //-----------------------------------------------------------------------------
 
@@ -353,12 +362,18 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
             while (node_index < n_nodes && stack_index >= 0)
             {
                 assert(4*node_index + 3 < 4*n_nodes);
-                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
-                AABBx = nodes[4*node_index + 1];
-                AABBy = nodes[4*node_index + 2];
-                AABBz = nodes[4*node_index + 3];
+
+                // Compiler warning: taking the address of a temporary if we
+                // immediately do a reinterpret_cast.
+                float4 tmp = tex1Dfetch(nodes_tex, 4*node_index + 0);
+                node = *reinterpret_cast<int4*>(&tmp);
+                AABBx = tex1Dfetch(nodes_tex, 4*node_index + 1);
+                AABBy = tex1Dfetch(nodes_tex, 4*node_index + 2);
+                AABBz = tex1Dfetch(nodes_tex, 4*node_index + 3);
+
                 assert(node.x > 0);
                 assert(node.y > 0);
+
                 lr_hit = 0;
                 lr_hit += AABB_hit_eisemann(ray, slope,
                                             AABBx.x, AABBy.x, AABBz.x,
@@ -396,11 +411,12 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
             while (node_index >= n_nodes && stack_index >= 0)
             {
-                node = leaves[node_index-n_nodes];
+                node = tex1Dfetch(leaves_tex, node_index-n_nodes);
                 assert((node_index-n_nodes) < n_nodes+1);
                 assert(node.x >= 0);
                 assert(node.y > 0);
                 assert(node.x+node.y-1 < n_spheres);
+
                 for (int i=0; i<node.y; i++)
                 {
                     if (sphere_hit(ray, spheres[node.x+i], b, d))
@@ -651,6 +667,13 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+    cudaBindTexture(0, nodes_tex,
+                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+                    d_tree.nodes.size());
+    cudaBindTexture(0, leaves_tex,
+                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.leaves.data())),
+                    d_tree.leaves.size());
+
     gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
@@ -660,6 +683,9 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size());
+
+    cudaUnbindTexture(nodes_tex);
+    cudaUnbindTexture(leaves_tex);
 }
 
 template <typename Float, typename Tout, typename Float4, typename Tin>
