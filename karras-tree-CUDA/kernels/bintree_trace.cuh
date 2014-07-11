@@ -669,10 +669,10 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
 
     cudaBindTexture(0, nodes_tex,
                     reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
-                    d_tree.nodes.size());
+                    d_tree.nodes.size()*sizeof(float4));
     cudaBindTexture(0, leaves_tex,
-                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.leaves.data())),
-                    d_tree.leaves.size());
+                    thrust::raw_pointer_cast(d_tree.leaves.data()),
+                    d_tree.leaves.size()*sizeof(int4));
 
     gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
@@ -709,6 +709,13 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+    cudaBindTexture(0, nodes_tex,
+                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+                    d_tree.nodes.size()*sizeof(float4));
+    cudaBindTexture(0, leaves_tex,
+                    thrust::raw_pointer_cast(d_tree.leaves.data()),
+                    d_tree.leaves.size()*sizeof(int4));
+
     gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
@@ -719,6 +726,9 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+
+    cudaUnbindTexture(nodes_tex);
+    cudaUnbindTexture(leaves_tex);
 }
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
@@ -766,6 +776,13 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+    cudaBindTexture(0, nodes_tex,
+                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+                    d_tree.nodes.size()*sizeof(float4));
+    cudaBindTexture(0, leaves_tex,
+                    thrust::raw_pointer_cast(d_tree.leaves.data()),
+                    d_tree.leaves.size()*sizeof(int4));
+
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
@@ -779,6 +796,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+
+    cudaUnbindTexture(nodes_tex);
+    cudaUnbindTexture(leaves_tex);
 }
 
 // TODO: Break this and trace() into multiple functions.
@@ -843,6 +863,13 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+    cudaBindTexture(0, nodes_tex,
+                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+                    d_tree.nodes.size()*sizeof(float4));
+    cudaBindTexture(0, leaves_tex,
+                    thrust::raw_pointer_cast(d_tree.leaves.data()),
+                    d_tree.leaves.size()*sizeof(int4));
+
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
@@ -856,6 +883,9 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+
+    cudaUnbindTexture(nodes_tex);
+    cudaUnbindTexture(leaves_tex);
 }
 
 } // namespace grace
