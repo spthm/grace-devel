@@ -357,6 +357,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 AABBx = nodes[4*node_index + 1];
                 AABBy = nodes[4*node_index + 2];
                 AABBz = nodes[4*node_index + 3];
+                assert(node.x > 0);
+                assert(node.y > 0);
                 lr_hit = 0;
                 lr_hit += AABB_hit_eisemann(ray, slope,
                                             AABBx.x, AABBy.x, AABBz.x,
@@ -395,10 +397,12 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
             while (node_index >= n_nodes && stack_index >= 0)
             {
                 node = leaves[node_index-n_nodes];
+                assert((node_index-n_nodes) < n_nodes+1);
+                assert(node.x >= 0);
+                assert(node.y > 0);
+                assert(node.x+node.y-1 < n_spheres);
                 for (int i=0; i<node.y; i++)
                 {
-                    assert(node.y > 0);
-                    assert(node.x+node.y-1 < n_spheres);
                     if (sphere_hit(ray, spheres[node.x+i], b, d))
                     {
                         ray_hit_count++;

@@ -133,7 +133,7 @@ __device__ int common_prefix_length(const int i,
 
 void copy_valid_nodes(thrust::device_vector<int4>& d_nodes,
                       const size_t N_nodes,
-                      unsigned int stride)
+                      const unsigned int stride)
 {
     typedef thrust::device_vector<int4>::iterator Iterator;
     strided_iterator<Iterator> i_nodes(d_nodes.begin(), d_nodes.end(), stride);
@@ -260,7 +260,7 @@ __global__ void build_nodes_kernel(int4* nodes,
             else {
                 nodes[4*(split_index+1)].z = index;
             }
-        } // No else.  We do not write to an invalid node.
+        } // No else.  We do not write to an invalid node, nor to its leaves.
 
         index += blockDim.x * gridDim.x;
     }
@@ -284,6 +284,9 @@ __global__ void shift_tree_indices(int4* nodes,
     while (tid < n_nodes)
     {
         node = nodes[4*tid];
+
+        assert(node.x > 0);
+        assert(node.y > 0);
 
         if (node.x >= n_nodes_prior) {
             // A leaf is identified by an index >= n_nodes.  Since n_nodes has
@@ -370,7 +373,6 @@ __global__ void find_AABBs_kernel(float4* nodes,
     Float4 sphere;
     Float x_min, y_min, z_min;
     Float x_max, y_max, z_max;
-    //volatile Box *left_AABB, *right_AABB;
     unsigned int* flags;
     bool first_arrival, in_block;
 
@@ -479,6 +481,11 @@ __global__ void find_AABBs_kernel(float4* nodes,
                             nodes[4*node_index + 3].z);
                 z_max = max(nodes[4*node_index + 3].y,
                             nodes[4*node_index + 3].w);
+
+                // Note, they should never be equal.
+                assert(x_min < x_max);
+                assert(y_min < y_max);
+                assert(z_min < z_max);
 
                 // Write the node's AABB to its *parent*.
                 if (node.w < 0)
