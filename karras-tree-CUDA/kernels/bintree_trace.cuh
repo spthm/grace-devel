@@ -34,6 +34,7 @@ namespace grace {
 // easier to treat as float and reinterpret as int when necessary.
 texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
+texture<float4, cudaTextureType1D, cudaReadModeElementType> spheres_tex;
 #endif
 
 //-----------------------------------------------------------------------------
@@ -427,7 +428,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
                 for (int i=0; i<node.y; i++)
                 {
-                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    if (sphere_hit(ray, FETCH(spheres, node.x+i), b, d))
                     {
                         ray_hit_count++;
                     }
@@ -456,7 +457,7 @@ __global__ void trace_property_kernel(const Ray* rays,
 {
     int node_index, ray_index, stack_index, lr_hit, b_index;
     int4 node;
-    float4 AABBx, AABBy, AABBz;
+    float4 AABBx, AABBy, AABBz, sphere;
     // Impact parameter and distance to intersection.
     float b, d;
     // Sphere radius and 1/radius.
@@ -521,9 +522,10 @@ __global__ void trace_property_kernel(const Ray* rays,
                 node = FETCH(leaves, node_index-n_nodes);
                 for (int i=0; i<node.y; i++)
                 {
-                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    sphere = FETCH(spheres, node.x+i);
+                    if (sphere_hit(ray, sphere, b, d))
                     {
-                        r = spheres[node.x+i].w;
+                        r = sphere.w;
                         ir = 1.f / r;
                         // Normalize impact parameter to size of lookup table and
                         // interpolate.
@@ -568,7 +570,7 @@ __global__ void trace_kernel(const Ray* rays,
     int node_index, ray_index, stack_index, lr_hit, b_index;
     unsigned int out_index;
     int4 node;
-    float4 AABBx, AABBy, AABBz;
+    float4 AABBx, AABBy, AABBz, sphere;
     float b, d;
     float r, ir;
     int trace_stack[31];
@@ -629,9 +631,10 @@ __global__ void trace_kernel(const Ray* rays,
                 node = FETCH(leaves, node_index-n_nodes);
                 for (int i=0; i<node.y; i++)
                 {
-                    if (sphere_hit(ray, spheres[node.x+i], b, d))
+                    sphere = FETCH(spheres, node.x+i);
+                    if (sphere_hit(ray, sphere, b, d))
                     {
-                        r = spheres[node.x+i].w;
+                        r = sphere.w;
                         ir = 1.f / r;
                         b = (N_table-1) * (b * ir);
                         b_index = (int) b;
@@ -684,6 +687,9 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+    cudaBindTexture(0, spheres_tex,
+                    thrust::raw_pointer_cast(d_spheres.data()),
+                    d_spheres.size()*sizeof(float4));
 #endif
 
     gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
@@ -700,6 +706,7 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
 #ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+    cudaUnbindTexture(spheres_tex);
 #endif
 }
 
@@ -731,6 +738,9 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+    cudaBindTexture(0, spheres_tex,
+                    thrust::raw_pointer_cast(d_spheres.data()),
+                    d_spheres.size()*sizeof(float4));
 #endif
 
     gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
@@ -748,6 +758,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 #ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+    cudaUnbindTexture(spheres_tex);
 #endif
 }
 
@@ -803,6 +814,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+    cudaBindTexture(0, spheres_tex,
+                    thrust::raw_pointer_cast(d_spheres.data()),
+                    d_spheres.size()*sizeof(float4));
 #endif
 
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
@@ -823,6 +837,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 #ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+    cudaUnbindTexture(spheres_tex);
 #endif
 }
 
@@ -895,6 +910,9 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+    cudaBindTexture(0, spheres_tex,
+                    thrust::raw_pointer_cast(d_spheres.data()),
+                    d_spheres.size()*sizeof(float4));
 #endif
 
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
@@ -915,6 +933,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
 #ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+    cudaUnbindTexture(spheres_tex);
 #endif
 }
 
