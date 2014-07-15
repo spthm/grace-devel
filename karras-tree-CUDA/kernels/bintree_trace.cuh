@@ -7,6 +7,12 @@
 #define assert(arg)
 #endif
 
+#ifdef GRACE_USE_TEX
+#define FETCH(t, i) tex1Dfetch(t##_tex, i)
+#else
+#define FETCH(t, i) t[i]
+#endif
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -23,10 +29,12 @@ namespace grace {
 // Textures for tree access within trace kernels.
 //-----------------------------------------------------------------------------
 
+#ifdef GRACE_USE_TEX
 // float4 since it contains hierarchy (1 x int4) and AABB (3 x float4) data;
 // easier to treat as float and reinterpret as int when necessary.
 texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
+#endif
 
 //-----------------------------------------------------------------------------
 // Helper functions for tracing kernels.
@@ -365,11 +373,11 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
                 // Compiler warning: taking the address of a temporary if we
                 // immediately do a reinterpret_cast.
-                float4 tmp = tex1Dfetch(nodes_tex, 4*node_index + 0);
+                float4 tmp = FETCH(nodes, 4*node_index + 0);
                 node = *reinterpret_cast<int4*>(&tmp);
-                AABBx = tex1Dfetch(nodes_tex, 4*node_index + 1);
-                AABBy = tex1Dfetch(nodes_tex, 4*node_index + 2);
-                AABBz = tex1Dfetch(nodes_tex, 4*node_index + 3);
+                AABBx = FETCH(nodes, 4*node_index + 1);
+                AABBy = FETCH(nodes, 4*node_index + 2);
+                AABBz = FETCH(nodes, 4*node_index + 3);
 
                 assert(node.x > 0);
                 assert(node.y > 0);
@@ -411,7 +419,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
             while (node_index >= n_nodes && stack_index >= 0)
             {
-                node = tex1Dfetch(leaves_tex, node_index-n_nodes);
+                node = FETCH(leaves, node_index-n_nodes);
                 assert((node_index-n_nodes) < n_nodes+1);
                 assert(node.x >= 0);
                 assert(node.y > 0);
@@ -473,10 +481,11 @@ __global__ void trace_property_kernel(const Ray* rays,
         {
             while (node_index < n_nodes && stack_index >= 0)
             {
-                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
-                AABBx = nodes[4*node_index + 1];
-                AABBy = nodes[4*node_index + 2];
-                AABBz = nodes[4*node_index + 3];
+                float4 tmp = FETCH(nodes, 4*node_index + 0);
+                node = *reinterpret_cast<int4*>(&tmp);
+                AABBx = FETCH(nodes, 4*node_index + 1);
+                AABBy = FETCH(nodes, 4*node_index + 2);
+                AABBz = FETCH(nodes, 4*node_index + 3);
                 lr_hit = 0;
                 lr_hit += AABB_hit_eisemann(ray, slope,
                                             AABBx.x, AABBy.x, AABBz.x,
@@ -509,7 +518,7 @@ __global__ void trace_property_kernel(const Ray* rays,
 
             while (node_index >= n_nodes && stack_index >= 0)
             {
-                node = leaves[node_index-n_nodes];
+                node = FETCH(leaves, node_index-n_nodes);
                 for (int i=0; i<node.y; i++)
                 {
                     if (sphere_hit(ray, spheres[node.x+i], b, d))
@@ -580,10 +589,11 @@ __global__ void trace_kernel(const Ray* rays,
         {
             while (node_index < n_nodes && stack_index >= 0)
             {
-                node = *reinterpret_cast<const int4*>(&nodes[4*node_index + 0]);
-                AABBx = nodes[4*node_index + 1];
-                AABBy = nodes[4*node_index + 2];
-                AABBz = nodes[4*node_index + 3];
+                float4 tmp = FETCH(nodes, 4*node_index + 0);
+                node = *reinterpret_cast<int4*>(&tmp);
+                AABBx = FETCH(nodes, 4*node_index + 1);
+                AABBy = FETCH(nodes, 4*node_index + 2);
+                AABBz = FETCH(nodes, 4*node_index + 3);
                 lr_hit = 0;
                 lr_hit += AABB_hit_eisemann(ray, slope,
                                             AABBx.x, AABBy.x, AABBz.x,
@@ -616,7 +626,7 @@ __global__ void trace_kernel(const Ray* rays,
 
             while (node_index >= n_nodes && stack_index >= 0)
             {
-                node = leaves[node_index-n_nodes];
+                node = FETCH(leaves, node_index-n_nodes);
                 for (int i=0; i<node.y; i++)
                 {
                     if (sphere_hit(ray, spheres[node.x+i], b, d))
@@ -667,25 +677,30 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+#ifdef GRACE_USE_TEX
     cudaBindTexture(0, nodes_tex,
                     reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
                     d_tree.nodes.size()*sizeof(float4));
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+#endif
 
     gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
-        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        reinterpret_cast<const float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size());
 
+#ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+#endif
 }
 
 template <typename Float, typename Tout, typename Float4, typename Tin>
@@ -709,26 +724,31 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+#ifdef GRACE_USE_TEX
     cudaBindTexture(0, nodes_tex,
                     reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
                     d_tree.nodes.size()*sizeof(float4));
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+#endif
 
     gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
-        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        reinterpret_cast<const float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
+#ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+#endif
 }
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
@@ -776,12 +796,14 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+#ifdef GRACE_USE_TEX
     cudaBindTexture(0, nodes_tex,
                     reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
                     d_tree.nodes.size()*sizeof(float4));
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+#endif
 
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
@@ -790,15 +812,18 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_hit_indices.data()),
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
-        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        reinterpret_cast<const float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
+#ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+#endif
 }
 
 // TODO: Break this and trace() into multiple functions.
@@ -863,12 +888,14 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
                                         / TRACE_THREADS_PER_BLOCK));
 
+#ifdef GRACE_USE_TEX
     cudaBindTexture(0, nodes_tex,
                     reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
                     d_tree.nodes.size()*sizeof(float4));
     cudaBindTexture(0, leaves_tex,
                     thrust::raw_pointer_cast(d_tree.leaves.data()),
                     d_tree.leaves.size()*sizeof(int4));
+#endif
 
     gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_rays.data()),
@@ -877,15 +904,18 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_hit_indices.data()),
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
-        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        reinterpret_cast<const float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
+#ifdef GRACE_USE_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
+#endif
 }
 
 } // namespace grace
