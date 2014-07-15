@@ -290,7 +290,7 @@ __global__ void shift_tree_indices(int4* nodes,
 
         if (node.x >= n_nodes_prior) {
             // A leaf is identified by an index >= n_nodes.  Since n_nodes has
-            // been reduced, as additional shift is required.
+            // been reduced, an additional shift is required.
             shift = leaf_shifts[node.x-n_nodes_prior] + n_removed;
             assert(node.x-shift >= n_nodes);
         }
@@ -361,8 +361,11 @@ __global__ void shift_tree_indices(int4* nodes,
     }
 }
 
+// No assigment operator for int4 node = volatile int4 nodes[i], so nodes and
+// v_nodes point to the same location.
 template <typename Float, typename Float4>
-__global__ void find_AABBs_kernel(float4* nodes,
+__global__ void find_AABBs_kernel(const int4* nodes,
+                                  volatile float4* v_nodes,
                                   const int4* leaves,
                                   const size_t n_leaves,
                                   const Float4* spheres,
@@ -420,31 +423,29 @@ __global__ void find_AABBs_kernel(float4* nodes,
             }
 
             node_index = node.z;
-            node = *reinterpret_cast<int4*>(&nodes[4*node.z + 0]);
-            // In case this ever changes.
-            assert(sizeof(int4) == sizeof(float4));
+            node = nodes[4*node.z + 0];
 
             // Write the leaf's AABB to its *parent*.
             // Would be simpler if e.g. node.w => leaf is a left child.
             if (tid == node.x-(n_leaves-1))
             {
                 // leaves[tid] is a left child; write left AABB.
-                nodes[4*node_index + 1].x = x_min;
-                nodes[4*node_index + 1].y = x_max;
-                nodes[4*node_index + 2].x = y_min;
-                nodes[4*node_index + 2].y = y_max;
-                nodes[4*node_index + 3].x = z_min;
-                nodes[4*node_index + 3].y = z_max;
+                v_nodes[4*node_index + 1].x = x_min;
+                v_nodes[4*node_index + 1].y = x_max;
+                v_nodes[4*node_index + 2].x = y_min;
+                v_nodes[4*node_index + 2].y = y_max;
+                v_nodes[4*node_index + 3].x = z_min;
+                v_nodes[4*node_index + 3].y = z_max;
             }
             else
             {
                 // leaves[tid] is a right child; write right AABB.
-                nodes[4*node_index + 1].z = x_min;
-                nodes[4*node_index + 1].w = x_max;
-                nodes[4*node_index + 2].z = y_min;
-                nodes[4*node_index + 2].w = y_max;
-                nodes[4*node_index + 3].z = z_min;
-                nodes[4*node_index + 3].w = z_max;
+                v_nodes[4*node_index + 1].z = x_min;
+                v_nodes[4*node_index + 1].w = x_max;
+                v_nodes[4*node_index + 2].z = y_min;
+                v_nodes[4*node_index + 2].w = y_max;
+                v_nodes[4*node_index + 3].z = z_min;
+                v_nodes[4*node_index + 3].w = z_max;
             }
 
             // Travel up the tree.  The second thread to reach a node writes
@@ -469,18 +470,18 @@ __global__ void find_AABBs_kernel(float4* nodes,
                 // Compute AABB of current node from AABBs of child nodes, i.e.
                 //   AABB.min = min(left_AABB.min, right_AABB.min)
                 //   AABB.max = max(left_AABB.max, right_AABB.max)
-                x_min = min(nodes[4*node_index + 1].x,
-                            nodes[4*node_index + 1].z);
-                x_max = max(nodes[4*node_index + 1].y,
-                            nodes[4*node_index + 1].w);
-                y_min = min(nodes[4*node_index + 2].x,
-                            nodes[4*node_index + 2].z);
-                y_max = max(nodes[4*node_index + 2].y,
-                            nodes[4*node_index + 2].w);
-                z_min = min(nodes[4*node_index + 3].x,
-                            nodes[4*node_index + 3].z);
-                z_max = max(nodes[4*node_index + 3].y,
-                            nodes[4*node_index + 3].w);
+                x_min = min(v_nodes[4*node_index + 1].x,
+                            v_nodes[4*node_index + 1].z);
+                x_max = max(v_nodes[4*node_index + 1].y,
+                            v_nodes[4*node_index + 1].w);
+                y_min = min(v_nodes[4*node_index + 2].x,
+                            v_nodes[4*node_index + 2].z);
+                y_max = max(v_nodes[4*node_index + 2].y,
+                            v_nodes[4*node_index + 2].w);
+                z_min = min(v_nodes[4*node_index + 3].x,
+                            v_nodes[4*node_index + 3].z);
+                z_max = max(v_nodes[4*node_index + 3].y,
+                            v_nodes[4*node_index + 3].w);
 
                 // Note, they should never be equal.
                 assert(x_min < x_max);
@@ -491,22 +492,22 @@ __global__ void find_AABBs_kernel(float4* nodes,
                 if (node.w < 0)
                 {
                     // Current node is a left child; write left AABB.
-                    nodes[4*node.z + 1].x = x_min;
-                    nodes[4*node.z + 1].y = x_max;
-                    nodes[4*node.z + 2].x = y_min;
-                    nodes[4*node.z + 2].y = y_max;
-                    nodes[4*node.z + 3].x = z_min;
-                    nodes[4*node.z + 3].y = z_max;
+                    v_nodes[4*node.z + 1].x = x_min;
+                    v_nodes[4*node.z + 1].y = x_max;
+                    v_nodes[4*node.z + 2].x = y_min;
+                    v_nodes[4*node.z + 2].y = y_max;
+                    v_nodes[4*node.z + 3].x = z_min;
+                    v_nodes[4*node.z + 3].y = z_max;
                 }
                 else
                 {
                     // Current node is a right child; write right AABB.
-                    nodes[4*node.z + 1].z = x_min;
-                    nodes[4*node.z + 1].w = x_max;
-                    nodes[4*node.z + 2].z = y_min;
-                    nodes[4*node.z + 2].w = y_max;
-                    nodes[4*node.z + 3].z = z_min;
-                    nodes[4*node.z + 3].w = z_max;
+                    v_nodes[4*node.z + 1].z = x_min;
+                    v_nodes[4*node.z + 1].w = x_max;
+                    v_nodes[4*node.z + 2].z = y_min;
+                    v_nodes[4*node.z + 2].w = y_max;
+                    v_nodes[4*node.z + 3].z = z_min;
+                    v_nodes[4*node.z + 3].w = z_max;
                 }
 
                 if (node.z == 0) {
@@ -517,7 +518,7 @@ __global__ void find_AABBs_kernel(float4* nodes,
                 }
 
                 node_index = node.z;
-                node = *reinterpret_cast<int4*>(&nodes[4*node.z + 0]);
+                node = nodes[4*node.z + 0];
                 in_block = (min(node_index, node_index + node.w) >= block_lower &&
                             max(node_index, node_index + node.w) <= block_upper);
 
@@ -559,6 +560,9 @@ void build_tree(Tree& d_tree,
                  const thrust::device_vector<UInteger>& d_keys,
                  const int max_per_leaf=1)
 {
+    // In case this ever changes.
+    assert(sizeof(int4) == sizeof(float4));
+
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
     // TODO: Error if max_per_leaf >= n_keys
 
@@ -615,7 +619,9 @@ void find_AABBs(Tree& d_tree,
                                         / AABB_THREADS_PER_BLOCK));
 
     gpu::find_AABBs_kernel<float, Float4><<<blocks,AABB_THREADS_PER_BLOCK>>>(
-        (float4*)thrust::raw_pointer_cast(d_tree.nodes.data()),
+        thrust::raw_pointer_cast(d_tree.nodes.data()),
+        reinterpret_cast<float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         n_leaves,
         thrust::raw_pointer_cast(d_spheres.data()),
