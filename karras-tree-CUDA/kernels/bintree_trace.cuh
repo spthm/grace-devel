@@ -542,8 +542,8 @@ __global__ void trace_property_kernel(const Ray* rays,
                         // interpolate.
                         b = (N_table-1) * (b * ir);
                         b_index = (int) b; // == floor(b)
-                        if (b_index > (N_table-1)) {
-                            b = 1.f;
+                        if (b_index >= (N_table-1)) {
+                            b = N_table-1;
                             b_index = N_table-2;
                         }
                         Float kernel_fac =
@@ -650,8 +650,8 @@ __global__ void trace_kernel(const Ray* rays,
                         b = sqrtf(b);
                         b = (N_table-1) * (b * ir);
                         b_index = (int) b;
-                        if (b_index > (N_table-1)) {
-                            b = 1.f;
+                        if (b_index >= (N_table-1)) {
+                            b = N_table-1;
                             b_index = N_table-2;
                         }
                         Float kernel_fac =
