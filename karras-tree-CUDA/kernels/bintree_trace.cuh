@@ -296,7 +296,7 @@ __host__ __device__ bool AABB_hit_eisemann(const Ray& ray,
 template <typename Float4, typename Float>
 __host__ __device__ bool sphere_hit(const Ray& ray,
                                     const Float4& sphere,
-                                    Float& b,
+                                    Float& b2,
                                     Float& dot_p)
 {
     float px = sphere.x - ray.ox;
@@ -315,9 +315,9 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
     float bx = px - dot_p*rx;
     float by = py - dot_p*ry;
     float bz = pz - dot_p*rz;
-    b = sqrtf(bx*bx + by*by + bz*bz);
+    b2 = bx*bx + by*by + bz*bz;
 
-    if (b >= sphere.w)
+    if (b2 >= sphere.w*sphere.w)
         return false;
 
     // If dot_p < 0, the ray origin must be inside the sphere for an
@@ -536,6 +536,8 @@ __global__ void trace_property_kernel(const Ray* rays,
                     {
                         r = sphere.w;
                         ir = 1.f / r;
+                        // sphere_hit returns |b*b|;
+                        b = sqrtf(b);
                         // Normalize impact parameter to size of lookup table and
                         // interpolate.
                         b = (N_table-1) * (b * ir);
@@ -645,6 +647,7 @@ __global__ void trace_kernel(const Ray* rays,
                     {
                         r = sphere.w;
                         ir = 1.f / r;
+                        b = sqrtf(b);
                         b = (N_table-1) * (b * ir);
                         b_index = (int) b;
                         if (b_index > (N_table-1)) {
