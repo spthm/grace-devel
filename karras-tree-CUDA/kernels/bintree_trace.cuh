@@ -7,6 +7,15 @@
 #define assert(arg)
 #endif
 
+#include <thrust/device_vector.h>
+#include <thrust/scan.h>
+#include <thrust/sequence.h>
+#include <thrust/transform.h>
+
+#include "../kernel_config.h"
+#include "../nodes.h"
+#include "../ray.h"
+
 #ifdef GRACE_NODES_TEX
 #define FETCH_NODE(nodes, i) tex1Dfetch(nodes##_tex, i)
 #else
@@ -18,15 +27,6 @@
 #else
 #define FETCH_SPHERE(spheres, i) spheres[i]
 #endif
-
-#include <thrust/device_vector.h>
-#include <thrust/scan.h>
-#include <thrust/sequence.h>
-#include <thrust/transform.h>
-
-#include "../kernel_config.h"
-#include "../nodes.h"
-#include "../ray.h"
 
 
 namespace grace {
