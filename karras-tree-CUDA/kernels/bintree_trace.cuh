@@ -443,15 +443,21 @@ __global__ void trace_kernel(const Ray* rays,
                              const int4* leaves,
                              const Float4* spheres,
                              const Tin* p_data,
-                             const Float* b_integrals)
+                             const Float* g_b_integrals)
 {
     int tid = threadIdx.x % WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
+    __shared__ Float b_integrals[N_table];
     __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+
     volatile int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     if (tid == 0)
         *stack_ptr = -1;
+
+    if (ray_index < N_table)
+        b_integrals[ray_index] = g_b_integrals[ray_index];
+    __syncthreads();
 
     while (ray_index < n_rays)
     {
