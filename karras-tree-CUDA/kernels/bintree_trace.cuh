@@ -359,9 +359,19 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     float4 AABBx, AABBy, AABBz;
     // Unused in this kernel.
     float b, d;
+#ifdef GRACE_SMEM_STACK
+    // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
-    int trace_stack[31];
-    trace_stack[0] = 0;
+    __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    // First thread in warp initializes the first data in its warp's stack.
+    if (threadIdx.x % WARP_SIZE == 0)
+        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+    __syncthreads();
+    int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
+#else
+    int stack[31];
+    stack[0] = 0;
+#endif
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -399,32 +409,21 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 lr_hit += 2*AABB_hit_eisemann(ray, slope,
                                               AABBx.z, AABBy.z, AABBz.z,
                                               AABBx.w, AABBy.w, AABBz.w);
-                // Most likely to hit both.
-                if (lr_hit == 3)
+                // TODO: Does the stack size need increasing by 1 for this?
+                // If any hit right, push it to the stack.
+                if (__any(lr_hit >= 2))
                 {
-                    // Traverse to left child and push right to stack.
-                    node_index = node.x;
                     stack_index++;
-                    trace_stack[stack_index] = node.y;
+                    stack[stack_index] = node.y;
                 }
-                else
+                // If any hit left, push it to the stack.
+                if (__any(lr_hit & 1u))
                 {
-                    // Likely to hit at least one.
-                    if (lr_hit)
-                    {
-                        // Traverse to the only node that was hit.
-                        if (lr_hit == 2)
-                            node_index = node.y;
-                        else
-                            node_index = node.x;
-                    }
-                    else
-                    {
-                        // Neither hit.  Pop stack.
-                        node_index = trace_stack[stack_index];
-                        stack_index--;
-                    }
+                    stack_index++;
+                    stack[stack_index] = node.x;
                 }
+                node_index = stack[stack_index];
+                stack_index--;
             }
 
             while (node_index >= n_nodes && stack_index >= 0)
@@ -443,7 +442,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     }
                 }
                 // Pop stack.
-                node_index = trace_stack[stack_index];
+                node_index = stack[stack_index];
                 stack_index--;
             }
 
@@ -473,8 +472,16 @@ __global__ void trace_property_kernel(const Ray* rays,
     float r, ir;
     // Property to trace and accumulate.
     Tout out;
-    int trace_stack[31];
-    trace_stack[0] = 0;
+#ifdef GRACE_SMEM_STACK
+    __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    if (threadIdx.x % WARP_SIZE == 0)
+        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+    __syncthreads();
+    int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
+#else
+    int stack[31];
+    stack[0] = 0;
+#endif
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -503,27 +510,18 @@ __global__ void trace_property_kernel(const Ray* rays,
                 lr_hit += 2*AABB_hit_eisemann(ray, slope,
                                               AABBx.z, AABBy.z, AABBz.z,
                                               AABBx.w, AABBy.w, AABBz.w);
-                if (lr_hit == 3)
+                if (__any(lr_hit >= 2))
                 {
-                    node_index = node.x;
                     stack_index++;
-                    trace_stack[stack_index] = node.y;
+                    stack[stack_index] = node.y;
                 }
-                else
+                if (__any(lr_hit & 1u))
                 {
-                    if (lr_hit)
-                    {
-                        if (lr_hit == 2)
-                            node_index = node.y;
-                        else
-                            node_index = node.x;
-                    }
-                    else
-                    {
-                        node_index = trace_stack[stack_index];
-                        stack_index--;
-                    }
+                    stack_index++;
+                    stack[stack_index] = node.x;
                 }
+                node_index = stack[stack_index];
+                stack_index--;
             }
 
             while (node_index >= n_nodes && stack_index >= 0)
@@ -555,7 +553,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                         out += (Tout) (kernel_fac * p_data[node.x+i]);
                     }
                 }
-                node_index = trace_stack[stack_index];
+                node_index = stack[stack_index];
                 stack_index--;
             }
         }
@@ -584,8 +582,16 @@ __global__ void trace_kernel(const Ray* rays,
     float4 AABBx, AABBy, AABBz, sphere;
     float b, d;
     float r, ir;
-    int trace_stack[31];
-    trace_stack[0] = 0;
+#ifdef GRACE_SMEM_STACK
+    __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    if (threadIdx.x % WARP_SIZE == 0)
+        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+    __syncthreads();
+    int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
+#else
+    int stack[31];
+    stack[0] = 0;
+#endif
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -614,27 +620,18 @@ __global__ void trace_kernel(const Ray* rays,
                 lr_hit += 2*AABB_hit_eisemann(ray, slope,
                                               AABBx.z, AABBy.z, AABBz.z,
                                               AABBx.w, AABBy.w, AABBz.w);
-                if (lr_hit == 3)
+                if (__any(lr_hit >= 2))
                 {
-                    node_index = node.x;
                     stack_index++;
-                    trace_stack[stack_index] = node.y;
+                    stack[stack_index] = node.y;
                 }
-                else
+                if (__any(lr_hit & 1u))
                 {
-                    if (lr_hit)
-                    {
-                        if (lr_hit == 2)
-                            node_index = node.y;
-                        else
-                            node_index = node.x;
-                    }
-                    else
-                    {
-                        node_index = trace_stack[stack_index];
-                        stack_index--;
-                    }
+                    stack_index++;
+                    stack[stack_index] = node.x;
                 }
+                node_index = stack[stack_index];
+                stack_index--;
             }
 
             while (node_index >= n_nodes && stack_index >= 0)
@@ -666,7 +663,7 @@ __global__ void trace_kernel(const Ray* rays,
                         out_index++;
                     }
                 }
-                node_index = trace_stack[stack_index];
+                node_index = stack[stack_index];
                 stack_index--;
             }
         }
