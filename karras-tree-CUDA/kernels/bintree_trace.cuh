@@ -365,7 +365,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     // First thread in warp initializes the first data in its warp's stack.
     if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+        sm_stacks[31*(threadIdx.x/WARP_SIZE)] = 0;
     __syncthreads();
     int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
 #else
@@ -475,7 +475,7 @@ __global__ void trace_property_kernel(const Ray* rays,
 #ifdef GRACE_SMEM_STACK
     __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+        sm_stacks[31*(threadIdx.x/WARP_SIZE)] = 0;
     __syncthreads();
     int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
 #else
@@ -585,7 +585,7 @@ __global__ void trace_kernel(const Ray* rays,
 #ifdef GRACE_SMEM_STACK
     __shared__ int sm_stacks[31*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[threadIdx.x/WARP_SIZE] = 0;
+        sm_stacks[31*(threadIdx.x/WARP_SIZE)] = 0;
     __syncthreads();
     int* stack = sm_stacks + 31*(threadIdx.x / WARP_SIZE);
 #else
