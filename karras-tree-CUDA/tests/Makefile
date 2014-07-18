@@ -1,6 +1,6 @@
 NVCC= nvcc
 CUDARCH= -arch=sm_20
-NVCCFLAGS= $(CUDARCH) -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX -DGRACE_SMEM_STACK
+NVCCFLAGS= $(CUDARCH) -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
 NVCCLIBS= -L /home/spth/usr/local/cuda/lib64 -lcuda -lcurand
 #NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
 

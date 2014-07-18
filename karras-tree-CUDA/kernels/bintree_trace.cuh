@@ -359,22 +359,20 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     float4 AABBx, AABBy, AABBz;
     // Unused in this kernel.
     float b, d;
-#ifdef GRACE_SMEM_STACK
+
+    // Note: tid here is the thread's index within its *warp*.
+    int tid = threadIdx.x % WARP_SIZE;
     // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
     // One more element required for exit sentinel.
     __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     // First thread in warp initializes the first data in its warp's stack.
     // This is the exit sentinel.
-    if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[32*(threadIdx.x / WARP_SIZE)] = -1;
-    __syncthreads();
-    int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
-#else
-    int stack[32];
-    int* stack_ptr = &(stack[0]);
-    *stack_ptr = -1;
-#endif
+    // The __threadfence_block() after pushing the root node to the stack also
+    // ensures the exit sentinel is readable by all threads.
+    if (tid == 0)
+        *stack_ptr = -1;
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -386,7 +384,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
         // Push root to stack
         stack_ptr++;
-        *stack_ptr = 0;
+        if (tid == 0)
+            *stack_ptr = 0;
+        __threadfence_block();
 
         while (*stack_ptr >= 0)
         {
@@ -397,8 +397,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(4*(*stack_ptr) + 3 < 4*n_nodes);
 
                 // Pop stack.
-                // If we immediately do a reinterpret_cast, the compiler warns:
-                // taking the address of a temporary
+                // If we immediately do a reinterpret_cast, the compiler states
+                // warning: taking the address of a temporary.
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 node = *reinterpret_cast<int4*>(&tmp);
                 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
@@ -421,14 +421,17 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.y;
+                    if (tid == 0)
+                        *stack_ptr = node.y;
                 }
                 // If any hit left, push it to the stack.
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.x;
+                    if (tid == 0)
+                        *stack_ptr = node.x;
                 }
+                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -476,17 +479,12 @@ __global__ void trace_property_kernel(const Ray* rays,
     float r, ir;
     // Property to trace and accumulate.
     Tout out;
-#ifdef GRACE_SMEM_STACK
+
+    int tid = threadIdx.x % WARP_SIZE;
     __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[32*(threadIdx.x / WARP_SIZE)] = -1;
-    __syncthreads();
     int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
-#else
-    int stack[32];
-    int* stack_ptr = &(stack[0]);
-    *stack_ptr = -1;
-#endif
+    if (tid == 0)
+        *stack_ptr = -1;
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -496,7 +494,9 @@ __global__ void trace_property_kernel(const Ray* rays,
         RaySlope slope = ray_slope(ray);
 
         stack_ptr++;
-        *stack_ptr = 0;
+        if (tid == 0)
+            *stack_ptr = 0;
+        __threadfence_block();
         out = 0;
 
         while (*stack_ptr >= 0)
@@ -520,13 +520,16 @@ __global__ void trace_property_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.y;
+                    if (tid == 0)
+                        *stack_ptr = node.y;
                 }
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.x;
+                    if (tid == 0)
+                        *stack_ptr = node.x;
                 }
+                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -586,17 +589,12 @@ __global__ void trace_kernel(const Ray* rays,
     float4 AABBx, AABBy, AABBz, sphere;
     float b, d;
     float r, ir;
-#ifdef GRACE_SMEM_STACK
+
+    int tid = threadIdx.x % WARP_SIZE;
     __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    if (threadIdx.x % WARP_SIZE == 0)
-        sm_stacks[32*(threadIdx.x / WARP_SIZE)] = -1;
-    __syncthreads();
     int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
-#else
-    int stack[32];
-    int* stack_ptr = &(stack[0]);
-    *stack_ptr = -1;
-#endif
+    if (tid == 0)
+        *stack_ptr = -1;
 
     ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -607,7 +605,9 @@ __global__ void trace_kernel(const Ray* rays,
         RaySlope slope = ray_slope(ray);
 
         stack_ptr++;
-        *stack_ptr = 0;
+        if (tid == 0)
+            *stack_ptr = 0;
+        __threadfence_block();
 
         while (*stack_ptr >= 0)
         {
@@ -630,13 +630,16 @@ __global__ void trace_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.y;
+                    if (tid == 0)
+                        *stack_ptr = node.y;
                 }
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    *stack_ptr = node.x;
+                    if (tid == 0)
+                        *stack_ptr = node.x;
                 }
+                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
