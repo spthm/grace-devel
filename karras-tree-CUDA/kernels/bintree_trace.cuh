@@ -129,32 +129,31 @@ __device__ int AABBs_hit(const float3 invd, const float3 ood, const float len,
                          const float4 AABBy,
                          const float4 AABBz)
 {
-    float bx, tx, by, ty, bz, tz;
-    float tmin, tmax;
-    unsigned int hits = 0;
-
     // FMA.
-    bx = AABBx.x * invd.x - ood.x;
-    tx = AABBx.y * invd.x - ood.x;
-    by = AABBy.x * invd.y - ood.y;
-    ty = AABBy.y * invd.y - ood.y;
-    bz = AABBz.x * invd.z - ood.z;
-    tz = AABBz.y * invd.z - ood.z;
-    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
-    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, len) );
-    hits += (int)(tmax >= tmin);
+    float bx_l = AABBx.x * invd.x - ood.x;
+    float tx_l = AABBx.y * invd.x - ood.x;
+    float by_l = AABBy.x * invd.y - ood.y;
+    float ty_l = AABBy.y * invd.y - ood.y;
+    float bz_l = AABBz.x * invd.z - ood.z;
+    float tz_l = AABBz.y * invd.z - ood.z;
 
-    bx = AABBx.z * invd.x - ood.x;
-    tx = AABBx.w * invd.x - ood.x;
-    by = AABBy.z * invd.y - ood.y;
-    ty = AABBy.w * invd.y - ood.y;
-    bz = AABBz.z * invd.z - ood.z;
-    tz = AABBz.w * invd.z - ood.z;
-    tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
-    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, len) );
-    hits += 2*((int)(tmax >= tmin));
+    float bx_r = AABBx.z * invd.x - ood.x;
+    float tx_r = AABBx.w * invd.x - ood.x;
+    float by_r = AABBy.z * invd.y - ood.y;
+    float ty_r = AABBy.w * invd.y - ood.y;
+    float bz_r = AABBz.z * invd.z - ood.z;
+    float tz_r = AABBz.w * invd.z - ood.z;
 
-    return hits;
+    float tmin_l = maxf_vmaxf( fmin(bx_l, tx_l), fmin(by_l, ty_l),
+                               maxf_vminf(bz_l, tz_l, 0) );
+    float tmax_l = minf_vminf( fmax(bx_l, tx_l), fmax(by_l, ty_l),
+                               minf_vmaxf(bz_l, tz_l, len) );
+    float tmin_r = maxf_vmaxf( fmin(bx_r, tx_r), fmin(by_r, ty_r),
+                               maxf_vminf(bz_r, tz_r, 0) );
+    float tmax_r = minf_vminf( fmax(bx_r, tx_r), fmax(by_r, ty_r),
+                               minf_vmaxf(bz_r, tz_r, len) );
+
+    return (int)(tmax_l >= tmin_l) + 2*((int)(tmax_r >= tmin_r));
 }
 
 template <typename Float4, typename Float>
@@ -217,17 +216,10 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const Float4* spheres,
                                        const size_t n_spheres)
 {
-    int ray_index, lr_hit;
-    unsigned int ray_hit_count;
-    int4 node;
-    Ray ray;
-    float3 invd, ood;
-    float4 AABBx, AABBy, AABBz;
-    // Unused in this kernel.
-    float b, d;
-
     // Note: tid here is the thread's index within its *warp*.
     int tid = threadIdx.x % WARP_SIZE;
+    int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
+
     // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
     // One more element required for exit sentinel.
@@ -240,19 +232,19 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     if (tid == 0)
         *stack_ptr = -1;
 
-    ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-
     while (ray_index < n_rays)
     {
-        ray = rays[ray_index];
+        unsigned int ray_hit_count = 0;
+
+        Ray ray = rays[ray_index];
+
+        float3 invd, ood;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
         ood.x = ray.ox * invd.x;
         ood.y = ray.oy * invd.y;
         ood.z = ray.oz * invd.z;
-
-        ray_hit_count = 0;
 
         // Push root to stack
         stack_ptr++;
@@ -272,25 +264,26 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 // If we immediately do a reinterpret_cast, the compiler states
                 // warning: taking the address of a temporary.
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
-                node = *reinterpret_cast<int4*>(&tmp);
-                AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                int4 node = *reinterpret_cast<int4*>(&tmp);
+                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 assert(node.x > 0);
                 assert(node.y > 0);
 
-                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
+                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                                                AABBx, AABBy, AABBz);
 
-                // If any hit right, push it to the stack.
+                // If any hit right child, push it to the stack.
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
                     if (tid == 0)
                         *stack_ptr = node.y;
                 }
-                // If any hit left, push it to the stack.
+                // If any hit left child, push it to the stack.
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
@@ -303,7 +296,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
             {
                 // Pop stack.
-                node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
+                int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
                 assert(((*stack_ptr)-n_nodes) < n_nodes+1);
                 stack_ptr--;
                 assert(node.x >= 0);
@@ -312,7 +305,10 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
                 for (int i=0; i<node.y; i++)
                 {
-                    if (sphere_hit(ray, FETCH_SPHERE(spheres, node.x+i), b, d))
+                    // Unused.
+                    float b2, dist;
+                    if (sphere_hit(ray, FETCH_SPHERE(spheres, node.x+i),
+                                   b2, dist))
                     {
                         ray_hit_count++;
                     }
@@ -336,29 +332,22 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const Tin* p_data,
                                       const Float* b_integrals)
 {
-    int ray_index, lr_hit, b_index;
-    int4 node;
-    Ray ray;
-    float3 invd, ood;
-    float4 AABBx, AABBy, AABBz, sphere;
-    // Impact parameter and distance to intersection.
-    float b, d;
-    // Sphere radius and 1/radius.
-    float r, ir;
-    // Property to trace and accumulate.
-    Tout out;
-
     int tid = threadIdx.x % WARP_SIZE;
+    int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
+
     __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     if (tid == 0)
         *stack_ptr = -1;
 
-    ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-
     while (ray_index < n_rays)
     {
-        ray = rays[ray_index];
+        // Property to trace and accumulate.
+        Tout out = 0;
+
+        Ray ray = rays[ray_index];
+
+        float3 invd, ood;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
@@ -370,20 +359,20 @@ __global__ void trace_property_kernel(const Ray* rays,
         if (tid == 0)
             *stack_ptr = 0;
         __threadfence_block();
-        out = 0;
 
         while (*stack_ptr >= 0)
         {
             while (*stack_ptr < n_nodes && *stack_ptr >= 0)
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
-                node = *reinterpret_cast<int4*>(&tmp);
-                AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                int4 node = *reinterpret_cast<int4*>(&tmp);
+                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
+                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                                                AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -402,15 +391,16 @@ __global__ void trace_property_kernel(const Ray* rays,
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
             {
-                node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
+                int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
                 stack_ptr--;
                 for (int i=0; i<node.y; i++)
                 {
-                    sphere = FETCH_SPHERE(spheres, node.x+i);
-                    if (sphere_hit(ray, sphere, b, d))
+                    int b_index;
+                    float b, dist;
+                    float4 sphere = FETCH_SPHERE(spheres, node.x+i);
+                    if (sphere_hit(ray, sphere, b, dist))
                     {
-                        r = sphere.w;
-                        ir = 1.f / r;
+                        float ir = 1.f / sphere.w;
                         // sphere_hit returns |b*b|;
                         b = sqrtf(b);
                         // Normalize impact parameter to size of lookup table and
@@ -451,27 +441,21 @@ __global__ void trace_kernel(const Ray* rays,
                              const Tin* p_data,
                              const Float* b_integrals)
 {
-    int ray_index, lr_hit, b_index;
-    unsigned int out_index;
-    int4 node;
-    Ray ray;
-    float3 invd, ood;
-    float4 AABBx, AABBy, AABBz, sphere;
-    float b, d;
-    float r, ir;
-
     int tid = threadIdx.x % WARP_SIZE;
+    int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
+
     __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     if (tid == 0)
         *stack_ptr = -1;
 
-    ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-
     while (ray_index < n_rays)
     {
-        out_index = ray_offsets[ray_index];
-        ray = rays[ray_index];
+        unsigned int out_index = ray_offsets[ray_index];
+
+        Ray ray = rays[ray_index];
+
+        float3 invd, ood;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
@@ -489,13 +473,14 @@ __global__ void trace_kernel(const Ray* rays,
             while (*stack_ptr < n_nodes && *stack_ptr >= 0)
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
-                node = *reinterpret_cast<int4*>(&tmp);
-                AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                int4 node = *reinterpret_cast<int4*>(&tmp);
+                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                lr_hit = AABBs_hit(invd, ood, ray.length, AABBx, AABBy, AABBz);
+                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                                                AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -514,15 +499,16 @@ __global__ void trace_kernel(const Ray* rays,
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
             {
-                node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
+                int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
                 stack_ptr--;
                 for (int i=0; i<node.y; i++)
                 {
-                    sphere = FETCH_SPHERE(spheres, node.x+i);
-                    if (sphere_hit(ray, sphere, b, d))
+                    int b_index;
+                    float b, dist;
+                    float4 sphere = FETCH_SPHERE(spheres, node.x+i);
+                    if (sphere_hit(ray, sphere, b, dist))
                     {
-                        r = sphere.w;
-                        ir = 1.f / r;
+                        float ir = 1.f / sphere.w;
                         b = sqrtf(b);
                         b = (N_table-1) * (b * ir);
                         b_index = (int) b;
@@ -538,7 +524,7 @@ __global__ void trace_kernel(const Ray* rays,
                         out_data[out_index] =
                             (Tout) (kernel_fac * p_data[node.x+i]);
                         hit_indices[out_index] = node.x+i;
-                        hit_distances[out_index] = d;
+                        hit_distances[out_index] = dist;
                         out_index++;
                     }
                 }
