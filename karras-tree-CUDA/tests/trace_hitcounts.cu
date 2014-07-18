@@ -106,17 +106,19 @@ int main(int argc, char* argv[]) {
 
     /* Output simple hit-count statistics. */
 
-    int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                  0u, thrust::maximum<unsigned int>());
-    int min_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                  N, thrust::minimum<unsigned int>());
-    float mean_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(),
-                                     0u, thrust::plus<unsigned int>())
-                                    / float(N_rays);
+    unsigned int max_hits = thrust::reduce(d_hit_counts.begin(),
+                                           d_hit_counts.end(),
+                                           0u, thrust::maximum<unsigned int>());
+    unsigned int min_hits = thrust::reduce(d_hit_counts.begin(),
+                                           d_hit_counts.end(),
+                                           N, thrust::minimum<unsigned int>());
+    unsigned int total_hits = thrust::reduce(d_hit_counts.begin(),
+                                             d_hit_counts.end(),
+                                             0u, thrust::plus<unsigned int>());
 
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Mean hits:            " << mean_hits << std::endl;
+    std::cout << "Total hits:           " << total_hits << std::endl;
     std::cout << "Max hits:             " << max_hits << std::endl;
     std::cout << "Min hits:             " << min_hits << std::endl;
 
