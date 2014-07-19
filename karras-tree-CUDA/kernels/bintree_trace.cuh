@@ -78,6 +78,8 @@ template <typename Float>
     0.000000000000000E+000
     };
 
+// See http://hpc.oit.uci.edu/nvidia-doc/sdk-cuda-doc/C/doc/ptx_isa_3.0.pdf
+// for details of the scalar vmin/vmax.
 // min(min(a, b), c)
 __device__ __inline__ int min_vmin(int a, int b, int c) {
     int mvm;
