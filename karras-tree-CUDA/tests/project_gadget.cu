@@ -132,7 +132,6 @@ int main(int argc, char* argv[]) {
             h_rays[i*N_rays_side + j].oz = min_z - max_r;
 
             h_rays[i*N_rays_side + j].length = span_z;
-            h_rays[i*N_rays_side + j].dclass = 7;
 
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
