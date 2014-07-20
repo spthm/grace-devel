@@ -225,8 +225,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
     // One more element required for exit sentinel.
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
+    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    volatile int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     // First thread in warp initializes the first data in its warp's stack.
     // This is the exit sentinel.
     // The __threadfence_block() after pushing the root node to the stack also
@@ -252,7 +252,6 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
         stack_ptr++;
         if (tid == 0)
             *stack_ptr = 0;
-        __threadfence_block();
 
         while (*stack_ptr >= 0)
         {
@@ -292,7 +291,6 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     if (tid == 0)
                         *stack_ptr = node.x;
                 }
-                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -337,8 +335,8 @@ __global__ void trace_property_kernel(const Ray* rays,
     int tid = threadIdx.x % WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
+    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    volatile int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     if (tid == 0)
         *stack_ptr = -1;
 
@@ -360,7 +358,6 @@ __global__ void trace_property_kernel(const Ray* rays,
         stack_ptr++;
         if (tid == 0)
             *stack_ptr = 0;
-        __threadfence_block();
 
         while (*stack_ptr >= 0)
         {
@@ -388,7 +385,6 @@ __global__ void trace_property_kernel(const Ray* rays,
                     if (tid == 0)
                         *stack_ptr = node.x;
                 }
-                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -446,8 +442,8 @@ __global__ void trace_kernel(const Ray* rays,
     int tid = threadIdx.x % WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
+    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    volatile int* stack_ptr = sm_stacks + 32*(threadIdx.x / WARP_SIZE);
     if (tid == 0)
         *stack_ptr = -1;
 
@@ -468,7 +464,6 @@ __global__ void trace_kernel(const Ray* rays,
         stack_ptr++;
         if (tid == 0)
             *stack_ptr = 0;
-        __threadfence_block();
 
         while (*stack_ptr >= 0)
         {
@@ -496,7 +491,6 @@ __global__ void trace_kernel(const Ray* rays,
                     if (tid == 0)
                         *stack_ptr = node.x;
                 }
-                __threadfence_block();
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
