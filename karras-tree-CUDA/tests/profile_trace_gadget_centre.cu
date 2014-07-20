@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int device_ID = 0;
-    unsigned int N_rays = 145000;
+    unsigned int N_rays = 4532 * 32; // = 145024 ~ max on an M2090 for data set.
     unsigned int max_per_leaf = 100;
     unsigned int N_iter = 2;
 
@@ -163,6 +163,7 @@ int main(int argc, char* argv[]) {
                                      d_traced_rho,
                                      d_tree,
                                      d_spheres_xyzr,
+                                     max_per_leaf,
                                      d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -187,6 +188,7 @@ int main(int argc, char* argv[]) {
                             d_hit_distances,
                             d_tree,
                             d_spheres_xyzr,
+                            max_per_leaf,
                             d_rho); // For RT, we'd pass ~number counts.
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -216,7 +218,8 @@ int main(int argc, char* argv[]) {
         grace::trace_hitcounts(d_rays,
                                d_ray_offsets,
                                d_tree,
-                               d_spheres_xyzr);
+                               d_spheres_xyzr,
+                               max_per_leaf);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);

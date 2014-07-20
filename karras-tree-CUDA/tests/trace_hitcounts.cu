@@ -101,7 +101,8 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts,
-                           d_tree, d_spheres_xyzr);
+                           d_tree, d_spheres_xyzr,
+                           max_per_leaf);
 
 
     /* Output simple hit-count statistics. */
