@@ -18,11 +18,11 @@ int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
-    unsigned int N_rays = 250000;
+    unsigned int N_rays = 512*512;
     unsigned int max_per_leaf = 32;
 
     if (argc > 1)
-        N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
     if (argc > 2)
         max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
 
@@ -161,6 +161,7 @@ int main(int argc, char* argv[]) {
                                  d_traced_pmass,
                                  d_tree,
                                  d_spheres_xyzr,
+                                 max_per_leaf,
                                  d_pmasses);
 
     // ~ Integrate over x and y.

@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
         device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);

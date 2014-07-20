@@ -583,6 +583,8 @@ __global__ void trace_kernel(const Ray* rays,
 // C-like wrappers for tracing kernels
 //-----------------------------------------------------------------------------
 
+// TODO: For consistency with the tree build kernels, max_per_leaf should
+// default to the same value (currently 1).
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                      thrust::device_vector<unsigned int>& d_hit_counts,

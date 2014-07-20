@@ -32,14 +32,14 @@ int main(int argc, char* argv[]) {
 
     unsigned int N = 100000;
     // Relatively few because the random spheres result in many hits per ray.
-    unsigned int N_rays = 80000;
+    unsigned int N_rays = 2500*32; // = 80,000.
     unsigned int max_per_leaf = 100;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
@@ -117,6 +117,7 @@ int main(int argc, char* argv[]) {
                         d_hit_distances,
                         d_tree,
                         d_spheres_xyzr,
+                        max_per_leaf,
                         d_rho);
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());

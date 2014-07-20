@@ -23,14 +23,14 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 100000;
-    unsigned int N_rays = 10000;
+    unsigned int N_rays = 313*32; // = 10,016
     unsigned int max_per_leaf = 32;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_rays = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
@@ -87,7 +87,8 @@ int main(int argc, char* argv[]) {
     /* Trace for per-ray hit counts. */
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
-    grace::trace_hitcounts(d_rays, d_hit_counts, d_tree, d_spheres_xyzr);
+    grace::trace_hitcounts(d_rays, d_hit_counts, d_tree,
+                           d_spheres_xyzr, max_per_leaf);
 
 
     /* Loop through all rays and test for interestion with all particles

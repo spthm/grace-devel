@@ -17,10 +17,10 @@ int main(int argc, char* argv[]) {
 
     /* Initialize run parameters. */
 
-    unsigned int N_rays = 250000;
+    unsigned int N_rays = 512*512;
 
     if (argc > 1)
-        N_rays = (unsigned int) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
 
     unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
 
@@ -129,6 +129,7 @@ int main(int argc, char* argv[]) {
                                  d_traced_pmass,
                                  d_tree,
                                  d_spheres_xyzr,
+                                 1,
                                  d_pmasses);
 
     // ~ Integrate over x and y.
