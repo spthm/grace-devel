@@ -267,7 +267,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(4*(*stack_ptr) + 3 < 4*n_nodes);
 
                 // Pop stack.
-                // If we immediately do a reinterpret_cast, the compiler states
+                // If we immediately do a reinterpret_cast, the compiler states:
                 // warning: taking the address of a temporary.
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
@@ -313,12 +313,15 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 // For max_per_leaf == WARP_SIZE, it is quicker to read more
                 // spheres than are in this leaf (which are not processed in the
                 // following loop) than to have an if (tid < 32).
+                // This additionally requires n_spheres be a multiple of 32.
                 // sm_spheres[32*wid+tid] = FETCH_SPHERE(spheres, node.x+tid);
                 for (int i=tid; i<node.y; i+=WARP_SIZE)
                 {
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
                 }
+                // Implicit warp-wide syncronization. Works for now. Discouraged
+                // by NVIDIA.
 
                 for (int i=0; i<node.y; i++)
                 {
