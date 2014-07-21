@@ -233,8 +233,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     volatile int* stack_ptr = sm_stacks + 32*wid;
     // First thread in warp initializes the first data in its warp's stack.
     // This is the exit sentinel.
-    // The __threadfence_block() after pushing the root node to the stack also
-    // ensures the exit sentinel is readable by all threads.
+    // The volatile declarations ensures the exit sentinel is visible to all
+    // threads in the warp. For now. Discouraged by NVIDIA.
     if (tid == 0)
         *stack_ptr = -1;
 
