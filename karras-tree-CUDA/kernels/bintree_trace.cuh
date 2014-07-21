@@ -350,7 +350,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const Float4* spheres,
                                       const unsigned int max_per_leaf,
                                       const Tin* p_data,
-                                      const Float* b_integrals)
+                                      const Float* g_b_integrals)
 {
     int tid = threadIdx.x % WARP_SIZE;
     int wid = threadIdx.x / WARP_SIZE;
@@ -358,9 +358,14 @@ __global__ void trace_property_kernel(const Ray* rays,
 
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
+    __shared__ Float b_integrals[N_table];
     __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
     volatile int* stack_ptr = sm_stacks + 32*wid;
+
+    if (ray_index < N_table)
+        b_integrals[ray_index] = g_b_integrals[ray_index];
+    __syncthreads();
 
     if (tid == 0)
         *stack_ptr = -1;
@@ -470,7 +475,7 @@ __global__ void trace_kernel(const Ray* rays,
                              const Float4* spheres,
                              const unsigned int max_per_leaf,
                              const Tin* p_data,
-                             const Float* b_integrals)
+                             const Float* g_b_integrals)
 {
     int tid = threadIdx.x % WARP_SIZE;
     int wid = threadIdx.x / WARP_SIZE;
@@ -478,9 +483,14 @@ __global__ void trace_kernel(const Ray* rays,
 
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
+    __shared__ Float b_integrals[N_table];
     __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
     volatile int* stack_ptr = sm_stacks + 32*wid;
+
+    if (ray_index < N_table)
+        b_integrals[ray_index] = g_b_integrals[ray_index];
+    __syncthreads();
 
     if (tid == 0)
         *stack_ptr = -1;
