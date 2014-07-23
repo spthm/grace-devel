@@ -363,8 +363,10 @@ __global__ void trace_property_kernel(const Ray* rays,
 
     volatile int* stack_ptr = sm_stacks + 32*wid;
 
-    if (ray_index < N_table)
-        b_integrals[ray_index] = g_b_integrals[ray_index];
+    for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
+    {
+        b_integrals[i] = g_b_integrals[i];
+    }
     __syncthreads();
 
     if (tid == 0)
@@ -452,6 +454,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                             + b_integrals[b_index];
                         // Re-scale integral (since we used a normalized b).
                         kernel_fac *= (ir*ir);
+                        assert(kernel_fac >= 0);
                         out += (Tout) (kernel_fac * p_data[node.x+i]);
                     }
                 }
@@ -488,8 +491,10 @@ __global__ void trace_kernel(const Ray* rays,
 
     volatile int* stack_ptr = sm_stacks + 32*wid;
 
-    if (ray_index < N_table)
-        b_integrals[ray_index] = g_b_integrals[ray_index];
+    for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
+    {
+        b_integrals[i] = g_b_integrals[i];
+    }
     __syncthreads();
 
     if (tid == 0)
@@ -572,6 +577,8 @@ __global__ void trace_kernel(const Ray* rays,
                             * (b - b_index)
                             + b_integrals[b_index];
                         kernel_fac *= (ir*ir);
+                        assert(kernel_fac >= 0);
+                        assert(dist >= 0);
                         out_data[out_index] =
                             (Tout) (kernel_fac * p_data[node.x+i]);
                         hit_indices[out_index] = node.x+i;
