@@ -6,7 +6,7 @@ NVCCLIBS= -L /home/spth/usr/local/cuda/lib64 -lcuda -lcurand
 
 OUT_DIR= bin
 
-DEPS= Makefile $(wildcard ../kernels/*.cuh)
+DEPS= Makefile $(wildcard ../kernels/*.cuh) $(wildcard ../*.cuh) $(wildcard ../*.h)
 
 UNIT_TEST_BIN= bit_prefix_32bit.out \
 	bit_prefix_64bit.out \
