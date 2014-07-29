@@ -156,6 +156,7 @@ int main(int argc, char* argv[]) {
             std::cout << "Error @ ray " << ray_i << "!" << std::endl;
             std::cout << "First particle hit distance = " << std::setw(8)
                       << dist << std::endl;
+            std::cout << std::endl;
             failures++;
         }
 
@@ -185,6 +186,7 @@ int main(int argc, char* argv[]) {
     else {
         std::cout << failures << " intersections sorted incorrectly."
                   << std::endl;
+        std::cout << std::endl;
         std::cout << "Device code may compile to FMA instructions; if the "
                   << "above errors are within" << std::endl;
         std::cout << "floating point error, try compiling this file with "
