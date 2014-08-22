@@ -131,20 +131,19 @@ __device__ int AABBs_hit(const float3 invd, const float3 ood, const float len,
                          const float4 AABBy,
                          const float4 AABBz)
 {
-    // FMA.
-    float bx_l = AABBx.x * invd.x - ood.x;
-    float tx_l = AABBx.y * invd.x - ood.x;
-    float by_l = AABBy.x * invd.y - ood.y;
-    float ty_l = AABBy.y * invd.y - ood.y;
-    float bz_l = AABBz.x * invd.z - ood.z;
-    float tz_l = AABBz.y * invd.z - ood.z;
+    float bx_l = (AABBx.x - ood.x) * invd.x;
+    float tx_l = (AABBx.y - ood.x) * invd.x;
+    float by_l = (AABBy.x - ood.y) * invd.y;
+    float ty_l = (AABBy.y - ood.y) * invd.y;
+    float bz_l = (AABBz.x - ood.z) * invd.z;
+    float tz_l = (AABBz.y - ood.z) * invd.z;
 
-    float bx_r = AABBx.z * invd.x - ood.x;
-    float tx_r = AABBx.w * invd.x - ood.x;
-    float by_r = AABBy.z * invd.y - ood.y;
-    float ty_r = AABBy.w * invd.y - ood.y;
-    float bz_r = AABBz.z * invd.z - ood.z;
-    float tz_r = AABBz.w * invd.z - ood.z;
+    float bx_r = (AABBx.z - ood.x) * invd.x;
+    float tx_r = (AABBx.w - ood.x) * invd.x;
+    float by_r = (AABBy.z - ood.y) * invd.y;
+    float ty_r = (AABBy.w - ood.y) * invd.y;
+    float bz_r = (AABBz.z - ood.z) * invd.z;
+    float tz_r = (AABBz.w - ood.z) * invd.z;
 
     float tmin_l = maxf_vmaxf( fmin(bx_l, tx_l), fmin(by_l, ty_l),
                                maxf_vminf(bz_l, tz_l, 0) );
@@ -248,9 +247,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
+        ood.x = ray.ox;
+        ood.y = ray.oy;
+        ood.z = ray.oz;
 
         // Push root to stack
         stack_ptr++;
@@ -383,9 +382,9 @@ __global__ void trace_property_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
+        ood.x = ray.ox;
+        ood.y = ray.oy;
+        ood.z = ray.oz;
 
         stack_ptr++;
         if (tid == 0)
@@ -510,9 +509,9 @@ __global__ void trace_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
+        ood.x = ray.ox;
+        ood.y = ray.oy;
+        ood.z = ray.oz;
 
         stack_ptr++;
         if (tid == 0)
