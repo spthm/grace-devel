@@ -126,24 +126,24 @@ __device__ __inline__ float maxf_vminf(float f1, float f2, float f3) {
                                    __float_as_int(f3)));
 }
 
-__device__ int AABBs_hit(const float3 invd, const float3 ood, const float len,
+__device__ int AABBs_hit(const float3 invd, const float3 origin, const float len,
                          const float4 AABBx,
                          const float4 AABBy,
                          const float4 AABBz)
 {
-    float bx_l = (AABBx.x - ood.x) * invd.x;
-    float tx_l = (AABBx.y - ood.x) * invd.x;
-    float by_l = (AABBy.x - ood.y) * invd.y;
-    float ty_l = (AABBy.y - ood.y) * invd.y;
-    float bz_l = (AABBz.x - ood.z) * invd.z;
-    float tz_l = (AABBz.y - ood.z) * invd.z;
+    float bx_l = (AABBx.x - origin.x) * invd.x;
+    float tx_l = (AABBx.y - origin.x) * invd.x;
+    float by_l = (AABBy.x - origin.y) * invd.y;
+    float ty_l = (AABBy.y - origin.y) * invd.y;
+    float bz_l = (AABBz.x - origin.z) * invd.z;
+    float tz_l = (AABBz.y - origin.z) * invd.z;
 
-    float bx_r = (AABBx.z - ood.x) * invd.x;
-    float tx_r = (AABBx.w - ood.x) * invd.x;
-    float by_r = (AABBy.z - ood.y) * invd.y;
-    float ty_r = (AABBy.w - ood.y) * invd.y;
-    float bz_r = (AABBz.z - ood.z) * invd.z;
-    float tz_r = (AABBz.w - ood.z) * invd.z;
+    float bx_r = (AABBx.z - origin.x) * invd.x;
+    float tx_r = (AABBx.w - origin.x) * invd.x;
+    float by_r = (AABBy.z - origin.y) * invd.y;
+    float ty_r = (AABBy.w - origin.y) * invd.y;
+    float bz_r = (AABBz.z - origin.z) * invd.z;
+    float tz_r = (AABBz.w - origin.z) * invd.z;
 
     float tmin_l = maxf_vmaxf( fmin(bx_l, tx_l), fmin(by_l, ty_l),
                                maxf_vminf(bz_l, tz_l, 0) );
@@ -243,13 +243,13 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
         Ray ray = rays[ray_index];
 
-        float3 invd, ood;
+        float3 invd, origin;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox;
-        ood.y = ray.oy;
-        ood.z = ray.oz;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
 
         // Push root to stack
         stack_ptr++;
@@ -277,7 +277,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(node.x > 0);
                 assert(node.y > 0);
 
-                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
                                                 AABBx, AABBy, AABBz);
 
                 // If any hit right child, push it to the stack.
@@ -378,13 +378,13 @@ __global__ void trace_property_kernel(const Ray* rays,
 
         Ray ray = rays[ray_index];
 
-        float3 invd, ood;
+        float3 invd, origin;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox;
-        ood.y = ray.oy;
-        ood.z = ray.oz;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
 
         stack_ptr++;
         if (tid == 0)
@@ -401,7 +401,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                 float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
                                                 AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))
@@ -505,13 +505,13 @@ __global__ void trace_kernel(const Ray* rays,
 
         Ray ray = rays[ray_index];
 
-        float3 invd, ood;
+        float3 invd, origin;
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        ood.x = ray.ox;
-        ood.y = ray.oy;
-        ood.z = ray.oz;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
 
         stack_ptr++;
         if (tid == 0)
@@ -528,7 +528,7 @@ __global__ void trace_kernel(const Ray* rays,
                 float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, ood, ray.length,
+                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
                                                 AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))

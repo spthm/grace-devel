@@ -97,7 +97,7 @@ __device__ __inline__ float maxf_vminf (float f1, float f2, float f3) {
                                    __float_as_int(f3)));
 }
 
-__device__ int AABB_hit_Aila_Laine_Karras(const float3 invd, const float4 ood,
+__device__ int AABB_hit_Aila_Laine_Karras(const float3 invd, const float4 origin,
                                           const float4 AABBx,
                                           const float4 AABBy,
                                           const float4 AABBz)
@@ -106,31 +106,30 @@ __device__ int AABB_hit_Aila_Laine_Karras(const float3 invd, const float4 ood,
     float tmin, tmax;
     unsigned int hits = 0;
 
-    // FMA.
-    bx = AABBx.x * invd.x - ood.x;
-    tx = AABBx.y * invd.x - ood.x;
-    by = AABBy.x * invd.y - ood.y;
-    ty = AABBy.y * invd.y - ood.y;
-    bz = AABBz.x * invd.z - ood.z;
-    tz = AABBz.y * invd.z - ood.z;
+    bx = (AABBx.x - origin.x) * invd.x ;
+    tx = (AABBx.y - origin.x) * invd.x ;
+    by = (AABBy.x - origin.y) * invd.y ;
+    ty = (AABBy.y - origin.y) * invd.y ;
+    bz = (AABBz.x - origin.z) * invd.z ;
+    tz = (AABBz.y - origin.z) * invd.z ;
     tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
-    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ood.w) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, origin.w) );
     hits += (int)(tmax >= tmin);
 
-    bx = AABBx.z * invd.x - ood.x;
-    tx = AABBx.w * invd.x - ood.x;
-    by = AABBy.z * invd.y - ood.y;
-    ty = AABBy.w * invd.y - ood.y;
-    bz = AABBz.z * invd.z - ood.z;
-    tz = AABBz.w * invd.z - ood.z;
+    bx = (AABBx.z - origin.x) * invd.x ;
+    tx = (AABBx.w - origin.x) * invd.x ;
+    by = (AABBy.z - origin.y) * invd.y ;
+    ty = (AABBy.w - origin.y) * invd.y ;
+    bz = (AABBz.z - origin.z) * invd.z ;
+    tz = (AABBz.w - origin.z) * invd.z ;
     tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
-    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ood.w) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, origin.w) );
     hits += (int)(tmax >= tmin);
 
     return hits;
 }
 
-__device__ int AABB_hit_williams(const float3 invd, const float4 ood,
+__device__ int AABB_hit_williams(const float3 invd, const float4 origin,
                                  const float4 AABBx,
                                  const float4 AABBy,
                                  const float4 AABBz)
@@ -140,52 +139,51 @@ __device__ int AABB_hit_williams(const float3 invd, const float4 ood,
     float L_tmin, L_tmax, R_tmin, R_tmax;
 
     if (invd.x >= 0) {
-        // FMA.
-        Lbx = AABBx.x * invd.x - ood.x;
-        Ltx = AABBx.y * invd.x - ood.x;
-        Rbx = AABBx.z * invd.x - ood.x;
-        Rtx = AABBx.w * invd.x - ood.x;
+        Lbx = (AABBx.x - origin.x) * invd.x;
+        Ltx = (AABBx.y - origin.x) * invd.x;
+        Rbx = (AABBx.z - origin.x) * invd.x;
+        Rtx = (AABBx.w - origin.x) * invd.x;
     }
     else {
-        Lbx = AABBx.y * invd.x - ood.x;
-        Ltx = AABBx.x * invd.x - ood.x;
-        Rbx = AABBx.w * invd.x - ood.x;
-        Rtx = AABBx.z * invd.x - ood.x;
+        Lbx = (AABBx.y - origin.x) * invd.x;
+        Ltx = (AABBx.x - origin.x) * invd.x;
+        Rbx = (AABBx.w - origin.x) * invd.x;
+        Rtx = (AABBx.z - origin.x) * invd.x;
     }
     if (invd.y >= 0) {
-        Lby = AABBy.x * invd.y - ood.y;
-        Lty = AABBy.y * invd.y - ood.y;
-        Rby = AABBy.z * invd.y - ood.y;
-        Rty = AABBy.w * invd.y - ood.y;
+        Lby = (AABBy.x - origin.y) * invd.y;
+        Lty = (AABBy.y - origin.y) * invd.y;
+        Rby = (AABBy.z - origin.y) * invd.y;
+        Rty = (AABBy.w - origin.y) * invd.y;
     }
     else {
-        Lby = AABBy.y * invd.y - ood.y;
-        Lty = AABBy.x * invd.y - ood.y;
-        Rby = AABBy.w * invd.y - ood.y;
-        Rty = AABBy.z * invd.y - ood.y;
+        Lby = (AABBy.y - origin.y) * invd.y;
+        Lty = (AABBy.x - origin.y) * invd.y;
+        Rby = (AABBy.w - origin.y) * invd.y;
+        Rty = (AABBy.z - origin.y) * invd.y;
     }
     if (invd.z >= 0) {
-        Lbz = AABBz.x * invd.z - ood.z;
-        Ltz = AABBz.y * invd.z - ood.z;
-        Rbz = AABBz.z * invd.z - ood.z;
-        Rtz = AABBz.w * invd.z - ood.z;
+        Lbz = (AABBz.x - origin.z) * invd.z;
+        Ltz = (AABBz.y - origin.z) * invd.z;
+        Rbz = (AABBz.z - origin.z) * invd.z;
+        Rtz = (AABBz.w - origin.z) * invd.z;
     }
     else {
-        Lbz = AABBz.y * invd.z - ood.z;
-        Ltz = AABBz.x * invd.z - ood.z;
-        Rbz = AABBz.w * invd.z - ood.z;
-        Rtz = AABBz.z * invd.z - ood.z;
+        Lbz = (AABBz.y - origin.z) * invd.z;
+        Ltz = (AABBz.x - origin.z) * invd.z;
+        Rbz = (AABBz.w - origin.z) * invd.z;
+        Rtz = (AABBz.z - origin.z) * invd.z;
     }
 
     L_tmin = fmax( fmax(Lbx, Lby), fmax(Lbz, 0) );
-    L_tmax = fmin( fmin(Ltx, Lty), fmin(Ltz, ood.w) );
+    L_tmax = fmin( fmin(Ltx, Lty), fmin(Ltz, origin.w) );
     R_tmin = fmax( fmax(Rbx, Rby), fmax(Rbz, 0) );
-    R_tmax = fmin( fmin(Rtx, Rty), fmin(Rtz, ood.w) );
+    R_tmax = fmin( fmin(Rtx, Rty), fmin(Rtz, origin.w) );
 
     return (int)(L_tmax >= L_tmin) + (int)(R_tmax >= R_tmin);
 }
 
-__device__ int AABB_hit_williams_noif(const float3 invd, const float4 ood,
+__device__ int AABB_hit_williams_noif(const float3 invd, const float4 origin,
                                       const float4 AABBx,
                                       const float4 AABBy,
                                       const float4 AABBz)
@@ -194,24 +192,23 @@ __device__ int AABB_hit_williams_noif(const float3 invd, const float4 ood,
     float Rbx, Rtx, Rby, Rty, Rbz, Rtz;
     float L_tmin, L_tmax, R_tmin, R_tmax;
 
-    // FMA.
-    Lbx = AABBx.x * invd.x - ood.x;
-    Ltx = AABBx.y * invd.x - ood.x;
-    Lby = AABBy.x * invd.y - ood.y;
-    Lty = AABBy.y * invd.y - ood.y;
-    Lbz = AABBz.x * invd.z - ood.z;
-    Ltz = AABBz.y * invd.z - ood.z;
-    Rbx = AABBx.z * invd.x - ood.x;
-    Rtx = AABBx.w * invd.x - ood.x;
-    Rby = AABBy.z * invd.y - ood.y;
-    Rty = AABBy.w * invd.y - ood.y;
-    Rbz = AABBz.z * invd.z - ood.z;
-    Rtz = AABBz.w * invd.z - ood.z;
+    Lbx = (AABBx.x - origin.x) * invd.x;
+    Ltx = (AABBx.y - origin.x) * invd.x;
+    Lby = (AABBy.x - origin.y) * invd.y;
+    Lty = (AABBy.y - origin.y) * invd.y;
+    Lbz = (AABBz.x - origin.z) * invd.z;
+    Ltz = (AABBz.y - origin.z) * invd.z;
+    Rbx = (AABBx.z - origin.x) * invd.x;
+    Rtx = (AABBx.w - origin.x) * invd.x;
+    Rby = (AABBy.z - origin.y) * invd.y;
+    Rty = (AABBy.w - origin.y) * invd.y;
+    Rbz = (AABBz.z - origin.z) * invd.z;
+    Rtz = (AABBz.w - origin.z) * invd.z;
 
     L_tmin = fmax( fmax(fmin(Lbx, Ltx), fmin(Lby, Lty)), fmax(fmin(Lbz, Ltz), 0) );
-    L_tmax = fmin( fmin(fmax(Lbx, Ltx), fmax(Lby, Lty)), fmin(fmax(Lbz, Ltz), ood.w) );
+    L_tmax = fmin( fmin(fmax(Lbx, Ltx), fmax(Lby, Lty)), fmin(fmax(Lbz, Ltz), origin.w) );
     R_tmin = fmax( fmax(fmin(Rbx, Rtx), fmin(Rby, Rty)), fmax(fmin(Rbz, Rtz), 0) );
-    R_tmax = fmin( fmin(fmax(Rbx, Rtx), fmax(Rby, Rty)), fmin(fmax(Rbz, Rtz), ood.w) );
+    R_tmax = fmin( fmin(fmax(Rbx, Rtx), fmax(Rby, Rty)), fmin(fmax(Rbz, Rtz), origin.w) );
 
     return (int)(L_tmax >= L_tmin) + (int)(R_tmax >= R_tmin);
 }
@@ -581,10 +578,9 @@ __global__ void AABB_hit_Aila_Laine_Karras_kernel(const Ray* rays,
                                            const int N_AABBs,
                                            unsigned int* ray_hits)
 {
-    float4 AABBx, AABBy, AABBz, ood;
+    float4 AABBx, AABBy, AABBz, origin;
     Ray ray;
     float3 invd;
-    float ooeps = exp2f(-80.0f);
     unsigned int hit_count;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -593,21 +589,20 @@ __global__ void AABB_hit_Aila_Laine_Karras_kernel(const Ray* rays,
         ray = rays[tid];
         hit_count = 0;
 
-        // Avoid div by zero.
-        invd.x = 1.0f / (fabsf(ray.dx) > ooeps ? ray.dx : copysignf(ooeps, ray.dx));
-        invd.y = 1.0f / (fabsf(ray.dy) > ooeps ? ray.dy : copysignf(ooeps, ray.dy));
-        invd.z = 1.0f / (fabsf(ray.dz) > ooeps ? ray.dz : copysignf(ooeps, ray.dz));
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
-        ood.w = ray.length;
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        origin.x = ray.ox * invd.x;
+        origin.y = ray.oy * invd.y;
+        origin.z = ray.oz * invd.z;
+        origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
         {
             AABBx = AABBs[3*i + 0];
             AABBy = AABBs[3*i + 1];
             AABBz = AABBs[3*i + 2];
-            hit_count += AABB_hit_Aila_Laine_Karras(invd, ood, AABBx, AABBy, AABBz);
+            hit_count += AABB_hit_Aila_Laine_Karras(invd, origin, AABBx, AABBy, AABBz);
         }
 
         ray_hits[tid] = hit_count;
@@ -622,10 +617,9 @@ __global__ void AABB_hit_williams_kernel(const Ray* rays,
                                          const int N_AABBs,
                                          unsigned int* ray_hits)
 {
-    float4 AABBx, AABBy, AABBz, ood;
+    float4 AABBx, AABBy, AABBz, origin;
     Ray ray;
     float3 invd;
-    float ooeps = exp2f(-80.0f);
     unsigned int hit_count;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -634,21 +628,20 @@ __global__ void AABB_hit_williams_kernel(const Ray* rays,
         ray = rays[tid];
         hit_count = 0;
 
-        // Avoid div by zero.
-        invd.x = 1.0f / (fabsf(ray.dx) > ooeps ? ray.dx : copysignf(ooeps, ray.dx));
-        invd.y = 1.0f / (fabsf(ray.dy) > ooeps ? ray.dy : copysignf(ooeps, ray.dy));
-        invd.z = 1.0f / (fabsf(ray.dz) > ooeps ? ray.dz : copysignf(ooeps, ray.dz));
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
-        ood.w = ray.length;
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        origin.x = ray.ox * invd.x;
+        origin.y = ray.oy * invd.y;
+        origin.z = ray.oz * invd.z;
+        origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
         {
             AABBx = AABBs[3*i + 0];
             AABBy = AABBs[3*i + 1];
             AABBz = AABBs[3*i + 2];
-            hit_count += AABB_hit_williams(invd, ood, AABBx, AABBy, AABBz);
+            hit_count += AABB_hit_williams(invd, origin, AABBx, AABBy, AABBz);
         }
 
         ray_hits[tid] = hit_count;
@@ -663,10 +656,9 @@ __global__ void AABB_hit_williams_noif_kernel(const Ray* rays,
                                               const int N_AABBs,
                                               unsigned int* ray_hits)
 {
-    float4 AABBx, AABBy, AABBz, ood;
+    float4 AABBx, AABBy, AABBz, origin;
     Ray ray;
     float3 invd;
-    float ooeps = exp2f(-80.0f);
     unsigned int hit_count;
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -675,14 +667,13 @@ __global__ void AABB_hit_williams_noif_kernel(const Ray* rays,
         ray = rays[tid];
         hit_count = 0;
 
-        // Avoid div by zero.
-        invd.x = 1.0f / (fabsf(ray.dx) > ooeps ? ray.dx : copysignf(ooeps, ray.dx));
-        invd.y = 1.0f / (fabsf(ray.dy) > ooeps ? ray.dy : copysignf(ooeps, ray.dy));
-        invd.z = 1.0f / (fabsf(ray.dz) > ooeps ? ray.dz : copysignf(ooeps, ray.dz));
-        ood.x = ray.ox * invd.x;
-        ood.y = ray.oy * invd.y;
-        ood.z = ray.oz * invd.z;
-        ood.w = ray.length;
+        invd.x = 1.f / ray.dx;
+        invd.y = 1.f / ray.dy;
+        invd.z = 1.f / ray.dz;
+        origin.x = ray.ox * invd.x;
+        origin.y = ray.oy * invd.y;
+        origin.z = ray.oz * invd.z;
+        origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
         {
@@ -690,7 +681,7 @@ __global__ void AABB_hit_williams_noif_kernel(const Ray* rays,
             AABBy = AABBs[3*i + 1];
             AABBz = AABBs[3*i + 2];
 
-            hit_count += AABB_hit_williams_noif(invd, ood, AABBx, AABBy, AABBz);
+            hit_count += AABB_hit_williams_noif(invd, origin, AABBx, AABBy, AABBz);
         }
 
         ray_hits[tid] = hit_count;
