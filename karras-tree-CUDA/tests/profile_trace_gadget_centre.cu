@@ -243,8 +243,8 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_rho.size() * sizeof(float);
-            // Integral lookup.
-            trace_bytes += grace::N_table * sizeof(float);
+            trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
+            trace_bytes += d_hit_distances.size() * sizeof(float);
             trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
@@ -252,10 +252,12 @@ int main(int argc, char* argv[]) {
             // Ray keys, used when generating rays.
             unused_bytes += d_rays.size() * sizeof(unsigned int);
 
-            std::cout << "Total memory for full trace kernel:        "
+            std::cout << "Total hits: " << d_hit_indices.size() << std::endl;
+            std::cout << std::endl;
+            std::cout << "Total memory for full trace kernel and sort: "
                       << trace_bytes / (1024.*1024.*1024.) << " GiB"
                       << std::endl;
-            std::cout << "Allocated memory not used in trace kernel: "
+            std::cout << "Allocated memory not used in trace kernel:   "
                       << unused_bytes / (1024.*1024.*1024.) << " GiB"
                       << std::endl;
 

@@ -160,6 +160,16 @@ int main(int argc, char* argv[]) {
             failures++;
         }
 
+        // Check first hit is not = 0 along ray; this is usually a sign of
+        // a bug, and if all distances are zero, the next loop will not catch
+        // it.
+        if (dist == 0) {
+            std::cout << "Warning @ ray " << ray_i << std::endl;
+            std::cout << "First particle hit distance = 0; check all particle "
+                      << "hit distances are not zero." << std::endl;
+            std::cout << std::endl;
+        }
+
         // Check all following hits are >= along the ray than those preceding.
         for (int i=start+1; i<end; i++) {
             float next_dist = h_hit_distances[i];
