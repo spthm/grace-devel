@@ -218,9 +218,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_spheres,
                                        const unsigned int max_per_leaf)
 {
-    // Note: tid here is the thread's index within its *warp*.
-    int tid = threadIdx.x % WARP_SIZE;
-    int wid = threadIdx.x / WARP_SIZE;
+    int tid = threadIdx.x % WARP_SIZE; // ID of thread within warp.
+    int wid = threadIdx.x / WARP_SIZE; // ID of warp within block.
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
@@ -228,14 +227,13 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
     // One more element required for exit sentinel.
-    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    volatile int* stack_ptr = sm_stacks + 32*wid;
-    // First thread in warp initializes the first data in its warp's stack.
-    // This is the exit sentinel.
-    // The volatile declarations ensures the exit sentinel is visible to all
-    // threads in the warp. For now. Discouraged by NVIDIA.
-    if (tid == 0)
-        *stack_ptr = -1;
+    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    int* stack_ptr = sm_stacks + 32*wid;
+
+    // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
+    // to the same location to avoid any need for volatile declarations, or
+    // warp-synchronous instructions (as far as the stack is concerned).
+    *stack_ptr = -1;
 
     while (ray_index < n_rays)
     {
@@ -253,13 +251,13 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
         // Push root to stack
         stack_ptr++;
-        if (tid == 0)
-            *stack_ptr = 0;
+        *stack_ptr = 0;
 
         while (*stack_ptr >= 0)
         {
-            // Not safe to compare signed (*stack_ptr) to unsigned (n_nodes)
-            // unless the signed >= 0. This is also our stack-empty sentinel.
+            // Nodes with an index > n_nodes are leaves. But, it is not safe to
+            // compare signed (*stack_ptr) to unsigned (n_nodes) unless the
+            // signed >= 0. This is also our stack-empty check.
             while (*stack_ptr < n_nodes && *stack_ptr >= 0)
             {
                 assert(4*(*stack_ptr) + 3 < 4*n_nodes);
@@ -284,15 +282,13 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.y;
+                    *stack_ptr = node.y;
                 }
                 // If any hit left child, push it to the stack.
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.x;
+                    *stack_ptr = node.x;
                 }
             }
 
@@ -306,7 +302,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(node.y > 0);
                 assert(node.x+node.y-1 < n_spheres);
 
-                // Coalesced reads from global memory.
+                // Cache spheres in the leaf to shared memory. Coalesced.
                 // For max_per_leaf == WARP_SIZE, it is quicker to read more
                 // spheres than are in this leaf (which are not processed in the
                 // following loop) than to have an if (tid < 32).
@@ -317,14 +313,14 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
                 }
-                // Implicit warp-wide syncronization. Works for now. Discouraged
-                // by NVIDIA.
+                // WARP-SYNCHRONOUS FIX:
+                // __syncthreads();
 
+                // Loop through spheres.
                 for (int i=0; i<node.y; i++)
                 {
                     // Unused.
                     float b2, dist;
-                    // Broadcast a sphere to all threads.
                     if (sphere_hit(ray, sm_spheres[max_per_leaf*wid+i],
                                    b2, dist))
                     {
@@ -358,9 +354,9 @@ __global__ void trace_property_kernel(const Ray* rays,
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    volatile int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + 32*wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {
@@ -368,8 +364,7 @@ __global__ void trace_property_kernel(const Ray* rays,
     }
     __syncthreads();
 
-    if (tid == 0)
-        *stack_ptr = -1;
+    *stack_ptr = -1;
 
     while (ray_index < n_rays)
     {
@@ -387,8 +382,7 @@ __global__ void trace_property_kernel(const Ray* rays,
         origin.z = ray.oz;
 
         stack_ptr++;
-        if (tid == 0)
-            *stack_ptr = 0;
+        *stack_ptr = 0;
 
         while (*stack_ptr >= 0)
         {
@@ -407,14 +401,12 @@ __global__ void trace_property_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.y;
+                    *stack_ptr = node.y;
                 }
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.x;
+                    *stack_ptr = node.x;
                 }
             }
 
@@ -428,6 +420,8 @@ __global__ void trace_property_kernel(const Ray* rays,
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
                 }
+                // WARP-SYNCHRONOUS FIX:
+                // __syncthreads();
 
                 for (int i=0; i<node.y; i++)
                 {
@@ -486,9 +480,9 @@ __global__ void trace_kernel(const Ray* rays,
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ volatile int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    volatile int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + 32*wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {
@@ -496,8 +490,7 @@ __global__ void trace_kernel(const Ray* rays,
     }
     __syncthreads();
 
-    if (tid == 0)
-        *stack_ptr = -1;
+    *stack_ptr = -1;
 
     while (ray_index < n_rays)
     {
@@ -514,8 +507,7 @@ __global__ void trace_kernel(const Ray* rays,
         origin.z = ray.oz;
 
         stack_ptr++;
-        if (tid == 0)
-            *stack_ptr = 0;
+        *stack_ptr = 0;
 
         while (*stack_ptr >= 0)
         {
@@ -534,14 +526,12 @@ __global__ void trace_kernel(const Ray* rays,
                 if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.y;
+                    *stack_ptr = node.y;
                 }
                 if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
-                    if (tid == 0)
-                        *stack_ptr = node.x;
+                    *stack_ptr = node.x;
                 }
             }
 
@@ -555,6 +545,8 @@ __global__ void trace_kernel(const Ray* rays,
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
                 }
+                // WARP-SYNCHRONOUS FIX:
+                // __syncthreads();
 
                 for (int i=0; i<node.y; i++)
                 {
