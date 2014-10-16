@@ -25,7 +25,7 @@ public:
     //                     .y: right child index
     //                     .z: parent index
     //                     .w: direction and size of node, such that
-    //                         i + nodes[4*i+0].z == the last/first sphere in
+    //                         i + nodes[4*i+0].w == the last/first sphere in
     //                         the ith node for right/left nodes, respectively
     // nodes[4*node_ID + 1].x = left_bx
     //                     .y = left_tx
