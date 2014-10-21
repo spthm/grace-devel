@@ -106,22 +106,22 @@ __device__ int AABB_hit_Aila_Laine_Karras(const float3 invd, const float4 origin
     float tmin, tmax;
     unsigned int hits = 0;
 
-    bx = (AABBx.x - origin.x) * invd.x ;
-    tx = (AABBx.y - origin.x) * invd.x ;
-    by = (AABBy.x - origin.y) * invd.y ;
-    ty = (AABBy.y - origin.y) * invd.y ;
-    bz = (AABBz.x - origin.z) * invd.z ;
-    tz = (AABBz.y - origin.z) * invd.z ;
+    bx = (AABBx.x - origin.x) * invd.x;
+    tx = (AABBx.y - origin.x) * invd.x;
+    by = (AABBy.x - origin.y) * invd.y;
+    ty = (AABBy.y - origin.y) * invd.y;
+    bz = (AABBz.x - origin.z) * invd.z;
+    tz = (AABBz.y - origin.z) * invd.z;
     tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
     tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, origin.w) );
     hits += (int)(tmax >= tmin);
 
-    bx = (AABBx.z - origin.x) * invd.x ;
-    tx = (AABBx.w - origin.x) * invd.x ;
-    by = (AABBy.z - origin.y) * invd.y ;
-    ty = (AABBy.w - origin.y) * invd.y ;
-    bz = (AABBz.z - origin.z) * invd.z ;
-    tz = (AABBz.w - origin.z) * invd.z ;
+    bx = (AABBx.z - origin.x) * invd.x;
+    tx = (AABBx.w - origin.x) * invd.x;
+    by = (AABBy.z - origin.y) * invd.y;
+    ty = (AABBy.w - origin.y) * invd.y;
+    bz = (AABBz.z - origin.z) * invd.z;
+    tz = (AABBz.w - origin.z) * invd.z;
     tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
     tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, origin.w) );
     hits += (int)(tmax >= tmin);
@@ -592,9 +592,9 @@ __global__ void AABB_hit_Aila_Laine_Karras_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        origin.x = ray.ox * invd.x;
-        origin.y = ray.oy * invd.y;
-        origin.z = ray.oz * invd.z;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
         origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
@@ -631,9 +631,9 @@ __global__ void AABB_hit_williams_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        origin.x = ray.ox * invd.x;
-        origin.y = ray.oy * invd.y;
-        origin.z = ray.oz * invd.z;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
         origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
@@ -670,9 +670,9 @@ __global__ void AABB_hit_williams_noif_kernel(const Ray* rays,
         invd.x = 1.f / ray.dx;
         invd.y = 1.f / ray.dy;
         invd.z = 1.f / ray.dz;
-        origin.x = ray.ox * invd.x;
-        origin.y = ray.oy * invd.y;
-        origin.z = ray.oz * invd.z;
+        origin.x = ray.ox;
+        origin.y = ray.oy;
+        origin.z = ray.oz;
         origin.w = ray.length;
 
         for (int i=0; i<N_AABBs/2; i++)
