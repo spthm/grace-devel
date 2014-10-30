@@ -228,7 +228,7 @@ __global__ void build_nodes_kernel(int4* nodes,
             node_levels[index] = node_prefix;
             nodes[4*index].x = split_index; // left child index
             nodes[4*index].y = split_index+1; // right child index
-            nodes[4*index].w = end_index - index; // ~node size * direction
+            nodes[4*index].w = end_index;
 
             left.x = min(index, end_index); // start
             left.y = (split_index - left.x) + 1; // primitives count
@@ -267,6 +267,9 @@ __global__ void build_nodes_kernel(int4* nodes,
     return;
 }
 
+// Note: nodes and leaves do not need to be declared volatile because, although
+// two threads may be reading and writing the same node simultaneously, they
+// will never be reading or writing the same data.
 __global__ void shift_tree_indices(int4* nodes,
                                    int4* leaves,
                                    const unsigned int* leaf_shifts,
@@ -317,8 +320,14 @@ __global__ void shift_tree_indices(int4* nodes,
         }
         node.y -= shift;
 
+        // This node's index is equal to the index of the first/last leaf it
+        // contains; the far end must be shifted such that it is equal to the
+        // last/first leaf it contains, for right/left nodes, respectively.
+        node.w -= leaf_shifts[node.w];
+
         nodes[4*tid].x = node.x;
         nodes[4*tid].y = node.y;
+        nodes[4*tid].w = node.w;
 
         // Do this near the top, when we read nodes[tid]?  May give slightly
         // more coalesced memory accesses.
@@ -423,7 +432,7 @@ __global__ void find_AABBs_kernel(const int4* nodes,
             }
 
             node_index = node.z;
-            node = nodes[4*node.z + 0];
+            node = nodes[4*node_index + 0];
 
             // Write the leaf's AABB to its *parent*.
             // Would be simpler if e.g. node.w => leaf is a left child.
@@ -450,8 +459,8 @@ __global__ void find_AABBs_kernel(const int4* nodes,
 
             // Travel up the tree.  The second thread to reach a node writes
             // its AABB to its parent.  The first exits the loop.
-            in_block = (min(node_index, node_index + node.w) >= block_lower &&
-                        max(node_index, node_index + node.w) <= block_upper);
+            in_block = (min(node_index, node.w) >= block_lower &&
+                        max(node_index, node.w) <= block_upper);
 
             if (in_block) {
                 flags = sm_flags;
@@ -489,7 +498,7 @@ __global__ void find_AABBs_kernel(const int4* nodes,
                 assert(z_min < z_max);
 
                 // Write the node's AABB to its *parent*.
-                if (node.w < 0)
+                if (node.w < node_index)
                 {
                     // Current node is a left child; write left AABB.
                     v_nodes[4*node.z + 1].x = x_min;
@@ -518,9 +527,9 @@ __global__ void find_AABBs_kernel(const int4* nodes,
                 }
 
                 node_index = node.z;
-                node = nodes[4*node.z + 0];
-                in_block = (min(node_index, node_index + node.w) >= block_lower &&
-                            max(node_index, node_index + node.w) <= block_upper);
+                node = nodes[4*node_index + 0];
+                in_block = (min(node_index, node.w) >= block_lower &&
+                            max(node_index, node.w) <= block_upper);
 
                 if (in_block) {
                     flags = sm_flags;

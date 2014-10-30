@@ -24,9 +24,9 @@ public:
     // nodes[4*node_ID + 0].x: left child index
     //                     .y: right child index
     //                     .z: parent index
-    //                     .w: direction and size of node, such that
-    //                         i + nodes[4*i+0].w == the last/first sphere in
-    //                         the ith node for right/left nodes, respectively
+    //                     .w: index of the leaf node farthest from
+    //                         leaves[node_ID] which is still a descendant of
+    //                         this node.
     // nodes[4*node_ID + 1].x = left_bx
     //                     .y = left_tx
     //                     .z = right_bx
