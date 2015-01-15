@@ -77,9 +77,10 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "TRACE_THREADS_PER_BLOCK:    " << TRACE_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "TRACE_THREADS_PER_BLOCK:    "
+              << grace::TRACE_THREADS_PER_BLOCK << std::endl;
+    std::cout << "MAX_BLOCKS:                 "
+              << grace::MAX_BLOCKS << std::endl;
     std::cout << "Gadget data file:           " << fname << std::endl;
     std::cout << "Number of gas particles:    " << N << std::endl;
     std::cout << "Number of rays:             " << N_rays << std::endl;

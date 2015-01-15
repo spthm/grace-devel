@@ -61,13 +61,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "MORTON_THREADS_PER_BLOCK:   "
+              << grace::MORTON_THREADS_PER_BLOCK << std::endl;
+    std::cout << "BUILD_THREADS_PER_BLOCK:    "
+              << grace::BUILD_THREADS_PER_BLOCK << std::endl;
+    std::cout << "AABB_THREADS_PER_BLOCK:     "
+              << grace::AABB_THREADS_PER_BLOCK << std::endl;
+    std::cout << "MAX_BLOCKS:                 "
+              << grace::MAX_BLOCKS << std::endl;
     std::cout << "Starting tree depth:        " << start << std::endl;
     std::cout << "Finishing tree depth:       " << end << std::endl;
     std::cout << "Max points per leaf:        " << max_per_leaf << std::endl;

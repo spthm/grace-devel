@@ -106,7 +106,7 @@ int main(int argc, char* argv[]) {
     /* Perform a full trace. */
 
     thrust::device_vector<float> d_traced_rho;
-    thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
+    thrust::device_vector<int> d_ray_offsets(N_rays);
     thrust::device_vector<unsigned int> d_hit_indices;
     thrust::device_vector<float> d_hit_distances;
 
@@ -120,10 +120,8 @@ int main(int argc, char* argv[]) {
                         max_per_leaf,
                         d_rho);
 
-    thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
-    grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
     grace::sort_by_distance(d_hit_distances,
-                            d_ray_segments,
+                            d_ray_offsets,
                             d_hit_indices,
                             d_traced_rho);
 
@@ -137,7 +135,7 @@ int main(int argc, char* argv[]) {
      * distance.
      */
 
-    thrust::host_vector<unsigned int> h_ray_offsets = d_ray_offsets;
+    thrust::host_vector<int> h_ray_offsets = d_ray_offsets;
     thrust::host_vector<float> h_hit_distances = d_hit_distances;
 
     unsigned int failures = 0u;
@@ -165,8 +163,8 @@ int main(int argc, char* argv[]) {
         // it.
         if (dist == 0) {
             std::cout << "Warning @ ray " << ray_i << std::endl;
-            std::cout << "First particle hit distance = 0; check all particle "
-                      << "hit distances are not zero." << std::endl;
+            std::cout << "First particle hit distance = 0; check particle hit "
+                      << "distances are not all zero." << std::endl;
             std::cout << std::endl;
         }
 

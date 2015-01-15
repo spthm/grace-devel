@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
 
     /* Trace for per-ray hit counts. */
 
-    thrust::device_vector<unsigned int> d_hit_counts(N_rays);
+    thrust::device_vector<int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts,
                            d_tree, d_spheres_xyzr,
                            max_per_leaf);
@@ -109,13 +109,13 @@ int main(int argc, char* argv[]) {
 
     unsigned int max_hits = thrust::reduce(d_hit_counts.begin(),
                                            d_hit_counts.end(),
-                                           0u, thrust::maximum<unsigned int>());
+                                           0, thrust::maximum<unsigned int>());
     unsigned int min_hits = thrust::reduce(d_hit_counts.begin(),
                                            d_hit_counts.end(),
                                            N, thrust::minimum<unsigned int>());
     unsigned int total_hits = thrust::reduce(d_hit_counts.begin(),
                                              d_hit_counts.end(),
-                                             0u, thrust::plus<unsigned int>());
+                                             0, thrust::plus<unsigned int>());
 
     std::cout << "Number of rays:       " << N_rays << std::endl;
     std::cout << "Number of particles:  " << N << std::endl;
@@ -148,7 +148,7 @@ int main(int argc, char* argv[]) {
         }
         outfile.close();
 
-        thrust::host_vector<float> h_hit_counts = d_hit_counts;
+        thrust::host_vector<int> h_hit_counts = d_hit_counts;
         outfile.open("outdata/hitdata.txt");
         for (int i=0; i<N_rays; i++) {
             outfile << h_hit_counts[i] << std::endl;
