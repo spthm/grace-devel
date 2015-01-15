@@ -1,8 +1,13 @@
+MGPU_DIR= ../../moderngpu/
+
+INCLUDES= -I $(MGPU_DIR)/include
+
 NVCC= nvcc
 CUDARCH= -arch=sm_20
-NVCCFLAGS= $(CUDARCH) -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
+NVCCFLAGS= $(CUDARCH) $(INCLUDES) -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
 NVCCLIBS= -L /home/spth/usr/local/cuda/lib64 -lcuda -lcurand
 #NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
+
 
 OUT_DIR= bin
 
@@ -46,8 +51,14 @@ dump: $(TEST_DUMP_BIN) $(DEPS)
 
 profile: $(PROFILER_BIN) $(DEPS)
 
-$(OUT_DIR)/%.out: %.cu $(DEPS) | $(OUT_DIR)
-	$(NVCC) $(NVCCFLAGS) $(NVCCLIBS) $< -o $@
+mgpucontext.o: $(MGPU_DIR)/src/mgpucontext.cu
+	$(NVCC) $(NVCCFLAGS) -o $@ -c $<
+
+mgpuutil.o: $(MGPU_DIR)/src/mgpuutil.cpp
+	$(NVCC) $(NVCCFLAGS) -o $@ -c $<
+
+$(OUT_DIR)/%.out: %.cu $(DEPS) mgpucontext.o mgpuutil.o | $(OUT_DIR)
+	$(NVCC) $(NVCCFLAGS) $(NVCCLIBS) $< -o $@ mgpucontext.o mgpuutil.o
 
 $(OUT_DIR):
 	mkdir -p $(OUT_DIR)
@@ -57,6 +68,7 @@ $(OUT_DIR):
 
 clean:
 	-rm -r $(OUT_DIR)/*.out
+	-rm *.o
 
 distclean: clean
 	-rm -r $(OUT_DIR)
