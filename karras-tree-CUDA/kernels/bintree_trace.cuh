@@ -210,7 +210,7 @@ namespace gpu {
 template <typename Float4>
 __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_rays,
-                                       unsigned int* hit_counts,
+                                       int* hit_counts,
                                        const float4* nodes,
                                        size_t n_nodes,
                                        const int4* leaves,
@@ -237,7 +237,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        unsigned int ray_hit_count = 0;
+        int ray_hit_count = 0;
 
         Ray ray = rays[ray_index];
 
@@ -275,8 +275,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(node.x > 0);
                 assert(node.y > 0);
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABBx, AABBy, AABBz);
 
                 // If any hit right child, push it to the stack.
                 if (__any(lr_hit >= 2))
@@ -395,8 +395,8 @@ __global__ void trace_property_kernel(const Ray* rays,
                 float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -464,7 +464,7 @@ __global__ void trace_kernel(const Ray* rays,
                              Tout* out_data,
                              unsigned int* hit_indices,
                              Float* hit_distances,
-                             const unsigned int* ray_offsets,
+                             const int* ray_offsets,
                              const float4* nodes,
                              const size_t n_nodes,
                              const int4* leaves,
@@ -494,7 +494,7 @@ __global__ void trace_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        unsigned int out_index = ray_offsets[ray_index];
+        int out_index = ray_offsets[ray_index];
 
         Ray ray = rays[ray_index];
 
@@ -520,8 +520,8 @@ __global__ void trace_kernel(const Ray* rays,
                 float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABBx, AABBy, AABBz);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -593,7 +593,7 @@ __global__ void trace_kernel(const Ray* rays,
 // default to the same value (currently 1).
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
-                     thrust::device_vector<unsigned int>& d_hit_counts,
+                     thrust::device_vector<int>& d_hit_counts,
                      const Tree& d_tree,
                      const thrust::device_vector<Float4>& d_spheres,
                      const unsigned int max_per_leaf)
@@ -702,7 +702,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
-           thrust::device_vector<unsigned int>& d_ray_offsets,
+           thrust::device_vector<int>& d_ray_offsets,
            thrust::device_vector<unsigned int>& d_hit_indices,
            thrust::device_vector<Float>& d_hit_distances,
            const Tree& d_tree,
@@ -787,7 +787,7 @@ template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           thrust::device_vector<Tout>& d_out_data,
                           const Tout out_sentinel,
-                          thrust::device_vector<unsigned int>& d_ray_offsets,
+                          thrust::device_vector<int>& d_ray_offsets,
                           thrust::device_vector<unsigned int>& d_hit_indices,
                           const unsigned int hit_sentinel,
                           thrust::device_vector<Float>& d_hit_distances,

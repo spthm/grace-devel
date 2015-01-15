@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../../moderngpu/include/kernels/segmentedsort.cuh"
+
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
@@ -88,24 +90,30 @@ void sort_by_key(thrust::device_vector<T_key>& d_keys,
 
 template <typename Float, typename T>
 void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
-                      thrust::device_vector<unsigned int>& d_ray_segments,
+                      const thrust::device_vector<int>& d_ray_heads,
                       thrust::device_vector<unsigned int>& d_hit_indices,
                       thrust::device_vector<T>& d_hit_data)
 {
+    // MGPU calls require a context.
+    int device_ID = 0;
+    cudaGetDevice(&device_ID);
+    mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
+
     // d_indices will be a map to reorder the input data.
     thrust::device_vector<unsigned int> d_indices(d_hit_distances.size());
 
-    // First, sort the ray IDs by the distance from the source.
-    // d_hit_distances is not altered.
-    sort_map(d_hit_distances, d_indices);
-    order_by_index(d_indices, d_ray_segments);
-    // Second, stable sort the distance-ordered ray IDs.  Since this is a stable
-    // sort, all the elements belonging to a particular ray ID remain sorted by
-    // distance!
-    thrust::stable_sort_by_key(d_ray_segments.begin(), d_ray_segments.end(),
-                               d_indices.begin());
-
-    order_by_index(d_indices, d_hit_distances);
+    // First, sort the hit distances in the segments defined by d_ray_heads,
+    // i.e. sort each ray by distance.
+    // The distances are the keys, and the ordered indices are the values.
+    mgpu::SegSortPairsFromIndices(
+        thrust::raw_pointer_cast(d_hit_distances.data()),
+        thrust::raw_pointer_cast(d_indices.data()),
+        d_hit_distances.size(),
+        thrust::raw_pointer_cast(d_ray_heads.data()),
+        d_ray_heads.size(),
+        *mgpu_context_ptr);
+    // Second, reorder the hit indices and hit data by the map produced in the
+    // above sort.
     order_by_index(d_indices, d_hit_indices);
     order_by_index(d_indices, d_hit_data);
 }
