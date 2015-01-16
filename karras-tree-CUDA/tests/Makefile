@@ -1,4 +1,4 @@
-MGPU_DIR= ../../moderngpu/
+MGPU_DIR= /home/spth/Code/CUDA/moderngpu/
 
 INCLUDES= -I $(MGPU_DIR)/include
 
