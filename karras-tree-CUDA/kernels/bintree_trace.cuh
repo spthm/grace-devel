@@ -801,7 +801,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     size_t n_nodes = d_tree.leaves.size() - 1;
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
+    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres, max_per_leaf);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate

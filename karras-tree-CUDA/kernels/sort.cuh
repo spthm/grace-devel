@@ -12,6 +12,7 @@
 #include <thrust/scatter.h>
 
 #include <thrust/scan.h>
+#include <thrust/sequence.h>
 #include <thrust/sort.h>
 
 namespace grace {
@@ -101,6 +102,7 @@ void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
 
     // d_indices will be a map to reorder the input data.
     thrust::device_vector<unsigned int> d_indices(d_hit_distances.size());
+    thrust::sequence(d_indices.begin(), d_indices.end(), 0u);
 
     // First, sort the hit distances in the segments defined by d_ray_heads,
     // i.e. sort each ray by distance.
