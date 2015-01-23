@@ -91,7 +91,7 @@ void sort_by_key(thrust::device_vector<T_key>& d_keys,
 
 template <typename Float, typename T>
 void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
-                      const thrust::device_vector<int>& d_ray_heads,
+                      const thrust::device_vector<int>& d_ray_offsets,
                       thrust::device_vector<unsigned int>& d_hit_indices,
                       thrust::device_vector<T>& d_hit_data)
 {
@@ -104,15 +104,15 @@ void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
     thrust::device_vector<unsigned int> d_indices(d_hit_distances.size());
     thrust::sequence(d_indices.begin(), d_indices.end(), 0u);
 
-    // First, sort the hit distances in the segments defined by d_ray_heads,
-    // i.e. sort each ray by distance.
+    // First, sort the hit distances and the indicies within the segments
+    // defined by d_ray_offsets, i.e. sort each ray and its indices by distance.
     // The distances are the keys, and the ordered indices are the values.
     mgpu::SegSortPairsFromIndices(
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_indices.data()),
         d_hit_distances.size(),
-        thrust::raw_pointer_cast(d_ray_heads.data()),
-        d_ray_heads.size(),
+        thrust::raw_pointer_cast(d_ray_offsets.data()),
+        d_ray_offsets.size(),
         *mgpu_context_ptr);
     // Second, reorder the hit indices and hit data by the map produced in the
     // above sort.
