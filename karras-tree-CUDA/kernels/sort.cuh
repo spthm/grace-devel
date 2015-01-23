@@ -6,10 +6,9 @@
 #include <thrust/iterator/constant_iterator.h>
 #include <thrust/iterator/zip_iterator.h>
 
-#include <thrust/sequence.h>
 #include <thrust/gather.h>
 #include <thrust/scatter.h>
-
+#include <thrust/sequence.h>
 #include <thrust/scan.h>
 #include <thrust/sort.h>
 
