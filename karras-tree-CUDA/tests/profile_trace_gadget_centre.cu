@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 4532 * 32; // = 145024 ~ max on an M2090 for data set.
-    unsigned int max_per_leaf = 100;
+    unsigned int max_per_leaf = 1;
     unsigned int N_iter = 2;
 
     if (argc > 1) {
@@ -50,6 +50,8 @@ int main(int argc, char* argv[]) {
     if (argc > 4) {
         N_iter = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
+
+    assert(max_per_leaf == 1);
 
 
     /* Read in Gadget file. */
@@ -109,9 +111,7 @@ int main(int argc, char* argv[]) {
 
     grace::Tree d_tree(N);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
 
 
     /* Compute information needed for ray generation; rays are emitted from the

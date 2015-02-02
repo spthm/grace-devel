@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int device_ID = 0;
-    unsigned int max_per_leaf = 100;
+    unsigned int max_per_leaf = 1;
     unsigned int N_iter = 100;
     infile_name = "Data_025";
 
@@ -38,6 +38,8 @@ int main(int argc, char* argv[]) {
         N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
 
+    assert(max_per_leaf == 1);
+
     /* Output run parameters and device properties to console. */
 
     cudaGetDeviceProperties(&deviceProp, device_ID);
@@ -48,8 +50,6 @@ int main(int argc, char* argv[]) {
     std::cout << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
             << std::endl;
     std::cout << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
             << std::endl;
     std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
     std::cout << "Max particles per leaf:     " << max_per_leaf << std::endl;
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed;
-    double all_tot, morton_tot, sort_tot, tree_tot, compact_tot, aabb_tot;
+    double all_tot, morton_tot, sort_tot, tree_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -117,25 +117,11 @@ int main(int argc, char* argv[]) {
         grace::Tree d_tree(N);
 
         cudaEventRecord(part_start);
-        grace::build_tree(d_tree, d_keys, max_per_leaf);
+        grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         tree_tot += part_elapsed;
-
-        cudaEventRecord(part_start);
-        grace::compact_tree(d_tree);
-        cudaEventRecord(part_stop);
-        cudaEventSynchronize(part_stop);
-        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        compact_tot += part_elapsed;
-
-        cudaEventRecord(part_start);
-        grace::find_AABBs(d_tree, d_spheres_xyzr);
-        cudaEventRecord(part_stop);
-        cudaEventSynchronize(part_stop);
-        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        aabb_tot += part_elapsed;
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -152,15 +138,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Time for sort-by-key:              ";
     std::cout.width(7);
     std::cout << sort_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for hierarchy generation:     ";
+    std::cout << "Time for tree construction:        ";
     std::cout.width(7);
     std::cout << tree_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for hierarchy compaction:     ";
-    std::cout.width(7);
-    std::cout << compact_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for calculating AABBs:        ";
-    std::cout.width(7);
-    std::cout << aabb_tot/N_iter << " ms." << std::endl;
     std::cout << "Time for total (inc. memory ops):  ";
     std::cout.width(7);
     std::cout << all_tot/N_iter << " ms." << std::endl;

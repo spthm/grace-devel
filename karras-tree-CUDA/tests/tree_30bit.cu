@@ -51,6 +51,8 @@ int main(int argc, char* argv[]) {
         seed_factor = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
 
+    assert(max_per_leaf == 1);
+
     std::cout << "Will generate " << N << " random points, with up to "
               << max_per_leaf << " point(s) per leaf." << std::endl;
     if (save_in == save_out) {
@@ -156,9 +158,7 @@ int main(int argc, char* argv[]) {
 
     grace::Tree d_tree(N);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
 
     /* Save node and leaf data. */
 
@@ -169,6 +169,8 @@ int main(int argc, char* argv[]) {
     h_tree.nodes = d_tree.nodes;
     h_tree.levels = d_tree.levels;
     h_tree.leaves = d_tree.leaves;
+    cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
+               sizeof(int), cudaMemcpyDeviceToHost);
 
     // Copy AABBs into a more output-friendly format.
     // AABB[2*i+0] = (bx, by, bz) of the ith node.
@@ -237,6 +239,8 @@ int main(int argc, char* argv[]) {
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
+        outfile << "root index: " << h_tree.root_index << std::endl;
+        outfile << std::endl;
         for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
             outfile << "level:           " << h_tree.levels[i] << std::endl;
@@ -261,7 +265,8 @@ int main(int argc, char* argv[]) {
                 outfile << "right leaf flag: False" << std::endl;
                 outfile << "right:           " << node.y << std::endl;
             }
-            outfile << "parent:          " << node.z << std::endl;
+            outfile << "left-most key:       " << node.z << std::endl;
+            outfile << "right-most key:      " << node.w << std::endl;
             outfile << "AABB_bottom:     " << node_AABBs[2*i+0].x << ", "
                                            << node_AABBs[2*i+0].y << ", "
                                            << node_AABBs[2*i+0].z

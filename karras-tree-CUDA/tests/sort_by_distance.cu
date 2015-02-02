@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     unsigned int N = 100000;
     // Relatively few because the random spheres result in many hits per ray.
     unsigned int N_rays = 2500*32; // = 80,000.
-    unsigned int max_per_leaf = 100;
+    unsigned int max_per_leaf = 1;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -44,6 +44,8 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
+
+    assert(max_per_leaf == 1);
 
     std::cout << "Generating " << N << " random points and " << N_rays
               << " random rays, with up to " << max_per_leaf << " point(s) per"
@@ -83,9 +85,7 @@ int main(int argc, char* argv[]) {
 
     grace::Tree d_tree(N);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
 
     // Working arrays no longer needed.
     d_keys.clear(); d_keys.shrink_to_fit();

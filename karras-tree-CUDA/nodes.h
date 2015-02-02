@@ -23,10 +23,8 @@ public:
     //
     // nodes[4*node_ID + 0].x: left child index
     //                     .y: right child index
-    //                     .z: parent index
-    //                     .w: index of the leaf node farthest from
-    //                         leaves[node_ID] which is still a descendant of
-    //                         this node.
+    //                     .z: index of first key in this node
+    //                     .w: index of the last key in this node
     // nodes[4*node_ID + 1].x = left_bx
     //                     .y = left_tx
     //                     .z = right_bx
@@ -48,9 +46,19 @@ public:
     //                .z = parent index
     //                .w = padding
     thrust::device_vector<int4> leaves;
+    // A pointer to the *value of the index* of the root element of the tree.
+    int* root_index_ptr;
 
     Tree(size_t N_leaves) : nodes(4*(N_leaves-1)), leaves(N_leaves),
-                                   levels(N_leaves-1) {}
+                                  levels(N_leaves-1)
+    {
+       cudaMalloc(&root_index_ptr, sizeof(int));
+    }
+
+    ~Tree()
+    {
+        cudaFree(root_index_ptr);
+    }
 };
 
 class H_Tree
@@ -59,9 +67,11 @@ public:
     thrust::host_vector<int4> nodes;
     thrust::host_vector<unsigned int> levels;
     thrust::host_vector<int4> leaves;
+    int root_index;
 
     H_Tree(size_t N_leaves) : nodes(4*(N_leaves-1)), leaves(N_leaves),
-                                     levels((N_leaves-1)) {}
+                                    levels(N_leaves-1),
+                                    root_index(0) {}
 };
 
 } //namespace grace

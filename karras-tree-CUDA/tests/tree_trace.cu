@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int N = 100000;
     unsigned int N_rays = 313*32; // = 10,016
-    unsigned int max_per_leaf = 32;
+    unsigned int max_per_leaf = 1;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -35,6 +35,8 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
+
+    assert(max_per_leaf == 1);
 
     std::cout << "Testing " << N << " random points and " << N_rays
               << " random rays, with up to " << max_per_leaf << " point(s) per"
@@ -65,9 +67,7 @@ int main(int argc, char* argv[]) {
 
     grace::Tree d_tree(N);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
 
     // Keys no longer needed.
     d_keys.clear();
@@ -148,6 +148,7 @@ int main(int argc, char* argv[]) {
     {
         std::cout << std::endl;
         std::cout << failures << " intersections failed." << std::endl;
+        std::cout << std::endl;
         std::cout << "Device code may compile to FMA instructions; try "
                   << "compiling this file" << std::endl;
         std::cout << "with nvcc's -fmad=false option."  << std::endl;
