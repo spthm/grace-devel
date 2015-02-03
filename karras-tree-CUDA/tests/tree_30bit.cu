@@ -157,8 +157,10 @@ int main(int argc, char* argv[]) {
     /* Build the tree from the keys. */
 
     grace::Tree d_tree(N);
+    thrust::device_vector<grace::uinteger32> d_deltas(N+1);
 
-    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
+    grace::compute_deltas(d_keys, d_deltas);
+    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
 
     /* Save node and leaf data. */
 
@@ -265,8 +267,8 @@ int main(int argc, char* argv[]) {
                 outfile << "right leaf flag: False" << std::endl;
                 outfile << "right:           " << node.y << std::endl;
             }
-            outfile << "left-most key:       " << node.z << std::endl;
-            outfile << "right-most key:      " << node.w << std::endl;
+            outfile << "left-most key:   " << node.z << std::endl;
+            outfile << "right-most key:  " << node.w << std::endl;
             outfile << "AABB_bottom:     " << node_AABBs[2*i+0].x << ", "
                                            << node_AABBs[2*i+0].y << ", "
                                            << node_AABBs[2*i+0].z

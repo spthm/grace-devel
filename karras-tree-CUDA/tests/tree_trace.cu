@@ -66,8 +66,10 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N);
+    thrust::device_vector<unsigned int> d_deltas(N+1);
 
-    grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
+    grace::compute_deltas(d_keys, d_deltas);
+    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
 
     // Keys no longer needed.
     d_keys.clear();

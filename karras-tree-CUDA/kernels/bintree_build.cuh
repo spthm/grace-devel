@@ -60,15 +60,29 @@ __device__ uinteger64 node_delta(const int i,
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename KeyType, typename Float4>
+template <typename KeyType>
+__global__ void compute_deltas_kernel(const KeyType* keys,
+                                      const size_t n_keys,
+                                      KeyType* deltas)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid <= n_keys)
+    {
+        // The range [-1, n_keys) is valid for querying node_delta.
+        deltas[tid] = node_delta(tid - 1, keys, n_keys);
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+template <typename DeltaType, typename Float4>
 __global__ void build_tree_kernel(volatile int4* nodes,
                                   volatile float4* f4_nodes,
-                                  const size_t n_nodes,
                                   int4* leaves,
+                                  const size_t n_leaves,
                                   unsigned int* levels,
                                   int* root_index,
-                                  const KeyType* keys,
-                                  const size_t n_keys,
+                                  const DeltaType* deltas,
                                   const Float4* spheres,
                                   unsigned int* flags)
 {
@@ -82,8 +96,11 @@ __global__ void build_tree_kernel(volatile int4* nodes,
     assert(sizeof(int4) == sizeof(float4));
 
     tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+    const size_t n_nodes = n_leaves - 1;
+    // Offset deltas so the range [-1, n_keys) is valid for indexing it.
+    deltas++;
 
-    while  (tid < n_keys)
+    while  (tid < n_leaves)
     {
         cur_index = tid;
 
@@ -101,8 +118,9 @@ __global__ void build_tree_kernel(volatile int4* nodes,
         // Compute the current leaf's parent index and write associated data.
         int left = cur_index;
         int right = cur_index;
-        if (node_delta(left - 1, keys, n_keys)
-                < node_delta(right, keys, n_keys))
+        assert(left >= 0);
+        assert(right < n_leaves);
+        if (deltas[left - 1] < deltas[right])
         {
             // Leftward node is parent.
             parent_index = left - 1;
@@ -158,7 +176,9 @@ __global__ void build_tree_kernel(volatile int4* nodes,
 
             left = nodes[4 * cur_index + 0].z;
             right = nodes[4 * cur_index + 0].w;
-            if (right - left == n_keys - 1) {
+            assert(left >= 0);
+            assert(right < n_leaves);
+            if (right - left == n_nodes) {
                 // A second thread has reached the root node, so all nodes
                 // have now been processed.
                 *root_index = cur_index;
@@ -187,8 +207,7 @@ __global__ void build_tree_kernel(volatile int4* nodes,
 
             // Compute the current node's parent index and write associated
             // data.
-            if (node_delta(left - 1, keys, n_keys)
-                    < node_delta(right, keys, n_keys))
+            if (deltas[left - 1] < deltas[right])
             {
                 // Leftward node is parent.
                 parent_index = left - 1;
@@ -237,9 +256,23 @@ __global__ void build_tree_kernel(volatile int4* nodes,
 // C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename KeyType, typename Float4>
+template<typename KeyType>
+void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
+                    thrust::device_vector<KeyType>& d_deltas)
+{
+    const size_t n_keys = d_keys.size();
+    assert(n_keys + 1 == d_deltas.size());
+
+    int blocks = min(MAX_BLOCKS, (int)( ((n_keys + 1) + 511) / 512 ));
+    gpu::compute_deltas_kernel<<<blocks, 512>>>(
+        thrust::raw_pointer_cast(d_keys.data()),
+        n_keys,
+        thrust::raw_pointer_cast(d_deltas.data()));
+}
+
+template <typename DeltaType, typename Float4>
 void build_tree(Tree& d_tree,
-                const thrust::device_vector<KeyType>& d_keys,
+                const thrust::device_vector<DeltaType>& d_deltas,
                 const thrust::device_vector<Float4>& d_spheres)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
@@ -247,23 +280,21 @@ void build_tree(Tree& d_tree,
     // In case this ever changes.
     assert(sizeof(int4) == sizeof(float4));
 
-    size_t n_nodes = d_tree.leaves.size() - 1;
-    size_t n_keys = d_keys.size();
-    thrust::device_vector<unsigned int> d_flags(n_keys-1);
+    const size_t n_leaves = d_tree.leaves.size();
+    thrust::device_vector<unsigned int> d_flags(n_leaves-1);
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + BUILD_THREADS_PER_BLOCK-1)
+    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
                                         / BUILD_THREADS_PER_BLOCK));
 
     gpu::build_tree_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tree.nodes.data()),
          reinterpret_cast<float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
-        n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
+        n_leaves,
         thrust::raw_pointer_cast(d_tree.levels.data()),
         d_tree.root_index_ptr,
-        thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
+        thrust::raw_pointer_cast(d_deltas.data()),
         thrust::raw_pointer_cast(d_spheres.data()),
         thrust::raw_pointer_cast(d_flags.data()));
 }

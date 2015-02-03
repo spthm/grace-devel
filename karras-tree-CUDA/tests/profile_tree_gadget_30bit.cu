@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed;
-    double all_tot, morton_tot, sort_tot, tree_tot;
+    double all_tot, morton_tot, sort_tot, deltas_tot, tree_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -98,6 +98,7 @@ int main(int argc, char* argv[]) {
         cudaEventRecord(tot_start);
         thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
         thrust::device_vector<grace::uinteger32> d_keys(N);
+        thrust::device_vector<grace::uinteger32> d_deltas(N+1);
 
         cudaEventRecord(part_start);
         grace::morton_keys(d_keys, d_spheres_xyzr);
@@ -114,10 +115,17 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         sort_tot += part_elapsed;
 
+        cudaEventRecord(part_start);
+        grace::compute_deltas(d_keys, d_deltas);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+        deltas_tot += part_elapsed;
+
         grace::Tree d_tree(N);
 
         cudaEventRecord(part_start);
-        grace::build_tree(d_tree, d_keys, d_spheres_xyzr);
+        grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -138,6 +146,9 @@ int main(int argc, char* argv[]) {
     std::cout << "Time for sort-by-key:              ";
     std::cout.width(7);
     std::cout << sort_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for computing node deltas:    ";
+    std::cout.width(7);
+    std::cout << deltas_tot/N_iter << " ms." << std::endl;
     std::cout << "Time for tree construction:        ";
     std::cout.width(7);
     std::cout << tree_tot/N_iter << " ms." << std::endl;
