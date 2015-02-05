@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 100000;
-    unsigned int max_per_leaf = 1;
+    unsigned int max_per_leaf = 32;
     bool save_in = false;
     bool save_out = false;
     unsigned int seed_factor = 1u;
@@ -50,8 +50,6 @@ int main(int argc, char* argv[]) {
     if (argc > 4) {
         seed_factor = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
-
-    assert(max_per_leaf == 1);
 
     std::cout << "Will generate " << N << " random points, with up to "
               << max_per_leaf << " point(s) per leaf." << std::endl;
@@ -156,11 +154,12 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
     grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::compact_tree(d_tree);
 
     /* Save node and leaf data. */
 
@@ -169,7 +168,7 @@ int main(int argc, char* argv[]) {
     grace::H_Tree h_tree(N_leaves);
 
     h_tree.nodes = d_tree.nodes;
-    h_tree.levels = d_tree.levels;
+    h_tree.heights = d_tree.heights;
     h_tree.leaves = d_tree.leaves;
     cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
                sizeof(int), cudaMemcpyDeviceToHost);
@@ -245,7 +244,7 @@ int main(int argc, char* argv[]) {
         outfile << std::endl;
         for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
-            outfile << "level:           " << h_tree.levels[i] << std::endl;
+            outfile << "height           " << h_tree.heights[i] << std::endl;
             int4 node = h_tree.nodes[4*i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.

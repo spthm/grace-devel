@@ -217,7 +217,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const int* root_index,
                                        const Float4* spheres,
                                        const size_t n_spheres,
-                                       const unsigned int max_per_leaf)
+                                       const int max_per_leaf)
 {
     int tid = threadIdx.x % WARP_SIZE; // ID of thread within warp.
     int wid = threadIdx.x / WARP_SIZE; // ID of warp within block.
@@ -354,7 +354,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const int4* leaves,
                                       const int* root_index,
                                       const Float4* spheres,
-                                      const unsigned int max_per_leaf,
+                                      const int max_per_leaf,
                                       const Tin* p_data,
                                       const Float* g_b_integrals)
 {
@@ -483,7 +483,7 @@ __global__ void trace_kernel(const Ray* rays,
                              const int4* leaves,
                              const int* root_index,
                              const Float4* spheres,
-                             const unsigned int max_per_leaf,
+                             const int max_per_leaf,
                              const Tin* p_data,
                              const Float* g_b_integrals)
 {
@@ -605,14 +605,11 @@ __global__ void trace_kernel(const Ray* rays,
 // C-like wrappers for tracing kernels
 //-----------------------------------------------------------------------------
 
-// TODO: For consistency with the tree build kernels, max_per_leaf should
-// default to the same value (currently 1).
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                      thrust::device_vector<unsigned int>& d_hit_counts,
                      const Tree& d_tree,
-                     const thrust::device_vector<Float4>& d_spheres,
-                     const unsigned int max_per_leaf)
+                     const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -634,7 +631,7 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
@@ -645,7 +642,7 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size(),
-        max_per_leaf);
+        d_tree.max_per_leaf);
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
@@ -661,7 +658,6 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
                     thrust::device_vector<Tout>& d_out_data,
                     const Tree& d_tree,
                     const thrust::device_vector<Float4>& d_spheres,
-                    const unsigned int max_per_leaf,
                     const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
@@ -692,7 +688,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -702,7 +698,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
@@ -725,14 +721,13 @@ void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Float>& d_hit_distances,
            const Tree& d_tree,
            const thrust::device_vector<Float4>& d_spheres,
-           const unsigned int max_per_leaf,
            const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres, max_per_leaf);
+    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
@@ -775,7 +770,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -788,7 +783,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
@@ -813,7 +808,6 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           const Float distance_sentinel,
                           const Tree& d_tree,
                           const thrust::device_vector<Float4>& d_spheres,
-                          const unsigned int max_per_leaf,
                           const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
@@ -878,7 +872,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -891,7 +885,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 

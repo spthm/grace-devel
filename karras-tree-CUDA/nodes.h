@@ -40,7 +40,7 @@ public:
     thrust::device_vector<int4> nodes;
     // Equal to the common prefix of the keys which this node spans.
     // Currently used only when verifying correct construction.
-    thrust::device_vector<unsigned int> levels;
+    thrust::device_vector<unsigned int> heights;
     // leaves[leaf_ID].x = index of first sphere
     //                .y = number of spheres in the leaf
     //                .z = parent index
@@ -48,9 +48,11 @@ public:
     thrust::device_vector<int4> leaves;
     // A pointer to the *value of the index* of the root element of the tree.
     int* root_index_ptr;
+    int max_per_leaf;
 
-    Tree(size_t N_leaves) : nodes(4*(N_leaves-1)), leaves(N_leaves),
-                                  levels(N_leaves-1)
+    Tree(size_t N_leaves, int max_per_leaf = 1) :
+        nodes(4*(N_leaves-1)), leaves(N_leaves), heights(N_leaves-1),
+        max_per_leaf(max_per_leaf)
     {
        cudaMalloc(&root_index_ptr, sizeof(int));
     }
@@ -65,13 +67,14 @@ class H_Tree
 {
 public:
     thrust::host_vector<int4> nodes;
-    thrust::host_vector<unsigned int> levels;
+    thrust::host_vector<unsigned int> heights;
     thrust::host_vector<int4> leaves;
     int root_index;
+    int max_per_leaf;
 
-    H_Tree(size_t N_leaves) : nodes(4*(N_leaves-1)), leaves(N_leaves),
-                                    levels(N_leaves-1),
-                                    root_index(0) {}
+    H_Tree(size_t N_leaves, int _max_per_leaf = 1) :
+        nodes(4*(N_leaves-1)), leaves(N_leaves), heights(N_leaves-1),
+        root_index(0), max_per_leaf(max_per_leaf) {}
 };
 
 } //namespace grace

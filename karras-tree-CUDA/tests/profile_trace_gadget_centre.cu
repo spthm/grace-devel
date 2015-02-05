@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int device_ID = 0;
     unsigned int N_rays = 4532 * 32; // = 145024 ~ max on an M2090 for data set.
-    unsigned int max_per_leaf = 1;
+    unsigned int max_per_leaf = 32;
     unsigned int N_iter = 2;
 
     if (argc > 1) {
@@ -50,8 +50,6 @@ int main(int argc, char* argv[]) {
     if (argc > 4) {
         N_iter = (unsigned int) std::strtol(argv[4], NULL, 10);
     }
-
-    assert(max_per_leaf == 1);
 
 
     /* Read in Gadget file. */
@@ -110,10 +108,11 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
     grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::compact_tree(d_tree);
 
 
     /* Compute information needed for ray generation; rays are emitted from the
@@ -165,7 +164,6 @@ int main(int argc, char* argv[]) {
                                      d_traced_rho,
                                      d_tree,
                                      d_spheres_xyzr,
-                                     max_per_leaf,
                                      d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -190,7 +188,6 @@ int main(int argc, char* argv[]) {
                             d_hit_distances,
                             d_tree,
                             d_spheres_xyzr,
-                            max_per_leaf,
                             d_rho); // For RT, we'd pass ~number counts.
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -220,8 +217,7 @@ int main(int argc, char* argv[]) {
         grace::trace_hitcounts(d_rays,
                                d_ray_offsets,
                                d_tree,
-                               d_spheres_xyzr,
-                               max_per_leaf);
+                               d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -250,7 +246,7 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(unsigned int);
-            unused_bytes += d_tree.levels.size() * sizeof(unsigned int);
+            unused_bytes += d_tree.heights.size() * sizeof(unsigned int);
             // Ray keys, used when generating rays.
             unused_bytes += d_rays.size() * sizeof(unsigned int);
 

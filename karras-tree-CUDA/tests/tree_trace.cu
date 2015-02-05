@@ -24,7 +24,7 @@ int main(int argc, char* argv[]) {
 
     unsigned int N = 100000;
     unsigned int N_rays = 313*32; // = 10,016
-    unsigned int max_per_leaf = 1;
+    unsigned int max_per_leaf = 32;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -35,8 +35,6 @@ int main(int argc, char* argv[]) {
     if (argc > 3) {
         max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
     }
-
-    assert(max_per_leaf == 1);
 
     std::cout << "Testing " << N << " random points and " << N_rays
               << " random rays, with up to " << max_per_leaf << " point(s) per"
@@ -65,11 +63,12 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
     grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::compact_tree(d_tree);
 
     // Keys no longer needed.
     d_keys.clear();
@@ -90,7 +89,7 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts, d_tree,
-                           d_spheres_xyzr, max_per_leaf);
+                           d_spheres_xyzr);
 
 
     /* Loop through all rays and test for interestion with all particles
