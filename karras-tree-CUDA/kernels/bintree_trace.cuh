@@ -231,8 +231,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
     // TODO: Alocate dynamically based on key length.
     // Including leaves there are 31 levels for 30-bit keys.
     // One more element required for exit sentinel.
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + 32*wid;
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
     // to the same location to avoid any need for volatile declarations, or
@@ -276,10 +276,14 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                // Node 0 may be the left child of its parent, but never the
-                // right.
+                // A left child can be nodes[0].
+                // A right child cannot be nodes[0].
                 assert(node.x >= 0);
                 assert(node.y > 0);
+                // Similarly for the last nodes, noting leaf indices are offset
+                // by += n_nodes.
+                assert(node.x < 2 * n_nodes);
+                assert(node.y <= 2 * n_nodes);
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
                                                 AABBx, AABBy, AABBz);
@@ -296,6 +300,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     stack_ptr++;
                     *stack_ptr = node.x;
                 }
+
+                assert(stack_ptr < sm_stacks + STACK_SIZE * (wid + 1));
+
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -363,9 +370,9 @@ __global__ void trace_property_kernel(const Ray* rays,
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {
@@ -492,9 +499,9 @@ __global__ void trace_kernel(const Ray* rays,
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {

@@ -105,14 +105,14 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
     thrust::device_vector<grace::uinteger32> d_keys(N);
-    thrust::device_vector<grace::uinteger32> d_deltas(N+1);
+    thrust::device_vector<float> d_deltas(N+1);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
     grace::Tree d_tree(N);
 
-    grace::compute_deltas(d_keys, d_deltas);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
     grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
 
 

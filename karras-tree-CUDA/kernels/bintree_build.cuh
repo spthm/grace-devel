@@ -7,6 +7,8 @@
 #define assert(arg)
 #endif
 
+#include <math_constants.h>
+
 #include <thrust/device_vector.h>
 #include <thrust/copy.h>
 #include <thrust/transform_scan.h>
@@ -56,21 +58,62 @@ __device__ uinteger64 node_delta(const int i,
 
 }
 
+// Euclidian distance metric.
+template <typename Float4>
+__device__ float node_delta(const int i,
+                            const Float4* spheres,
+                            const size_t n_spheres)
+{
+    if (i < 0 || i + 1 >= n_spheres)
+        return CUDART_INF_F;
+
+    Float4 si = spheres[i];
+    Float4 sj = spheres[i+1];
+
+    return (si.x - sj.x) * (si.x - sj.x)
+           + (si.y - sj.y) * (si.y - sj.y)
+           + (si.z - sj.z) * (si.z - sj.z);
+}
+
+// Surface area 'distance' metric.
+// template <typename Float4>
+// __device__ float node_delta(const int i,
+//                             const Float4* spheres,
+//                             const size_t n_spheres)
+// {
+//     if (i < 0 || i + 1 >= n_spheres)
+//         return CUDART_INF_F;
+
+//     Float4 si = spheres[i];
+//     Float4 sj = spheres[i+1];
+
+//     float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
+//     float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
+//     float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
+
+//     float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
+
+//     assert(SA < CUDART_INF_F);
+//     assert(SA > 0);
+
+//     return SA;
+// }
+
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename KeyType>
-__global__ void compute_deltas_kernel(const KeyType* keys,
-                                      const size_t n_keys,
-                                      KeyType* deltas)
+template <typename InType, typename DeltaType>
+__global__ void compute_deltas_kernel(const InType* input,
+                                      const size_t n_input,
+                                      DeltaType* deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (tid <= n_keys)
+    while (tid <= n_input)
     {
         // The range [-1, n_keys) is valid for querying node_delta.
-        deltas[tid] = node_delta(tid - 1, keys, n_keys);
+        deltas[tid] = node_delta(tid - 1, input, n_input);
         tid += blockDim.x * gridDim.x;
     }
 }
@@ -256,17 +299,17 @@ __global__ void build_tree_kernel(volatile int4* nodes,
 // C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
-template<typename KeyType>
-void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
-                    thrust::device_vector<KeyType>& d_deltas)
+template<typename InType, typename DeltaType>
+void compute_deltas(const thrust::device_vector<InType>& d_input,
+                    thrust::device_vector<DeltaType>& d_deltas)
 {
-    const size_t n_keys = d_keys.size();
-    assert(n_keys + 1 == d_deltas.size());
+    const size_t n_input = d_input.size();
+    assert(n_input + 1 == d_deltas.size());
 
-    int blocks = min(MAX_BLOCKS, (int)( ((n_keys + 1) + 511) / 512 ));
+    int blocks = min(MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
     gpu::compute_deltas_kernel<<<blocks, 512>>>(
-        thrust::raw_pointer_cast(d_keys.data()),
-        n_keys,
+        thrust::raw_pointer_cast(d_input.data()),
+        n_input,
         thrust::raw_pointer_cast(d_deltas.data()));
 }
 
