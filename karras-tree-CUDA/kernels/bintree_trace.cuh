@@ -228,9 +228,6 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
-    // TODO: Alocate dynamically based on key length.
-    // Including leaves there are 31 levels for 30-bit keys.
-    // One more element required for exit sentinel.
     __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
