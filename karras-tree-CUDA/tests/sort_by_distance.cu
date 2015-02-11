@@ -85,8 +85,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
-    grace::compact_tree(d_tree);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
     // Working arrays no longer needed.
     d_keys.clear(); d_keys.shrink_to_fit();
@@ -118,7 +117,6 @@ int main(int argc, char* argv[]) {
                         d_hit_distances,
                         d_tree,
                         d_spheres_xyzr,
-                        max_per_leaf,
                         d_rho);
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());

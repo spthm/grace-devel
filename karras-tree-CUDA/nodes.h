@@ -23,8 +23,8 @@ public:
     //
     // nodes[4*node_ID + 0].x: left child index
     //                     .y: right child index
-    //                     .z: index of first key in this node
-    //                     .w: index of the last key in this node
+    //                     .z: index of first leaf in this node
+    //                     .w: index of the last leaf in this node
     // nodes[4*node_ID + 1].x = left_bx
     //                     .y = left_tx
     //                     .z = right_bx
@@ -41,8 +41,8 @@ public:
     // Equal to the common prefix of the keys which this node spans.
     // Currently used only when verifying correct construction.
     thrust::device_vector<unsigned int> heights;
-    // leaves[leaf_ID].x = index of first sphere
-    //                .y = number of spheres in the leaf
+    // leaves[leaf_ID].x = index of first sphere in this leaf
+    //                .y = number of spheres in this leaf
     //                .z = parent index
     //                .w = padding
     thrust::device_vector<int4> leaves;

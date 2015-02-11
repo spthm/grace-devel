@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed;
-    double all_tot, morton_tot, sort_tot, deltas_tot, tree_tot, comp_tot;
+    double all_tot, morton_tot, sort_tot, deltas_tot, tree_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
     cudaEventCreate(&tot_start);
@@ -123,18 +123,11 @@ int main(int argc, char* argv[]) {
         grace::Tree d_tree(N, max_per_leaf);
 
         cudaEventRecord(part_start);
-        grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+        grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         tree_tot += part_elapsed;
-
-        cudaEventRecord(part_start);
-        grace::compact_tree(d_tree);
-        cudaEventRecord(part_stop);
-        cudaEventSynchronize(part_stop);
-        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-        comp_tot += part_elapsed;
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -157,9 +150,6 @@ int main(int argc, char* argv[]) {
     std::cout << "Time for tree construction:        ";
     std::cout.width(7);
     std::cout << tree_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for tree compaction:          ";
-    std::cout.width(7);
-    std::cout << comp_tot/N_iter << " ms." << std::endl;
     std::cout << "Time for total (inc. memory ops):  ";
     std::cout.width(7);
     std::cout << all_tot/N_iter << " ms." << std::endl;
