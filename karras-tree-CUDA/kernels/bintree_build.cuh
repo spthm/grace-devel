@@ -136,7 +136,7 @@ __global__ void compute_deltas_kernel(const KeyType* keys,
 }
 
 template <typename KeyType, typename DeltaType>
-__global__ void compute_edge_deltas_kernel(const int4* leaves,
+__global__ void compute_leaf_deltas_kernel(const int4* leaves,
                                            const size_t n_leaves,
                                            const KeyType* keys,
                                            const size_t n_keys,
@@ -158,12 +158,12 @@ __global__ void compute_edge_deltas_kernel(const int4* leaves,
 }
 
 template <typename DeltaType>
-__global__ void build_tree_leaves_kernel(volatile int4* nodes,
-                                         const size_t n_nodes,
-                                         int4* big_leaves,
-                                         const DeltaType* deltas,
-                                         const int max_per_leaf,
-                                         unsigned int* flags)
+__global__ void build_leaves_kernel(volatile int4* nodes,
+                                    const size_t n_nodes,
+                                    int4* big_leaves,
+                                    const DeltaType* deltas,
+                                    const int max_per_leaf,
+                                    unsigned int* flags)
 {
     int tid, cur_index, parent_index;
     bool first_arrival;
@@ -292,15 +292,15 @@ __global__ void fix_leaves_kernel(const int4* nodes,
 }
 
 template <typename DeltaType, typename Float4>
-__global__ void build_tree_nodes_kernel(volatile int4* nodes,
-                                        volatile float4* f4_nodes,
-                                        int4* leaves,
-                                        const size_t n_leaves,
-                                        unsigned int* heights,
-                                        int* root_index,
-                                        const DeltaType* deltas,
-                                        const Float4* spheres,
-                                        unsigned int* flags)
+__global__ void build_nodes_kernel(volatile int4* nodes,
+                                   volatile float4* f4_nodes,
+                                   int4* leaves,
+                                   const size_t n_leaves,
+                                   unsigned int* heights,
+                                   int* root_index,
+                                   const DeltaType* deltas,
+                                   const Float4* spheres,
+                                   unsigned int* flags)
 {
     int tid, cur_index, parent_index;
     Float4 sphere;
@@ -498,14 +498,14 @@ void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
 }
 
 template<typename KeyType, typename DeltaType>
-void compute_edge_deltas(const thrust::device_vector<int4>& d_leaves,
+void compute_leaf_deltas(const thrust::device_vector<int4>& d_leaves,
                          const thrust::device_vector<KeyType>& d_keys,
                          thrust::device_vector<DeltaType>& d_deltas)
 {
     assert(d_leaves.size() + 1 == d_deltas.size());
 
     int blocks = min(MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
-    gpu::compute_edge_deltas_kernel<<<blocks, 512>>>(
+    gpu::compute_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
         thrust::raw_pointer_cast(d_keys.data()),
@@ -513,10 +513,90 @@ void compute_edge_deltas(const thrust::device_vector<int4>& d_leaves,
         thrust::raw_pointer_cast(d_deltas.data()));
 }
 
+template <typename DeltaType>
+void build_leaves(thrust::device_vector<int4>& d_tmp_nodes,
+                  thrust::device_vector<int4>& d_tmp_leaves,
+                  const int max_per_leaf,
+                  const thrust::device_vector<DeltaType>& d_deltas,
+                  thrust::device_vector<unsigned int>& d_flags)
+{
+    const size_t n_leaves = d_tmp_leaves.size();
+    const size_t n_nodes = n_leaves - 1;
+
+    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
+                                        / BUILD_THREADS_PER_BLOCK));
+
+    gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_tmp_nodes.data()),
+        n_nodes,
+        thrust::raw_pointer_cast(d_tmp_leaves.data()),
+        thrust::raw_pointer_cast(d_deltas.data()),
+        max_per_leaf,
+        thrust::raw_pointer_cast(d_flags.data()));
+
+    blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
+                                     / BUILD_THREADS_PER_BLOCK));
+
+    gpu::fix_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_tmp_nodes.data()),
+        n_nodes,
+        thrust::raw_pointer_cast(d_tmp_leaves.data()),
+        thrust::raw_pointer_cast(d_flags.data()));
+}
+
+template <typename DeltaType, typename Float4>
+void build_nodes(Tree& d_tree,
+                 const thrust::device_vector<DeltaType>& d_deltas,
+                 const thrust::device_vector<Float4>& d_spheres,
+                 thrust::device_vector<unsigned int>& d_flags)
+{
+    const size_t n_leaves = d_tree.leaves.size();
+
+    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
+                                         / BUILD_THREADS_PER_BLOCK));
+
+    gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_tree.nodes.data()),
+         reinterpret_cast<float4*>(
+            thrust::raw_pointer_cast(d_tree.nodes.data())),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
+        n_leaves,
+        thrust::raw_pointer_cast(d_tree.heights.data()),
+        d_tree.root_index_ptr,
+        thrust::raw_pointer_cast(d_deltas.data()),
+        thrust::raw_pointer_cast(d_spheres.data()),
+        thrust::raw_pointer_cast(d_flags.data()));
+}
+
+void copy_big_leaves(Tree& d_tree,
+                     thrust::device_vector<int4>& d_tmp_leaves)
+{
+    // TODO: Since the copy_if presumably does a scan sum internally before
+    // performing the copy, this is wasteful.  Calling a scan sum and then
+    // doing the copy 'manually' would probably be better.
+    // Alternatively, try thrust::remove_copy with value = int4().
+    // Not using a temporary leaves array above, and using thrust::remove
+    // here is also an option (d_tree.nodes could be used as the first argument
+    // to build_tree_leaves_kernel as all its data will be overwritten later
+    // anyway.)
+    const int n_new_leaves = thrust::transform_reduce(d_tmp_leaves.begin(),
+                                                      d_tmp_leaves.end(),
+                                                      is_valid_node(),
+                                                      0,
+                                                      thrust::plus<int>());
+    const int n_new_nodes = n_new_leaves - 1;
+    d_tree.nodes.resize(4 * n_new_nodes);
+    d_tree.leaves.resize(n_new_leaves);
+
+    thrust::copy_if(d_tmp_leaves.begin(), d_tmp_leaves.end(),
+                    d_tree.leaves.begin(),
+                    is_valid_node());
+}
+
 template <typename KeyType, typename DeltaType, typename Float4>
 void build_tree(Tree& d_tree,
                 const thrust::device_vector<KeyType>& d_keys,
-                thrust::device_vector<DeltaType>& d_deltas,
+                const thrust::device_vector<DeltaType>& d_deltas,
                 const thrust::device_vector<Float4>& d_spheres)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
@@ -526,68 +606,27 @@ void build_tree(Tree& d_tree,
 
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
+
     thrust::device_vector<unsigned int> d_flags(n_nodes);
-
-    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
-                                        / BUILD_THREADS_PER_BLOCK));
-
-    // Use d_tree.leaves as a temporary here (working memory for the partial
-    // tree climb).
-    // d_tmp_leaves stores what will become the final leaf nodes.
     thrust::device_vector<int4> d_tmp_leaves(n_leaves);
-    gpu::build_tree_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        n_nodes,
-        thrust::raw_pointer_cast(d_tmp_leaves.data()),
-        thrust::raw_pointer_cast(d_deltas.data()),
-        d_tree.max_per_leaf,
-        thrust::raw_pointer_cast(d_flags.data()));
 
-    blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
-                                     / BUILD_THREADS_PER_BLOCK));
-    gpu::fix_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        n_nodes,
-        thrust::raw_pointer_cast(d_tmp_leaves.data()),
-        thrust::raw_pointer_cast(d_flags.data()));
+    // Use d_tree.leaves as temporary *nodes* here (working memory for the
+    // partial tree climb).
+    // d_tmp_leaves stores what will become the final leaf nodes.
+    build_leaves(d_tree.leaves, d_tmp_leaves, d_tree.max_per_leaf, d_deltas,
+                 d_flags);
 
-    // TODO: Since the copy_if presumably does a scan sum internally before
-    // performing the copy, this is wasteful.  Calling a scan sum and then
-    // doing the copy 'manually' would probably be better.
-    // Alternatively, try thrust::remove_copy with value = int4().
-    // Not using a temporary leaves array above, and using thrust::remove
-    // here is also an option (d_tree.nodes could be used as the first argument
-    // to build_tree_leaves_kernel as all its data will be overwritten later
-    // anyway.)
-    int n_new_leaves = thrust::transform_reduce(d_tmp_leaves.begin(),
-                                                d_tmp_leaves.end(),
-                                                is_valid_node(),
-                                                0,
-                                                thrust::plus<int>());
-    int n_new_nodes = n_new_leaves - 1;
-    d_tree.nodes.resize(4 * n_new_nodes);
-    d_tree.leaves.resize(n_new_leaves);
-    d_deltas.resize(n_new_leaves + 1);
+    copy_big_leaves(d_tree, d_tmp_leaves);
+
+    const size_t n_new_leaves = d_tree.leaves.size();
+    const size_t n_new_nodes = n_new_leaves - 1;
+
+    thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
+    compute_leaf_deltas(d_tree.leaves, d_keys, d_new_deltas);
+
     d_flags.resize(n_new_nodes);
     thrust::fill(d_flags.begin(), d_flags.end(), 0);
-
-    thrust::copy_if(d_tmp_leaves.begin(), d_tmp_leaves.end(),
-                    d_tree.leaves.begin(),
-                    is_valid_node());
-
-    compute_edge_deltas(d_tree.leaves, d_keys, d_deltas);
-
-    gpu::build_tree_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.nodes.data()),
-         reinterpret_cast<float4*>(
-            thrust::raw_pointer_cast(d_tree.nodes.data())),
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        n_new_leaves,
-        thrust::raw_pointer_cast(d_tree.heights.data()),
-        d_tree.root_index_ptr,
-        thrust::raw_pointer_cast(d_deltas.data()),
-        thrust::raw_pointer_cast(d_spheres.data()),
-        thrust::raw_pointer_cast(d_flags.data()));
+    build_nodes(d_tree, d_new_deltas, d_spheres, d_flags);
 }
 
 } // namespace grace
