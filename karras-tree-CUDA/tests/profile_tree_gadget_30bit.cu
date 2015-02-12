@@ -84,19 +84,23 @@ int main(int argc, char* argv[]) {
     /* Profile the tree constructed from Gadget data. */
 
     cudaEvent_t part_start, part_stop;
+    cudaEvent_t tree_start, tree_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed;
-    double all_tot, morton_tot, sort_tot, deltas_tot, tree_tot;
+    double all_tot, morton_tot, sort_tot, tree_tot;
+    double deltas_tot, leaves_tot, leaf_deltas_tot, nodes_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
+    cudaEventCreate(&tree_start);
+    cudaEventCreate(&tree_stop);
     cudaEventCreate(&tot_start);
     cudaEventCreate(&tot_stop);
 
     for (int i=0; i<N_iter; i++) {
         cudaEventRecord(tot_start);
+
         thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
         thrust::device_vector<grace::uinteger32> d_keys(N);
-        thrust::device_vector<float> d_deltas(N+1);
 
         cudaEventRecord(part_start);
         grace::morton_keys(d_keys, d_spheres_xyzr);
@@ -113,6 +117,8 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         sort_tot += part_elapsed;
 
+        thrust::device_vector<float> d_deltas(N+1);
+
         cudaEventRecord(part_start);
         grace::compute_deltas(d_spheres_xyzr, d_deltas);
         cudaEventRecord(part_stop);
@@ -121,12 +127,46 @@ int main(int argc, char* argv[]) {
         deltas_tot += part_elapsed;
 
         grace::Tree d_tree(N, max_per_leaf);
+        thrust::device_vector<int4> d_tmp_nodes(N - 1);
+        thrust::device_vector<int4> d_tmp_leaves(N);
+        thrust::device_vector<unsigned int> d_flags(N - 1);
+
+        cudaEventRecord(tree_start);
 
         cudaEventRecord(part_start);
-        grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
+        grace::build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf,
+                            d_deltas, d_flags);
+        grace::copy_big_leaves(d_tree, d_tmp_leaves);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+        leaves_tot += part_elapsed;
+
+        const size_t n_new_leaves = d_tree.leaves.size();
+        const size_t n_new_nodes = n_new_leaves - 1;
+        thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
+
+        cudaEventRecord(part_start);
+        grace::compute_leaf_deltas(d_tree.leaves, d_spheres_xyzr,
+                                   d_new_deltas);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+        leaf_deltas_tot += part_elapsed;
+
+        d_flags.resize(n_new_nodes);
+
+        cudaEventRecord(part_start);
+        thrust::fill(d_flags.begin(), d_flags.end(), 0);
+        grace::build_nodes(d_tree, d_new_deltas, d_spheres_xyzr, d_flags);
+        cudaEventRecord(part_stop);
+        cudaEventSynchronize(part_stop);
+        cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
+        nodes_tot += part_elapsed;
+
+        cudaEventRecord(tree_stop);
+        cudaEventSynchronize(tree_stop);
+        cudaEventElapsedTime(&part_elapsed, tree_start, tree_stop);
         tree_tot += part_elapsed;
 
         cudaEventRecord(tot_stop);
@@ -135,8 +175,8 @@ int main(int argc, char* argv[]) {
         all_tot += part_elapsed;
     }
 
-    std::cout << "Will generate:" << std::endl;
-    std::cout << "    i)  A tree from " << N << " SPH particles." << std::endl;
+    std::cout << "Will generate: a tree from " << N << " SPH particles."
+              << std::endl;
     std::cout << std::endl;
     std::cout << "Time for Morton key generation:    ";
     std::cout.width(7);
@@ -144,10 +184,19 @@ int main(int argc, char* argv[]) {
     std::cout << "Time for sort-by-key:              ";
     std::cout.width(7);
     std::cout << sort_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for computing node deltas:    ";
+    std::cout << "Time for computing deltas:         ";
     std::cout.width(7);
     std::cout << deltas_tot/N_iter << " ms." << std::endl;
-    std::cout << "Time for tree construction:        ";
+    std::cout << "Time for building leaves:          ";
+    std::cout.width(7);
+    std::cout << leaves_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for computing leaf deltas:    ";
+    std::cout.width(7);
+    std::cout << leaf_deltas_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for building nodes:           ";
+    std::cout.width(7);
+    std::cout << nodes_tot/N_iter << " ms." << std::endl;
+    std::cout << "Time for tree construction, total: ";
     std::cout.width(7);
     std::cout << tree_tot/N_iter << " ms." << std::endl;
     std::cout << "Time for total (inc. memory ops):  ";
