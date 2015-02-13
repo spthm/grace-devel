@@ -313,30 +313,27 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
                                    const Float4* spheres,
                                    unsigned int* flags)
 {
-    int tid, cur_index, parent_index;
-    Float4 sphere;
-    float x_min, y_min, z_min;
-    float x_max, y_max, z_max;
-    bool first_arrival;
-
     // Ensure the int4/float4 recasting of node data is valid.
     assert(sizeof(int4) == sizeof(float4));
 
-    tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+    int tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
     const size_t n_nodes = n_leaves - 1;
     // Offset deltas so the range [-1, n_keys) is valid for indexing it.
     deltas++;
 
-    x_min = y_min = z_min = CUDART_INF_F;
-    x_max = y_max = z_max = -1.f;
     while  (tid < n_leaves)
     {
-        cur_index = tid;
+        int cur_index = tid;
         int4 leaf = leaves[cur_index];
+
+        float x_min, y_min, z_min;
+        float x_max, y_max, z_max;
+        x_min = y_min = z_min = CUDART_INF_F;
+        x_max = y_max = z_max = -1.f;
 
         // Compute the current leaf's AABB.
         for (int i = 0; i < leaf.y; i++) {
-            sphere = spheres[leaf.x + i];
+            Float4 sphere = spheres[leaf.x + i];
 
             x_max = max(x_max, sphere.x + sphere.w);
             y_max = max(y_max, sphere.y + sphere.w);
@@ -351,6 +348,7 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
         // write this leaf's share of its parent's data.
         int left = cur_index;
         int right = cur_index;
+        int parent_index;
         if (deltas[left - 1] < deltas[right])
         {
             // Leftward node is parent.
@@ -398,7 +396,7 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
 
         unsigned int flag = atomicAdd(&flags[parent_index], 1);
         assert(flag < 2);
-        first_arrival = (flag == 0);
+        bool first_arrival = (flag == 0);
 
         while (!first_arrival)
         {
