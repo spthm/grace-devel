@@ -265,8 +265,8 @@ int main(int argc, char* argv[]) {
                 outfile << "right leaf flag: False" << std::endl;
                 outfile << "right:           " << node.y << std::endl;
             }
-            outfile << "left-most key:   " << node.z << std::endl;
-            outfile << "right-most key:  " << node.w << std::endl;
+            outfile << "left-most leaf:  " << node.z << std::endl;
+            outfile << "right-most leaf: " << node.w << std::endl;
             outfile << "AABB_bottom:     " << node_AABBs[2*i+0].x << ", "
                                            << node_AABBs[2*i+0].y << ", "
                                            << node_AABBs[2*i+0].z
