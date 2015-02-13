@@ -213,20 +213,8 @@ __global__ void build_leaves_kernel(volatile int4* nodes,
 
             int size = right - left + 1;
             if (size > max_per_leaf) {
-                // Both children of the current node must be leaves.
-                int4 leaf;
-
-                // Write left child as a big leaf.
-                leaf.x = left;
-                leaf.y = cur_index - left + 1;
-                big_leaves[left] = leaf;
-
-                // Write right child as a big leaf.
-                leaf.x = cur_index + 1;
-                leaf.y = right - cur_index;
-                big_leaves[right] = leaf;
-
-                // Stop traveling up the tree. Continue with outer loop.
+                // At least one child of the current node must be a leaf.
+                // Stop traveling up the tree and continue with outer loop.
                 break;
             }
 
@@ -257,36 +245,59 @@ __global__ void build_leaves_kernel(volatile int4* nodes,
 __global__ void fix_leaves_kernel(const int4* nodes,
                                   const size_t n_nodes,
                                   int4* big_leaves,
-                                  const unsigned int* flags)
+                                  const int max_per_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < n_nodes)
     {
-        unsigned int flag = flags[tid];
-        assert(flag <= 2);
-        if (flag == 1)
-        {
-            // This node only had one of its children written: that half must
-            // be a big leaf.
-            int4 node = nodes[tid];
-            int4 leaf;
-            int left = node.z;
-            int right = node.w;
+        // This node had at least one of its children written.
+        int4 node = nodes[tid];
+        int left = node.z;
+        int right = node.w;
 
-            // Left-most leaf in a node, node.z, can legitimately be 0, but the
-            // right-most leaf, node.w, cannot.
-            if (right > 0) {
-                leaf.x = tid + 1;
-                leaf.y = right - tid;
-                big_leaves[right] = leaf;
-            }
-            else {
-                leaf.x = node.z;
-                leaf.y = tid - left + 1;
-                big_leaves[left] = leaf;
-            }
+        // If left or right are 0, size may be incorrect.
+        int size = right - left + 1;
+
+        // If left is 0, left_size may be *incorrect*:
+        // we cannot differentiate between an unwritten node.z and one
+        // written as 0.
+        int left_size = tid - left + 1;
+        // This is guaranteed to be *sufficiently correct*:
+        // right == 0 means node.w was unwritten, and the right child is
+        // therefore not a leaf, so its size is set accordingly.
+        int right_size = (right > 0 ? right - tid : max_per_leaf + 1);
+
+        // These are both guarranteed to be *correct*:
+        // If left_size was computed incorrectly, then the true value of
+        // node.z is not zero, and thus node.z was unwritten. This requires
+        // that the left child is *not* a leaf, and hence the node index
+        // (tid) must be  >= max_per_leaf, resulting in left_leaf = false.
+        // right_leaf follows from the correctness of right_size.
+        bool left_leaf = (left_size <= max_per_leaf);
+        bool right_leaf = (right_size <= max_per_leaf);
+
+        // If only one child is to be written, we are certain it should be,
+        // as the current node's size must be > max_per_leaf.
+        // Otherwise: we write only if the current node cannot be a leaf.
+        bool size_check = left_leaf ^ right_leaf ? true :
+                                                   (size > max_per_leaf);
+
+        // NOTE: size is guaranteed accurate only if both left_leaf and
+        // right_leaf are true, but if they are both false no write occurs
+        // anyway because of the && below.
+        int4 leaf;
+        if (left_leaf && size_check) {
+            leaf.x = left;
+            leaf.y = left_size;
+            big_leaves[left] = leaf;
         }
+        if (right_leaf && size_check) {
+            leaf.x = tid + 1;
+            leaf.y = right_size;
+            big_leaves[right] = leaf;
+        }
+
         tid += blockDim.x * gridDim.x;
     }
 }
@@ -541,7 +552,7 @@ void build_leaves(thrust::device_vector<int4>& d_tmp_nodes,
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
-        thrust::raw_pointer_cast(d_flags.data()));
+        max_per_leaf);
 }
 
 template <typename DeltaType, typename Float4>
