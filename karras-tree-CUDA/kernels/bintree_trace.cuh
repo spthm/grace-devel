@@ -127,34 +127,34 @@ __device__ __inline__ float maxf_vminf(float f1, float f2, float f3) {
 }
 
 __device__ int AABBs_hit(const float3 invd, const float3 origin, const float len,
-                         const float4 AABBx,
-                         const float4 AABBy,
-                         const float4 AABBz)
+                         const float4 AABB_L,
+                         const float4 AABB_R,
+                         const float4 AABB_LR)
 {
-    float bx_l = (AABBx.x - origin.x) * invd.x;
-    float tx_l = (AABBx.y - origin.x) * invd.x;
-    float by_l = (AABBy.x - origin.y) * invd.y;
-    float ty_l = (AABBy.y - origin.y) * invd.y;
-    float bz_l = (AABBz.x - origin.z) * invd.z;
-    float tz_l = (AABBz.y - origin.z) * invd.z;
+    float bx_L = (AABB_L.x - origin.x) * invd.x;
+    float tx_L = (AABB_L.y - origin.x) * invd.x;
+    float by_L = (AABB_L.z - origin.y) * invd.y;
+    float ty_L = (AABB_L.w - origin.y) * invd.y;
+    float bz_L = (AABB_LR.x - origin.z) * invd.z;
+    float tz_L = (AABB_LR.y - origin.z) * invd.z;
 
-    float bx_r = (AABBx.z - origin.x) * invd.x;
-    float tx_r = (AABBx.w - origin.x) * invd.x;
-    float by_r = (AABBy.z - origin.y) * invd.y;
-    float ty_r = (AABBy.w - origin.y) * invd.y;
-    float bz_r = (AABBz.z - origin.z) * invd.z;
-    float tz_r = (AABBz.w - origin.z) * invd.z;
+    float bx_R = (AABB_R.x - origin.x) * invd.x;
+    float tx_R = (AABB_R.y - origin.x) * invd.x;
+    float by_R = (AABB_R.z - origin.y) * invd.y;
+    float ty_R = (AABB_R.w - origin.y) * invd.y;
+    float bz_R = (AABB_LR.z - origin.z) * invd.z;
+    float tz_R = (AABB_LR.w - origin.z) * invd.z;
 
-    float tmin_l = maxf_vmaxf( fmin(bx_l, tx_l), fmin(by_l, ty_l),
-                               maxf_vminf(bz_l, tz_l, 0) );
-    float tmax_l = minf_vminf( fmax(bx_l, tx_l), fmax(by_l, ty_l),
-                               minf_vmaxf(bz_l, tz_l, len) );
-    float tmin_r = maxf_vmaxf( fmin(bx_r, tx_r), fmin(by_r, ty_r),
-                               maxf_vminf(bz_r, tz_r, 0) );
-    float tmax_r = minf_vminf( fmax(bx_r, tx_r), fmax(by_r, ty_r),
-                               minf_vmaxf(bz_r, tz_r, len) );
+    float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
+                               maxf_vminf(bz_L, tz_L, 0) );
+    float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
+                               minf_vmaxf(bz_L, tz_L, len) );
+    float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
+                               maxf_vminf(bz_R, tz_R, 0) );
+    float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
+                               minf_vmaxf(bz_R, tz_R, len) );
 
-    return (int)(tmax_l >= tmin_l) + 2*((int)(tmax_r >= tmin_r));
+    return (int)(tmax_L >= tmin_L) + 2*((int)(tmax_R >= tmin_R));
 }
 
 template <typename Float4, typename Float>
@@ -268,9 +268,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 // warning: taking the address of a temporary.
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 // A left child can be nodes[0].
@@ -283,7 +283,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(node.y <= 2 * n_nodes);
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 // If any hit right child, push it to the stack.
                 if (__any(lr_hit >= 2))
@@ -403,13 +403,13 @@ __global__ void trace_property_kernel(const Ray* rays,
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -531,13 +531,13 @@ __global__ void trace_kernel(const Ray* rays,
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {

@@ -27,10 +27,10 @@ public:
     //                     .w: index of the last leaf in this node
     // nodes[4*node_ID + 1].x = left_bx
     //                     .y = left_tx
-    //                     .z = right_bx
-    //                     .w = right_tx
-    // nodes[4*node_ID + 2].x = left_by
-    //                     .y = left_ty
+    //                     .z = left_by
+    //                     .w = left_ty
+    // nodes[4*node_ID + 2].x = right_bx
+    //                     .y = right_tx
     //                     .z = right_by
     //                     .w = right_ty
     // nodes[4*node_ID + 3].x = left_bz

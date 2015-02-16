@@ -116,6 +116,67 @@ __device__ float node_delta(const int i,
 //     return SA;
 // }
 
+// Load/store functions which read/write directly from/to L2 cache, which is
+// globally coherent.
+// All take a pointer with the type of the base primitive (i.e. int* for int 2
+// read/writes, float* for float4 read/writes) for flexibility.
+__device__ __forceinline__ int2 load_L2_vec2s32(const int* const addr)
+{
+    int2 i2;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "l"(addr));
+    #else
+    asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "r"(addr));
+    #endif
+
+    return i2;
+}
+
+__device__ __forceinline__ float4 load_L2_vec4f32(const float* const addr)
+{
+    float4 f4;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "l"(addr));
+    #else
+    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "r"(addr));
+    #endif
+
+    return f4;
+}
+
+__device__ __forceinline__ void store_L2_s32(
+    const int* const addr, const int a)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("st.global.cg.s32 [%0], %1;" :: "l"(addr), "r"(a));
+    #else
+    asm("st.global.cg.s32 [%0], %1;" :: "r"(addr), "r"(a));
+    #endif
+}
+
+__device__ __forceinline__ void store_L2_vec4f32(
+    const float* const addr,
+    const float a, const float b, const float c, const float d)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "l"(addr), "f"(a), "f"(b), "f"(c), "f"(d));
+    #else
+    asm("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "r"(addr), "f"(a), "f"(b), "f"(c), "f"(d));
+    #endif
+}
+
+__device__ __forceinline__ void store_L2_vec2f32(
+    const float* const addr, const float a, const float b)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("st.global.cg.v2.f32 [%0], {%1, %2};" :: "l"(addr), "f"(a), "f"(b));
+    #else
+    asm("st.global.cg.v2.f32 [%0], {%1, %2};" :: "r"(addr), "f"(a), "f"(b));
+    #endif
+}
+
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
@@ -229,11 +290,12 @@ __global__ void build_leaves_kernel(int2* nodes,
             if (parent_index < low || parent_index >= high)
                 continue;
 
-            #if defined(__LP64__) || defined(_WIN64)
-            asm("st.global.cg.s32 [%0], %1;" :: "l"(addr), "r"(end));
-            #else
-            asm("st.global.cg.s32 [%0], %1;" :: "r"(addr), "r"(end));
-            #endif
+            // The next thread to read this data may be in a different block,
+            // and this always has to be assumed. Hence, L1 cache (which is not
+            // globally coherent) is essentially useless. L2, however, is
+            // globally coherent.
+            // Store DIRECTLY to L2.
+            store_L2_s32(addr, end);
 
             // Travel up the tree.  The second thread to reach a node writes its
             // left or right end to its parent.  The first exits the loop.
@@ -248,12 +310,11 @@ __global__ void build_leaves_kernel(int2* nodes,
             {
                 cur_index = parent_index;
 
-                int left, right;
-                #if defined(__LP64__) || defined(_WIN64)
-                asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "l"(nodes+parent_index));
-                #else
-                asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "r"(nodes+parent_index));
-                #endif
+                int2 left_right;
+                // Load DIRECTLY from L2. Vector int2 load.
+                left_right = load_L2_vec2s32(&(nodes[parent_index].x));
+                int left = left_right.x;
+                int right = left_right.y;
 
                 // Only the left-most leaf can have an index of 0, and only the
                 // right-most leaf can have an index of n_leaves - 1.
@@ -298,11 +359,8 @@ __global__ void build_leaves_kernel(int2* nodes,
                     break;
                 }
 
-                #if defined(__LP64__) || defined(_WIN64)
-                asm("st.global.cg.s32 [%0], %1;" :: "l"(addr), "r"(end));
-                #else
-                asm("st.global.cg.s32 [%0], %1;" :: "r"(addr), "r"(end));
-                #endif
+                // Store DIRECTLY to L2.
+                store_L2_s32(addr, end);
 
                 __threadfence_block();
                 assert(parent_index - low >= 0);
@@ -380,7 +438,7 @@ __global__ void fix_leaves_kernel(const int2* nodes,
 
 template <typename DeltaType, typename Float4>
 __global__ void build_nodes_kernel(volatile int4* nodes,
-                                   volatile float4* f4_nodes,
+                                   float4* f4_nodes,
                                    int4* leaves,
                                    const size_t n_leaves,
                                    unsigned int* heights,
@@ -425,6 +483,8 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
         int left = cur_index;
         int right = cur_index;
         int parent_index;
+        float* vec4_addr;
+        float* vec2_addr;
         if (deltas[left - 1] < deltas[right])
         {
             // Leftward node is parent.
@@ -435,13 +495,11 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
             nodes[4 * parent_index + 0].y = cur_index + n_nodes;
             nodes[4 * parent_index + 0].w = right;
 
-            // Write current node's AABB (to its parent).
-            f4_nodes[4 * parent_index + 1].z = x_min;
-            f4_nodes[4 * parent_index + 1].w = x_max;
-            f4_nodes[4 * parent_index + 2].z = y_min;
-            f4_nodes[4 * parent_index + 2].w = y_max;
-            f4_nodes[4 * parent_index + 3].z = z_min;
-            f4_nodes[4 * parent_index + 3].w = z_max;
+            // Get the float* addresses to write the right AABB to.
+            // Address for a full vec4 store.
+            vec4_addr = &(f4_nodes[4 * parent_index + 2].x);
+            // Address for a vec2 store into a float4 element.
+            vec2_addr = &(f4_nodes[4 * parent_index + 3].z);
 
         }
         else {
@@ -453,14 +511,14 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
             nodes[4 * parent_index + 0].x = cur_index + n_nodes;
             nodes[4 * parent_index + 0].z = left;
 
-            // Write current node's AABB (to its parent).
-            f4_nodes[4 * parent_index + 1].x = x_min;
-            f4_nodes[4 * parent_index + 1].y = x_max;
-            f4_nodes[4 * parent_index + 2].x = y_min;
-            f4_nodes[4 * parent_index + 2].y = y_max;
-            f4_nodes[4 * parent_index + 3].x = z_min;
-            f4_nodes[4 * parent_index + 3].y = z_max;
+            // Get the float* addresses to write the left AABB to.
+            vec4_addr = &(f4_nodes[4 * parent_index + 1].x);
+            vec2_addr = &(f4_nodes[4 * parent_index + 3].x);
         }
+
+        // Write the leaf's AABB to its parent. Store DIRECTLY to L2.
+        store_L2_vec4f32(vec4_addr, x_min, x_max, y_min, y_max);
+        store_L2_vec2f32(vec2_addr, z_min, z_max);
 
         // TODO: We don't actually need to store this information.
         leaves[cur_index] = leaf;
@@ -474,6 +532,7 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
         assert(flag < 2);
         bool first_arrival = (flag == 0);
 
+        // Travel up the tree, essentially performing the same steps as above.
         while (!first_arrival)
         {
             cur_index = parent_index;
@@ -496,20 +555,19 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
                 return;
             }
 
+            // Vector load the current node's child AABBs DIRECTLY from L2.
+            float4 AABB_L  = load_L2_vec4f32(&(f4_nodes[4 * cur_index + 1].x));
+            float4 AABB_R  = load_L2_vec4f32(&(f4_nodes[4 * cur_index + 2].x));
+            float4 AABB_LR = load_L2_vec4f32(&(f4_nodes[4 * cur_index + 3].x));
+
             // Compute the current node's AABB as the union of its children's
             // AABBs.
-            x_min = min(f4_nodes[4 * cur_index + 1].x,
-                        f4_nodes[4 * cur_index + 1].z);
-            x_max = max(f4_nodes[4 * cur_index + 1].y,
-                        f4_nodes[4 * cur_index + 1].w);
-            y_min = min(f4_nodes[4 * cur_index + 2].x,
-                        f4_nodes[4 * cur_index + 2].z);
-            y_max = max(f4_nodes[4 * cur_index + 2].y,
-                        f4_nodes[4 * cur_index + 2].w);
-            z_min = min(f4_nodes[4 * cur_index + 3].x,
-                        f4_nodes[4 * cur_index + 3].z);
-            z_max = max(f4_nodes[4 * cur_index + 3].y,
-                        f4_nodes[4 * cur_index + 3].w);
+            x_min = min(AABB_L.x, AABB_R.x);
+            x_max = max(AABB_L.y, AABB_R.y);
+            y_min = min(AABB_L.z, AABB_R.z);
+            y_max = max(AABB_L.w, AABB_R.w);
+            z_min = min(AABB_LR.x, AABB_LR.z);
+            z_max = max(AABB_LR.y, AABB_LR.w);
 
             // Note, they should never be equal.
             assert(x_min < x_max);
@@ -527,13 +585,8 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
                 nodes[4 * parent_index + 0].y = cur_index;
                 nodes[4 * parent_index + 0].w = right;
 
-                // Write current node's AABB (to its parent).
-                f4_nodes[4 * parent_index + 1].z = x_min;
-                f4_nodes[4 * parent_index + 1].w = x_max;
-                f4_nodes[4 * parent_index + 2].z = y_min;
-                f4_nodes[4 * parent_index + 2].w = y_max;
-                f4_nodes[4 * parent_index + 3].z = z_min;
-                f4_nodes[4 * parent_index + 3].w = z_max;
+                vec4_addr = &(f4_nodes[4 * parent_index + 2].x);
+                vec2_addr = &(f4_nodes[4 * parent_index + 3].z);
 
             }
             else {
@@ -544,14 +597,13 @@ __global__ void build_nodes_kernel(volatile int4* nodes,
                 nodes[4 * parent_index + 0].x = cur_index;
                 nodes[4 * parent_index + 0].z = left;
 
-                // Write current node's AABB (to its parent).
-                f4_nodes[4 * parent_index + 1].x = x_min;
-                f4_nodes[4 * parent_index + 1].y = x_max;
-                f4_nodes[4 * parent_index + 2].x = y_min;
-                f4_nodes[4 * parent_index + 2].y = y_max;
-                f4_nodes[4 * parent_index + 3].x = z_min;
-                f4_nodes[4 * parent_index + 3].y = z_max;
+                vec4_addr = &(f4_nodes[4 * parent_index + 1].x);
+                vec2_addr = &(f4_nodes[4 * parent_index + 3].x);
             }
+
+            // Write the node's AABB to its parent. Store DIRECTLY to L2.
+            store_L2_vec4f32(vec4_addr, x_min, x_max, y_min, y_max);
+            store_L2_vec2f32(vec2_addr, z_min, z_max);
 
             __threadfence();
             unsigned int flag = atomicAdd(&flags[parent_index], 1);
