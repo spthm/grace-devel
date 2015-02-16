@@ -127,7 +127,7 @@ int main(int argc, char* argv[]) {
         deltas_tot += part_elapsed;
 
         grace::Tree d_tree(N, max_per_leaf);
-        thrust::device_vector<int4> d_tmp_nodes(N - 1);
+        thrust::device_vector<int2> d_tmp_nodes(N - 1);
         thrust::device_vector<int4> d_tmp_leaves(N);
         thrust::device_vector<unsigned int> d_flags(N - 1);
 
