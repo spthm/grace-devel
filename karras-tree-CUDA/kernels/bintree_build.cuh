@@ -161,10 +161,9 @@ template <typename DeltaType>
 __global__ void build_leaves_kernel(int2* nodes,
                                     const size_t n_nodes,
                                     const DeltaType* deltas,
-                                    const int max_per_leaf,
-                                    int* g_flags)
+                                    const int max_per_leaf)
 {
-    // extern __shared__ int flags[];
+    extern __shared__ int flags[];
 
     const size_t n_leaves = n_nodes + 1;
 
@@ -179,15 +178,16 @@ __global__ void build_leaves_kernel(int2* nodes,
     {
         // Zero all SMEM flags at start of first loop and at end of subsequent
         // loops.
-        // for (int i = threadIdx.x;
-        //      i < BUILD_THREADS_PER_BLOCK + max_per_leaf;
-        //      i += BUILD_THREADS_PER_BLOCK)
-        // {
-        //     flags[i] = 0;
-        // }
-        // __syncthreads();
+        __syncthreads();
+        for (int i = threadIdx.x;
+             i < BUILD_THREADS_PER_BLOCK + max_per_leaf;
+             i += BUILD_THREADS_PER_BLOCK)
+        {
+            flags[i] = 0;
+        }
+        __syncthreads();
 
-        int* flags = g_flags + bid * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
+        // int* flags = g_flags + bid * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
         // [low, high) leaf indices covered by this block, including the
         // max_per_leaf buffer.
@@ -250,9 +250,9 @@ __global__ void build_leaves_kernel(int2* nodes,
 
                 int left, right;
                 #if defined(__LP64__) || defined(_WIN64)
-                asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "l"(nodes+parent_index));
+                asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "l"(nodes+parent_index));
                 #else
-                asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "r"(nodes+parent_index));
+                asm("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "r"(nodes+parent_index));
                 #endif
 
                 // Only the left-most leaf can have an index of 0, and only the
@@ -610,17 +610,13 @@ void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
 
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
                                         / BUILD_THREADS_PER_BLOCK));
-    /* DELETE */
-    thrust::device_vector<int> d_flags(n_nodes +
-                                       ((n_nodes + 511) / 512) * max_per_leaf);
     int smem_size = sizeof(int) * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
     gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_deltas.data()),
-        max_per_leaf,
-        thrust::raw_pointer_cast(d_flags.data()));
+        max_per_leaf);
 
     blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
                                      / BUILD_THREADS_PER_BLOCK));
