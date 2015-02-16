@@ -160,7 +160,6 @@ __global__ void compute_leaf_deltas_kernel(const int4* leaves,
 template <typename DeltaType>
 __global__ void build_leaves_kernel(int2* nodes,
                                     const size_t n_nodes,
-                                    int4* big_leaves,
                                     const DeltaType* deltas,
                                     const int max_per_leaf,
                                     unsigned int* flags)
@@ -561,7 +560,6 @@ void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
     gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
-        thrust::raw_pointer_cast(d_tmp_leaves.data()),
         thrust::raw_pointer_cast(d_deltas.data()),
         max_per_leaf,
         thrust::raw_pointer_cast(d_flags.data()));
