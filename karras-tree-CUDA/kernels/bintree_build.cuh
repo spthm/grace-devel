@@ -162,105 +162,159 @@ __global__ void build_leaves_kernel(int2* nodes,
                                     const size_t n_nodes,
                                     const DeltaType* deltas,
                                     const int max_per_leaf,
-                                    unsigned int* flags)
+                                    int* g_flags)
 {
-    int tid, cur_index, parent_index;
-    bool first_arrival;
+    // extern __shared__ int flags[];
 
-    tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
     const size_t n_leaves = n_nodes + 1;
+
     // Offset deltas so the range [-1, n_keys) is valid for indexing it.
     deltas++;
 
-    while  (tid < n_leaves)
+    int bid = blockIdx.x;
+    int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    // while() and an inner for() to ensure all threads in a block hit the
+    // flag-wiping syncthreads().
+    while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
     {
-        cur_index = tid;
+        // Zero all SMEM flags at start of first loop and at end of subsequent
+        // loops.
+        // for (int i = threadIdx.x;
+        //      i < BUILD_THREADS_PER_BLOCK + max_per_leaf;
+        //      i += BUILD_THREADS_PER_BLOCK)
+        // {
+        //     flags[i] = 0;
+        // }
+        // __syncthreads();
 
-        // Compute the current leaf's parent index and write associated data to
-        // the parent. The leaf is not actually written.
-        int left = cur_index;
-        int right = cur_index;
-        DeltaType delta_L = deltas[left - 1];
-        DeltaType delta_R = deltas[right];
-        if (delta_L < delta_R)
+        int* flags = g_flags + bid * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
+
+        // [low, high) leaf indices covered by this block, including the
+        // max_per_leaf buffer.
+        int low = bid * BUILD_THREADS_PER_BLOCK;
+        int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_leaf,
+                       (int)n_leaves);
+
+        for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
         {
-            // Leftward node is parent.
-            parent_index = left - 1;
-            // Current leaf is a right child.
-            nodes[parent_index].y = right;
-        }
-        else {
-            // Rightward node is parent.
-            parent_index = right;
-            // Current leaf is a left child.
-            nodes[parent_index].x = left;
-        }
+            int cur_index = idx;
+            int parent_index;
 
-        // Travel up the tree.  The second thread to reach a node writes its
-        // left or right end to its parent.  The first exits the loop.
-        __threadfence();
-        unsigned int flag = atomicAdd(&flags[parent_index], 1);
-        assert(flag < 2);
-        first_arrival = (flag == 0);
-
-        while (!first_arrival)
-        {
-            cur_index = parent_index;
-
-            int left, right;
-            #if defined(__LP64__) || defined(_WIN64)
-            asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "l"(nodes+parent_index));
-            #else
-            asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "r"(nodes+parent_index));
-            #endif
-
-            // Only the left-most leaf can have an index of 0, and only the
-            // right-most leaf can have an index of n_leaves - 1.
-            assert(left >= 0 && left < n_leaves - 1);
-            assert(right > 0 && right < n_leaves);
-
-            int size = right - left + 1;
-            if (size > max_per_leaf) {
-                // At least one child of the current node must be a leaf.
-                // Stop traveling up the tree and continue with outer loop.
-                break;
-            }
-
+            // Compute the current leaf's parent index and write associated data to
+            // the parent. The leaf is not actually written.
+            int left = cur_index;
+            int right = cur_index;
             DeltaType delta_L = deltas[left - 1];
             DeltaType delta_R = deltas[right];
             int* addr;
             int end;
-            // Compute the current node's parent index and write associated
-            // data.
             if (delta_L < delta_R)
             {
                 // Leftward node is parent.
                 parent_index = left - 1;
-                // Current node is a right child.
+                // Current leaf is a right child.
                 addr = &(nodes[parent_index].y);
                 end = right;
             }
             else {
                 // Rightward node is parent.
                 parent_index = right;
-                // Current node is a left child.
+                // Current leaf is a left child.
                 addr = &(nodes[parent_index].x);
                 end = left;
-
             }
+
+            // If the leaf's parent is outside this block do not write anything;
+            // the preceding block will follow this path.
+            if (parent_index < low || parent_index >= high)
+                continue;
+
             #if defined(__LP64__) || defined(_WIN64)
             asm("st.global.cg.s32 [%0], %1;" :: "l"(addr), "r"(end));
             #else
             asm("st.global.cg.s32 [%0], %1;" :: "r"(addr), "r"(end));
             #endif
 
-            __threadfence();
-            unsigned int flag = atomicAdd(&flags[parent_index], 1);
+            // Travel up the tree.  The second thread to reach a node writes its
+            // left or right end to its parent.  The first exits the loop.
+            __threadfence_block();
+            assert(parent_index - low >= 0);
+            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+            unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
             assert(flag < 2);
-            first_arrival = (flag == 0);
-        }
-        tid += BUILD_THREADS_PER_BLOCK * gridDim.x;
-    }
+            bool first_arrival = (flag == 0);
+
+            while (!first_arrival)
+            {
+                cur_index = parent_index;
+
+                int left, right;
+                #if defined(__LP64__) || defined(_WIN64)
+                asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "l"(nodes+parent_index));
+                #else
+                asm volatile ("ld.global.cg.v2.s32 {%0, %1}, [%2];" : "=r"(left), "=r"(right) : "r"(nodes+parent_index));
+                #endif
+
+                // Only the left-most leaf can have an index of 0, and only the
+                // right-most leaf can have an index of n_leaves - 1.
+                assert(left >= 0);
+                assert(left < n_leaves - 1);
+                assert(right > 0);
+                assert(right < n_leaves);
+
+                int size = right - left + 1;
+                if (size > max_per_leaf) {
+                    // At least one child of the current node must be a leaf.
+                    // Stop traveling up the tree and continue with outer loop.
+                    break;
+                }
+
+                DeltaType delta_L = deltas[left - 1];
+                DeltaType delta_R = deltas[right];
+                int* addr;
+                int end;
+                // Compute the current node's parent index and write associated
+                // data.
+                if (delta_L < delta_R)
+                {
+                    // Leftward node is parent.
+                    parent_index = left - 1;
+                    // Current node is a right child.
+                    addr = &(nodes[parent_index].y);
+                    end = right;
+                }
+                else {
+                    // Rightward node is parent.
+                    parent_index = right;
+                    // Current node is a left child.
+                    addr = &(nodes[parent_index].x);
+                    end = left;
+
+                }
+
+                if (parent_index < low || parent_index >= high) {
+                    // Parent node outside this block's boundaries, exit without
+                    // writing the unreachable node and flag.
+                    break;
+                }
+
+                #if defined(__LP64__) || defined(_WIN64)
+                asm("st.global.cg.s32 [%0], %1;" :: "l"(addr), "r"(end));
+                #else
+                asm("st.global.cg.s32 [%0], %1;" :: "r"(addr), "r"(end));
+                #endif
+
+                __threadfence_block();
+                assert(parent_index - low >= 0);
+                assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+                assert(flag < 2);
+                first_arrival = (flag == 0);
+            } // while (!first_arrival)
+        } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
+        bid += gridDim.x;
+        tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    } // while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
     return;
 }
 
@@ -548,16 +602,20 @@ template <typename DeltaType>
 void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
                   thrust::device_vector<int4>& d_tmp_leaves,
                   const int max_per_leaf,
-                  const thrust::device_vector<DeltaType>& d_deltas,
-                  thrust::device_vector<unsigned int>& d_flags)
+                  const thrust::device_vector<DeltaType>& d_deltas)
 {
     const size_t n_leaves = d_tmp_leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
+
     int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
                                         / BUILD_THREADS_PER_BLOCK));
+    /* DELETE */
+    thrust::device_vector<int> d_flags(n_nodes +
+                                       ((n_nodes + 511) / 512) * max_per_leaf);
+    int smem_size = sizeof(int) * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
-    gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+    gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_deltas.data()),
@@ -637,13 +695,11 @@ void build_tree(Tree& d_tree,
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
-    thrust::device_vector<unsigned int> d_flags(n_nodes);
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
     thrust::device_vector<int4> d_tmp_leaves(n_leaves);
 
     // d_tmp_leaves stores what will become the final leaf nodes.
-    build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf, d_deltas,
-                 d_flags);
+    build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf, d_deltas);
 
     copy_big_leaves(d_tree, d_tmp_leaves);
 
@@ -653,7 +709,7 @@ void build_tree(Tree& d_tree,
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
     compute_leaf_deltas(d_tree.leaves, d_keys, d_new_deltas);
 
-    d_flags.resize(n_new_nodes);
+    thrust::device_vector<unsigned int> d_flags(n_new_nodes);
     thrust::fill(d_flags.begin(), d_flags.end(), 0);
     build_nodes(d_tree, d_new_deltas, d_spheres, d_flags);
 }

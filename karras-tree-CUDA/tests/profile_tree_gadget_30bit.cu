@@ -129,13 +129,12 @@ int main(int argc, char* argv[]) {
         grace::Tree d_tree(N, max_per_leaf);
         thrust::device_vector<int2> d_tmp_nodes(N - 1);
         thrust::device_vector<int4> d_tmp_leaves(N);
-        thrust::device_vector<unsigned int> d_flags(N - 1);
 
         cudaEventRecord(tree_start);
 
         cudaEventRecord(part_start);
         grace::build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf,
-                            d_deltas, d_flags);
+                            d_deltas);
         grace::copy_big_leaves(d_tree, d_tmp_leaves);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -154,7 +153,7 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         leaf_deltas_tot += part_elapsed;
 
-        d_flags.resize(n_new_nodes);
+        thrust::device_vector<unsigned int> d_flags(n_new_nodes);
 
         cudaEventRecord(part_start);
         thrust::fill(d_flags.begin(), d_flags.end(), 0);
