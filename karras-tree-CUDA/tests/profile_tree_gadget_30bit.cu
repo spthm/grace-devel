@@ -142,7 +142,6 @@ int main(int argc, char* argv[]) {
         leaves_tot += part_elapsed;
 
         const size_t n_new_leaves = d_tree.leaves.size();
-        const size_t n_new_nodes = n_new_leaves - 1;
         thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
 
         cudaEventRecord(part_start);
@@ -153,11 +152,8 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         leaf_deltas_tot += part_elapsed;
 
-        thrust::device_vector<unsigned int> d_flags(n_new_nodes);
-
         cudaEventRecord(part_start);
-        thrust::fill(d_flags.begin(), d_flags.end(), 0);
-        grace::build_nodes(d_tree, d_new_deltas, d_spheres_xyzr, d_flags);
+        grace::build_nodes(d_tree, d_new_deltas, d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -174,30 +170,38 @@ int main(int argc, char* argv[]) {
         all_tot += part_elapsed;
     }
 
-    std::cout << "Will generate: a tree from " << N << " SPH particles."
+    std::cout << "Will generate a tree from " << N << " SPH particles."
               << std::endl;
     std::cout << std::endl;
+
     std::cout << "Time for Morton key generation:    ";
     std::cout.width(7);
     std::cout << morton_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for sort-by-key:              ";
     std::cout.width(7);
     std::cout << sort_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for computing deltas:         ";
     std::cout.width(7);
     std::cout << deltas_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for building leaves:          ";
     std::cout.width(7);
     std::cout << leaves_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for computing leaf deltas:    ";
     std::cout.width(7);
     std::cout << leaf_deltas_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for building nodes:           ";
     std::cout.width(7);
     std::cout << nodes_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for tree construction, total: ";
     std::cout.width(7);
     std::cout << tree_tot/N_iter << " ms." << std::endl;
+
     std::cout << "Time for total (inc. memory ops):  ";
     std::cout.width(7);
     std::cout << all_tot/N_iter << " ms." << std::endl;

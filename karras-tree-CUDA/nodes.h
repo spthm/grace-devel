@@ -43,7 +43,7 @@ public:
     thrust::device_vector<unsigned int> heights;
     // leaves[leaf_ID].x = index of first sphere in this leaf
     //                .y = number of spheres in this leaf
-    //                .z = parent index
+    //                .z = padding
     //                .w = padding
     thrust::device_vector<int4> leaves;
     // A pointer to the *value of the index* of the root element of the tree.

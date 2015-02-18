@@ -184,10 +184,10 @@ int main(int argc, char* argv[]) {
         // Left child's AABB.
         // NB: bot and top defined as float3s above.
         bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].x);
-        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].x);
-        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].x);
         top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].y);
-        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].y);
+        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].z);
+        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].w);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].x);
         top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].y);
         if (left_i < N_leaves-1) {
             // Left is a node.
@@ -202,11 +202,11 @@ int main(int argc, char* argv[]) {
         }
 
         // Right child's AABB.
-        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].z);
+        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].x);
+        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].y);
         bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].z);
-        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].z);
-        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].w);
         top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].w);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].z);
         top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].w);
         if (right_i < N_leaves-1) {
             // Right is a node.
@@ -222,20 +222,20 @@ int main(int argc, char* argv[]) {
     }
 
     // The root node's AABB is implicit.  Compute it.
-    bot.x = min(*reinterpret_cast<float*>(&h_tree.nodes[1].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[1].z));
-    bot.y = min(*reinterpret_cast<float*>(&h_tree.nodes[2].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[2].z));
-    bot.z = min(*reinterpret_cast<float*>(&h_tree.nodes[3].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[3].z));
-    top.x = max(*reinterpret_cast<float*>(&h_tree.nodes[1].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[1].w));
-    top.y = max(*reinterpret_cast<float*>(&h_tree.nodes[2].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[2].w));
-    top.z = max(*reinterpret_cast<float*>(&h_tree.nodes[3].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[3].w));
-    node_AABBs[0] = bot;
-    node_AABBs[1] = top;
+    bot.x = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].x));
+    top.x = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].y));
+    bot.y = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].z),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].z));
+    top.y = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].w),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].w));
+    bot.z = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].z));
+    top.z = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].w));
+    node_AABBs[2*h_tree.root_index+0] = bot;
+    node_AABBs[2*h_tree.root_index+1] = top;
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");

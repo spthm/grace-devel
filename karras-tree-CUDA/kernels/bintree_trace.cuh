@@ -644,6 +644,9 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
         d_spheres.size(),
         d_tree.max_per_leaf);
 
+    CUDA_HANDLE_ERR(cudaPeekAtLastError());
+    CUDA_HANDLE_ERR(cudaDeviceSynchronize());
+
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
     cudaUnbindTexture(leaves_tex);
