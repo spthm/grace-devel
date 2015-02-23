@@ -84,15 +84,12 @@ int main(int argc, char* argv[]) {
     /* Profile the tree constructed from Gadget data. */
 
     cudaEvent_t part_start, part_stop;
-    cudaEvent_t tree_start, tree_stop;
     cudaEvent_t tot_start, tot_stop;
     float part_elapsed;
-    double all_tot, morton_tot, sort_tot, tree_tot;
+    double all_tot, morton_tot, sort_tot;
     double deltas_tot, leaves_tot, leaf_deltas_tot, nodes_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
-    cudaEventCreate(&tree_start);
-    cudaEventCreate(&tree_stop);
     cudaEventCreate(&tot_start);
     cudaEventCreate(&tot_stop);
 
@@ -128,14 +125,11 @@ int main(int argc, char* argv[]) {
 
         grace::Tree d_tree(N, max_per_leaf);
         thrust::device_vector<int2> d_tmp_nodes(N - 1);
-        thrust::device_vector<int4> d_tmp_leaves(N);
-
-        cudaEventRecord(tree_start);
 
         cudaEventRecord(part_start);
-        grace::build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf,
+        grace::build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
                             d_deltas);
-        grace::copy_big_leaves(d_tree, d_tmp_leaves);
+        grace::remove_empty_leaves(d_tree);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -158,11 +152,6 @@ int main(int argc, char* argv[]) {
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
         nodes_tot += part_elapsed;
-
-        cudaEventRecord(tree_stop);
-        cudaEventSynchronize(tree_stop);
-        cudaEventElapsedTime(&part_elapsed, tree_start, tree_stop);
-        tree_tot += part_elapsed;
 
         cudaEventRecord(tot_stop);
         cudaEventSynchronize(tot_stop);
@@ -197,10 +186,6 @@ int main(int argc, char* argv[]) {
     std::cout << "Time for building nodes:           ";
     std::cout.width(7);
     std::cout << nodes_tot/N_iter << " ms." << std::endl;
-
-    std::cout << "Time for tree construction, total: ";
-    std::cout.width(7);
-    std::cout << tree_tot/N_iter << " ms." << std::endl;
 
     std::cout << "Time for total (inc. memory ops):  ";
     std::cout.width(7);

@@ -7,13 +7,15 @@
 #define assert(arg)
 #endif
 
+// CUDA math constants.
 #include <math_constants.h>
 
-#include <thrust/iterator/zip_iterator.h>
+#include <thrust/fill.h>
+#include <thrust/functional.h>
 #include <thrust/device_vector.h>
-#include <thrust/copy.h>
-#include <thrust/transform_scan.h>
-#include <thrust/tuple.h>
+#include <thrust/remove.h>
+#include <thrust/sequence.h>
+#include <thrust/swap.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -23,17 +25,17 @@
 namespace grace {
 
 //-----------------------------------------------------------------------------
-// Helper functions for tree build kernels.
+// Helper function for tree build kernels.
 //-----------------------------------------------------------------------------
 
-struct is_valid_node : public thrust::unary_function<int4, int>
+struct is_empty_node : public thrust::unary_function<int4, bool>
 {
     __host__ __device__
-    int operator()(const int4 node) const
+    bool operator()(const int4 node) const
     {
         // Note: a node's right child can never be node 0, and a leaf can never
         // cover zero elements.
-        return (node.y > 0);
+        return (node.y == 0);
     }
 };
 
@@ -116,10 +118,12 @@ __device__ float node_delta(const int i,
 //     return SA;
 // }
 
-// Load/store functions which read/write directly from/to L2 cache, which is
-// globally coherent.
-// All take a pointer with the type of the base primitive (i.e. int* for int 2
+// Load/store functions to be used when specific memory behaviour is required,
+// e.g. a read/write directly from/to L2 cache, which is globally coherent.
+//
+// All take a pointer with the type of the base primitive (i.e. int* for int2
 // read/writes, float* for float4 read/writes) for flexibility.
+//
 // The "memory" clobber is added to all load/store PTX instructions to prevent
 // memory optimizations around the asm statements. We should only be using these
 // functions when we know better than the compiler!
@@ -436,16 +440,15 @@ __global__ void build_leaves_kernel(int2* nodes,
     return;
 }
 
-__global__ void fix_leaves_kernel(const int2* nodes,
-                                  const size_t n_nodes,
-                                  int4* big_leaves,
-                                  const int max_per_leaf)
+__global__ void write_leaves_kernel(const int2* nodes,
+                                    const size_t n_nodes,
+                                    int4* big_leaves,
+                                    const int max_per_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < n_nodes)
     {
-        // This node had at least one of its children written.
         int2 node = nodes[tid];
         int left = node.x;
         int right = node.y;
@@ -453,40 +456,41 @@ __global__ void fix_leaves_kernel(const int2* nodes,
         // If left or right are 0, size may be incorrect.
         int size = right - left + 1;
 
-        // If left is 0, left_size may be *incorrect*:
-        // we cannot differentiate between an unwritten node.z and one
+        // If left is 0, left_size may be incorrect:
+        // we cannot differentiate between an unwritten node.x and one
         // written as 0.
         int left_size = tid - left + 1;
-        // This is guaranteed to be *sufficiently correct*:
-        // right == 0 means node.w was unwritten, and the right child is
+        // This is guaranteed to be sufficiently correct:
+        // right == 0 means node.y was unwritten, and the right child is
         // therefore not a leaf, so its size is set accordingly.
         int right_size = (right > 0 ? right - tid : max_per_leaf + 1);
 
-        // These are both guarranteed to be *correct*:
+        // *These are both guarranteed to be correct*:
         // If left_size was computed incorrectly, then the true value of
-        // node.z is not zero, and thus node.z was unwritten. This requires
-        // that the left child is *not* a leaf, and hence the node index
-        // (tid) must be  >= max_per_leaf, resulting in left_leaf = false.
+        // node.x is not zero, and thus node.x was unwritten.  This requires
+        // that the left child not be a leaf, and hence the node index (tid)
+        // must be > max_per_leaf, resulting in left_leaf = false.
+        //
         // right_leaf follows from the correctness of right_size.
         bool left_leaf = (left_size <= max_per_leaf);
         bool right_leaf = (right_size <= max_per_leaf);
 
         // If only one child is to be written, we are certain it should be,
-        // as the current node's size must be > max_per_leaf.
-        // Otherwise: we write only if the current node cannot be a leaf.
-        bool size_check = left_leaf ^ right_leaf ? true :
-                                                   (size > max_per_leaf);
+        // as the current node's (unknown) size must be > max_per_leaf.
+        // Otherwise, we write only if the current node cannot be a leaf.
+        bool write_check = left_leaf != right_leaf ? true :
+                                                    (size > max_per_leaf);
 
         // NOTE: size is guaranteed accurate only if both left_leaf and
         // right_leaf are true, but if they are both false no write occurs
         // anyway because of the && below.
         int4 leaf;
-        if (left_leaf && size_check) {
+        if (left_leaf && write_check) {
             leaf.x = left;
             leaf.y = left_size;
             big_leaves[left] = leaf;
         }
-        if (right_leaf && size_check) {
+        if (right_leaf && write_check) {
             leaf.x = tid + 1;
             leaf.y = right_size;
             big_leaves[right] = leaf;
@@ -505,7 +509,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                                          const Float4* spheres,
                                          const int* base_indices,
                                          const size_t n_base_nodes,
-                                         unsigned int* heights,
                                          int* root_index,
                                          const DeltaType* deltas,
                                          const int max_per_node,
@@ -522,8 +525,9 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
 
     int bid = blockIdx.x;
     int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
-    // while() and an inner for() to ensure all threads in a block hit the
-    // __syncthreads() and wipe the flags.
+
+    // while() and inner for() loops to ensure all threads in a block hit the
+    // __syncthreads().
     while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
     {
         // Zero all SMEM flags and node data at start of first loop and at end
@@ -541,20 +545,25 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
         }
         __syncthreads();
 
-        // [low, high) *compressed* node indices covered by this block,
-        // including the max_per_node buffer.
+        // The compressed/logical node indices for this block cover the range
+        // [low, high), including the max_per_node buffer.
         int low = bid * BUILD_THREADS_PER_BLOCK;
         int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_node,
                        (int)n_base_nodes);
 
         for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
         {
-            // These are logical, or compressed node indices for writing to
-            // shared memory.
+            // For the tree climb, we start at base nodes, treating them as
+            // leaves.  The left/right values refer to the left- and right-most
+            // *base nodes* covered by the current node.  (g_left and g_right
+            // contain the left- and right-most *actual* leaf indices.)
+            // The current index (i.e. the idx-th base node) is thus a logical,
+            // or compressed node index, and is used for writing to shared
+            // memory.
             int cur_index = idx;
             int parent_index;
 
-            // These are real node indices for writing to global memory.
+            // These are real node indices (for writing to global memory).
             int g_cur_index = base_indices[cur_index];
             int g_parent_index;
 
@@ -563,24 +572,19 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
 
             int4 node;
             if (g_cur_index < n_nodes)
-                node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+                node = nodes[4 * g_cur_index + 0];
             else
-                node = leaves[g_cur_index - n_nodes]; // non-volatile load
+                node = leaves[g_cur_index - n_nodes];
 
-            // Compute the current node's AABB.
             float x_min, y_min, z_min;
             float x_max, y_max, z_max;
-
             if (g_cur_index < n_nodes) {
-                // We have a node.
-                // No special load functions since this data existed at kernel
-                // launch.
                 float4 AABB_L  = f4_nodes[4 * g_cur_index + 1];
                 float4 AABB_R  = f4_nodes[4 * g_cur_index + 2];
                 float4 AABB_LR = f4_nodes[4 * g_cur_index + 3];
 
-                // Compute the current node's AABB as the union of its children's
-                // AABBs.
+                // Compute the current node's AABB (union of its children's
+                // AABBs).
                 x_min = min(AABB_L.x, AABB_R.x);
                 x_max = max(AABB_L.y, AABB_R.y);
 
@@ -591,10 +595,12 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 z_max = max(AABB_LR.y, AABB_LR.w);
             }
             else {
-                // We have a leaf.
                 x_min = y_min = z_min = CUDART_INF_F;
                 x_max = y_max = z_max = -1.f;
 
+                // Current node is a leaf; compute it's AABB from the spheres
+                // it contains.
+                #pragma unroll 4
                 for (int i = 0; i < node.y; i++) {
                     Float4 sphere = spheres[node.x + i];
 
@@ -614,13 +620,15 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
             assert(y_min < y_max);
             assert(z_min < z_max);
 
-            // Compute the current node's logical and global parent indices.
-            // If we are at a leaf, then the global left/right limits are equal
-            // to the corrected leaf index.
+            // Recall that leaf left/right limits are equal to the leaf index,
+            // minus the leaf-identifying offset.
             int g_left = (g_cur_index < n_nodes ? node.z :
                                                   g_cur_index - n_nodes);
             int g_right = (g_cur_index < n_nodes ? node.w :
                                                    g_cur_index - n_nodes);
+
+            // Only the left-most leaf can have an index of 0, and only the
+            // right-most leaf can have an index of n_leaves - 1.
             if (g_cur_index < n_nodes) {
                 assert(g_left >= 0);
                 assert(g_left < n_leaves - 1);
@@ -645,6 +653,7 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
             float* AABB_f2_addr;
             float* AABB_f4_addr;
             int end, sm_end;
+            // Compute the current node's parent index and write-to locations.
             if (delta_L < delta_R)
             {
                 // Leftward node is parent.
@@ -652,14 +661,13 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 g_parent_index = g_left - 1;
 
                 // Current node is a right child.
-                // The -ve end index encodes the fact that this node was written
-                // to this iteration; it will be set as the right-most leaf
-                // index before the next iteration.
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
                 child_addr = &(nodes[4 * g_parent_index + 0].y);
                 end_addr = &(nodes[4 * g_parent_index + 0].w);
                 end = -1 * (right + 1);
 
-                // Right-most real node index.
+                // Right-most global node index.
                 sm_addr = &(sm_nodes[parent_index - low].y);
                 sm_end = g_right;
 
@@ -673,14 +681,13 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 g_parent_index = g_right;
 
                 // Current node is a left child.
-                // The -ve end index encodes the fact that this node was written
-                // to this iteration; it will be set as the left-most leaf index
-                // before the next iteration.
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
                 child_addr = &(nodes[4 * g_parent_index + 0].x);
                 end_addr = &(nodes[4 * g_parent_index + 0].z);
                 end = -1 * (left + 1);
 
-                // Left-most real node index.
+                // Left-most global node index.
                 sm_addr = &(sm_nodes[parent_index - low].x);
                 sm_end = g_left;
 
@@ -690,12 +697,18 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
             }
 
             // If the leaf's parent is outside this block do not write anything;
-            // an adjacent preceding block will follow this path.
+            // an adjacent block will follow this path.
             if (parent_index < low || parent_index >= high)
                 continue;
 
+            // Parent index must be at a valid location for writing to sm_nodes
+            // and the SMEM flags.
+            assert(parent_index - low >= 0);
+            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
+
             // Normal stores.  Other threads in this block can read from L1 if
-            // they get a cache hit/no requirement for global coherency.
+            // they get a cache hit, i.e. there is no requirement for global
+            // coherency.
             store_s32(child_addr, g_cur_index);
             store_s32(end_addr, end);
             store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
@@ -706,8 +719,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
             // logical/compressed left or right end to its parent; the first
             // exits the loop.
             __threadfence_block();
-            assert(parent_index - low >= 0);
-            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
             unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
             assert(flag < 2);
             bool first_arrival = (flag == 0);
@@ -721,8 +732,8 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 assert(g_cur_index < n_nodes);
 
                 // We are certain that a thread in this block has already
-                // written the other child of the current node, so we can read
-                // from L1 if we get a cache hit.  Normal int4 load.
+                // *written* the other child of the current node, so we can read
+                // from L1 if we get a cache hit.
                 int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
 
                 // 'error: class "int2" has no suitable copy constructor'
@@ -731,8 +742,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 // int g_right = left_right.y;
                 int g_left = sm_nodes[cur_index - low].x;
                 int g_right = sm_nodes[cur_index - low].y;
-                // Only the left-most leaf can have an index of 0, and only the
-                // right-most leaf can have an index of n_leaves - 1.
                 assert(g_left >= 0);
                 assert(g_left < n_leaves - 1);
                 assert(g_right > 0);
@@ -741,7 +750,9 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 // Undo the -ve sign encoding.
                 int left = -1 * node.z - 1;
                 int right = -1 * node.w - 1;
-                // Similarly for the logical/compressed indices.
+                // We are the second thread in this block to reach this node.
+                // Both of its logical/compressed end-indices must also be in
+                // this block.
                 assert(left >= low);
                 assert(left < high - 1);
                 assert(right > low);
@@ -755,37 +766,20 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 // Check our compacted/logical size, and exit the loop if we are
                 // large enough to become a base layer in the next iteration.
                 if (right - left + 1 > max_per_node) {
-                    // Both children of the current node must be leaves.
-                    // Stop traveling up the tree, add the current node's REAL
-                    // index to a *unique* location in the output work queue and
-                    // continue with the outer loop.
-
-                    // The current compacted/logical index is unique *EXCEPT* in
-                    // the overlap region; in that case, we only write if the
-                    // the corresponding thread in the next block cannot get
-                    // to this point.
-                    // NB: left < high - max_per_node fails for the final block.
-                    // if (left < low + BUILD_THREADS_PER_BLOCK)
-                    //    new_base_indices[cur_index] = g_cur_index;
+                    // Both children of the current node must be leaves.  Stop
+                    // travelling up the tree and continue with the outer loop.
                     break;
                 }
 
-                // TODO: Try moving all this to after the if (delta_L ... )
-                // block. Remember, the compiler can't re-order our special
-                // load/store functions.
-                // Again, normal float4 load since L1 data will be accurate.
+                // Again, L1 data will be accurate.
                 float4 AABB_L  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
                 float4 AABB_R  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
                 float4 AABB_LR = load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
 
-                // Compute the current node's AABB as the union of its
-                // children's AABBs.
                 float x_min = min(AABB_L.x, AABB_R.x);
                 float x_max = max(AABB_L.y, AABB_R.y);
-
                 float y_min = min(AABB_L.z, AABB_R.z);
                 float y_max = max(AABB_L.w, AABB_R.w);
-
                 float z_min = min(AABB_LR.x, AABB_LR.z);
                 float z_max = max(AABB_LR.y, AABB_LR.w);
 
@@ -801,8 +795,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 float* AABB_f2_addr;
                 float* AABB_f4_addr;
                 int end, sm_end;
-                // Compute the current node's parent index and write associated
-                // data.
                 if (delta_L < delta_R)
                 {
                     // Leftward node is parent.
@@ -814,7 +806,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                     end_addr = &(nodes[4 * g_parent_index + 0].w);
                     end = -1 * (right + 1);
 
-                    // Right-most real node index.
                     sm_addr = &(sm_nodes[parent_index - low].y);
                     sm_end = g_right;
 
@@ -833,7 +824,6 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                     end_addr = &(nodes[4 * g_parent_index + 0].z);
                     end = -1 * (left + 1);
 
-                    // Left-most real node index.
                     sm_addr = &(sm_nodes[parent_index - low].x);
                     sm_end = g_left;
 
@@ -843,12 +833,12 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
                 }
 
                 if (parent_index < low || parent_index >= high) {
-                    // Parent node outside this block's boundaries, exit without
-                    // writing the unreachable node and flag.
+                    // Parent node outside this block's boundaries.  Either a
+                    // thread in an adjacent block will follow this path, or the
+                    // current node will be a base node in the next iteration.
                     break;
                 }
 
-                // Normal store.
                 store_s32(child_addr, g_cur_index);
                 store_s32(end_addr, end);
                 store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
@@ -882,8 +872,7 @@ __global__ void fill_output_queue(const int4* nodes,
         int4 node = nodes[4 * tid + 0];
 
         // The left/right values are negative IFF they were written in this
-        // iteration. If they are negative, then they also represent
-        // logical/compacted indices.
+        // iteration.  A negative index represents a logical/compacted index.
         bool left_written = (node.z < 0);
         bool right_written = (node.w < 0);
 
@@ -892,18 +881,17 @@ __global__ void fill_output_queue(const int4* nodes,
         int right = -1 * node.w - 1;
 
         if (left_written != right_written) {
-            // If only one child was written, it must be placed in the output
-            // queue.
-            // The location we write to must be unique!
+            // Only one child was written; it must be placed in the output queue
+            // at a *unique* location.
             int index = left_written ? left : right;
             assert(new_base_indices[index] == -1);
             new_base_indices[index] = left_written ? node.x : node.y;
         }
-        else if (left_written && right_written) {
+        else if (left_written) {
             // Both were written, so the current node must be added to the
             // output queue IFF it is sufficiently large; that is, if its size
-            // is such that it would have caused the thread to exit from the
-            // tree climb.
+            // is such that it would have caused the thread to end its tree
+            // climb.
             // Again, the location we write to must be unique.
             int size = right - left + 1;
             if (size > max_per_node) {
@@ -927,8 +915,8 @@ __global__ void fix_node_ranges(int4* nodes,
     {
         int4 node = nodes[4 * tid + 0];
 
-        // Only bother if the node has been written to on both sides and is,
-        // therefore, either a base node or a descendant of a base node.
+        // We only need to fix nodes whose ranges were written, *in full*, this
+        // iteration.
         if (node.z < 0 && node.w < 0)
         {
             int left = node.z < 0 ? (-1 * node.z - 1) : node.z;
@@ -1019,11 +1007,33 @@ void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
     blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
                                      / BUILD_THREADS_PER_BLOCK));
 
-    gpu::fix_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+    gpu::write_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
         max_per_leaf);
+}
+
+void remove_empty_leaves(Tree& d_tree)
+{
+    // A transform_reduce (with unary op 'is_valid_node()') followed by a
+    // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
+    // than the below.  However, this method does not require a temporary leaves
+    // array, which would be the largest temporary memory allocation in the
+    // build process.
+
+    // error: no operator "==" matches these operands
+    //         operand types are: const int4 == const int4
+    // thrust::remove(.., .., make_int4(0, 0, 0, 0))
+
+    typedef thrust::device_vector<int4>::iterator Int4Iter;
+    Int4Iter end = thrust::remove_if(d_tree.leaves.begin(), d_tree.leaves.end(),
+                                     is_empty_node());
+
+    const size_t n_new_leaves = end - d_tree.leaves.begin();
+    const size_t n_new_nodes = n_new_leaves - 1;
+    d_tree.nodes.resize(4 * n_new_nodes);
+    d_tree.leaves.resize(n_new_leaves);
 }
 
 template <typename DeltaType, typename Float4>
@@ -1073,7 +1083,6 @@ void build_nodes(Tree& d_tree,
             thrust::raw_pointer_cast(d_spheres.data()),
             d_in_ptr,
             n_in,
-            thrust::raw_pointer_cast(d_tree.heights.data()),
             d_tree.root_index_ptr,
             thrust::raw_pointer_cast(d_deltas.data()),
             d_tree.max_per_leaf, // This can actually be anything.
@@ -1106,52 +1115,31 @@ void build_nodes(Tree& d_tree,
     }
 }
 
-void copy_big_leaves(Tree& d_tree,
-                     thrust::device_vector<int4>& d_tmp_leaves)
-{
-    // TODO: Since the copy_if presumably does a scan sum internally before
-    // performing the copy, this is wasteful.  Calling a scan sum and then
-    // doing the copy 'manually' would probably be better.
-    // Alternatively, try thrust::remove_copy with value = int4().
-    // Not using a temporary leaves array above, and using thrust::remove
-    // here is also an option (d_tree.nodes could be used as the first argument
-    // to build_tree_leaves_kernel as all its data will be overwritten later
-    // anyway.)
-    const int n_new_leaves = thrust::transform_reduce(d_tmp_leaves.begin(),
-                                                      d_tmp_leaves.end(),
-                                                      is_valid_node(),
-                                                      0,
-                                                      thrust::plus<int>());
-    const int n_new_nodes = n_new_leaves - 1;
-    d_tree.nodes.resize(4 * n_new_nodes);
-    d_tree.leaves.resize(n_new_leaves);
-
-    thrust::copy_if(d_tmp_leaves.begin(), d_tmp_leaves.end(),
-                    d_tree.leaves.begin(),
-                    is_valid_node());
-}
-
 template <typename KeyType, typename DeltaType, typename Float4>
 void build_tree(Tree& d_tree,
                 const thrust::device_vector<KeyType>& d_keys,
                 const thrust::device_vector<DeltaType>& d_deltas,
-                const thrust::device_vector<Float4>& d_spheres)
+                const thrust::device_vector<Float4>& d_spheres,
+                const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
 
     // In case this ever changes.
     assert(sizeof(int4) == sizeof(float4));
 
+    if (wipe) {
+        int4 empty = make_int4(0, 0, 0, 0);
+        thrust::fill(d_tree.nodes.begin(), d_tree.nodes.end(), empty);
+        thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(), empty);
+    }
+
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
-    thrust::device_vector<int4> d_tmp_leaves(n_leaves);
 
-    // d_tmp_leaves stores what will become the final leaf nodes.
-    build_leaves(d_tmp_nodes, d_tmp_leaves, d_tree.max_per_leaf, d_deltas);
-
-    copy_big_leaves(d_tree, d_tmp_leaves);
+    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf, d_deltas);
+    remove_empty_leaves(d_tree);
 
     const size_t n_new_leaves = d_tree.leaves.size();
 
