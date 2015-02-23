@@ -95,16 +95,16 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
     thrust::device_vector<float> d_rho = h_rho;
-    thrust::device_vector<unsigned int> d_keys(N);
+    thrust::device_vector<grace::uinteger32> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
 
     /* Generate the rays, all emitted in +z direction from a box side. */
@@ -195,7 +195,6 @@ int main(int argc, char* argv[]) {
                                      d_traced_rho,
                                      d_tree,
                                      d_spheres_xyzr,
-                                     max_per_leaf,
                                      d_rho);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
@@ -219,8 +218,9 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
 
-            unused_bytes += d_keys.size() * sizeof(unsigned int);
-            unused_bytes += d_tree.levels.size() * sizeof(unsigned int);
+            unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
+            unused_bytes += d_deltas.size() * sizeof(float);
+            unused_bytes += d_tree.heights.size() * sizeof(unsigned int);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 
             std::cout << "Total memory for property trace kernel:    "

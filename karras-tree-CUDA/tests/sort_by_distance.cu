@@ -89,6 +89,7 @@ int main(int argc, char* argv[]) {
 
     // Working arrays no longer needed.
     d_keys.clear(); d_keys.shrink_to_fit();
+    d_deltas.clear(); d_deltas.shrink_to_fit();
 
 
     /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
