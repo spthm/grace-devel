@@ -76,15 +76,15 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
-    // Keys no longer needed.
-    d_keys.clear();
-    d_keys.shrink_to_fit();
+    // Keys and deltas no longer needed.
+    d_keys.clear(); d_keys.shrink_to_fit();
+    d_deltas.clear(); d_deltas.shrink_to_fit();
 
 
     /* Generate the rays (emitted from box centre and of length 2). */
@@ -101,8 +101,7 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts,
-                           d_tree, d_spheres_xyzr,
-                           max_per_leaf);
+                           d_tree, d_spheres_xyzr);
 
 
     /* Output simple hit-count statistics. */

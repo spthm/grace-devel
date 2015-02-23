@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
     unsigned int N = 100000;
     // Relatively few because the random spheres result in many hits per ray.
     unsigned int N_rays = 2500*32; // = 80,000.
-    unsigned int max_per_leaf = 100;
+    unsigned int max_per_leaf = 32;
 
     if (argc > 1) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -81,14 +81,15 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N+1);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
     // Working arrays no longer needed.
     d_keys.clear(); d_keys.shrink_to_fit();
+    d_deltas.clear(); d_deltas.shrink_to_fit();
 
 
     /* Generate the rays, emitted emitted from box centre (.5, .5, .5) and of
@@ -117,7 +118,6 @@ int main(int argc, char* argv[]) {
                         d_hit_distances,
                         d_tree,
                         d_spheres_xyzr,
-                        max_per_leaf,
                         d_rho);
 
     thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());

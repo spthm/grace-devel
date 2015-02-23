@@ -7,9 +7,15 @@
 #define assert(arg)
 #endif
 
+// CUDA math constants.
+#include <math_constants.h>
+
+#include <thrust/fill.h>
+#include <thrust/functional.h>
 #include <thrust/device_vector.h>
-#include <thrust/copy.h>
-#include <thrust/transform_scan.h>
+#include <thrust/remove.h>
+#include <thrust/sequence.h>
+#include <thrust/swap.h>
 
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -18,87 +24,18 @@
 
 namespace grace {
 
-
 //-----------------------------------------------------------------------------
-// Helper functions for tree build kernels.
+// Helper function for tree build kernels.
 //-----------------------------------------------------------------------------
 
-// From thrust/examples.strided_range.cu, author Nathan Bell.
-template <typename Iterator>
-class strided_iterator
+struct is_empty_node : public thrust::unary_function<int4, bool>
 {
-    public:
-
-    typedef typename thrust::iterator_difference<Iterator>::type difference_type;
-
-    struct stride_functor : public thrust::unary_function<difference_type,difference_type>
+    __host__ __device__
+    bool operator()(const int4 node) const
     {
-        difference_type stride;
-
-        stride_functor(difference_type stride)
-            : stride(stride) {}
-
-        __host__ __device__
-        difference_type operator()(const difference_type& i) const
-        {
-            return stride * i;
-        }
-    };
-
-    typedef typename thrust::counting_iterator<difference_type>                   CountingIterator;
-    typedef typename thrust::transform_iterator<stride_functor, CountingIterator> TransformIterator;
-    typedef typename thrust::permutation_iterator<Iterator,TransformIterator>     PermutationIterator;
-
-    // type of the strided_iterator iterator
-    typedef PermutationIterator iterator;
-
-    // construct strided_iterator for the range [first,last)
-    strided_iterator(Iterator first, Iterator last, difference_type stride)
-        : first(first), last(last), stride(stride) {}
-
-    iterator begin(void) const
-    {
-        return PermutationIterator(first, TransformIterator(CountingIterator(0), stride_functor(stride)));
-    }
-
-    iterator end(void) const
-    {
-        return begin() + ((last - first) + (stride - 1)) / stride;
-    }
-
-    protected:
-    Iterator first;
-    Iterator last;
-    difference_type stride;
-};
-
-struct flag_null_node
-{
-    __host__ __device__ int operator() (const int4 node)
-    {
-        // node.y: index of right child (cannot be the root node).  Note that
-        //         nodes must be accessed with a stride of 4 for this to work.
-        // leaf.y: spheres within leaf (cannot be < 1)
-        if (node.y > 0)
-            return 0;
-        else
-            return 1;
-    }
-};
-
-struct is_valid_node
-{
-    __host__ __device__ bool operator() (const int4 node)
-    {
-        return (node.y > 0);
-    }
-};
-
-struct is_valid_level
-{
-    __host__ __device__ bool operator() (const unsigned int level)
-    {
-        return (level != 0);
+        // Note: a node's right child can never be node 0, and a leaf can never
+        // cover zero elements.
+        return (node.y == 0);
     }
 };
 
@@ -108,454 +45,908 @@ namespace gpu {
 // GPU helper functions for tree build kernels.
 //-----------------------------------------------------------------------------
 
-// __device__ and in namespace gpu so we use the __device__ bit_prefix_length()
-template <typename UInteger>
-__device__ int common_prefix_length(const int i,
-                                    const int j,
-                                    const UInteger* keys,
-                                    const size_t n_keys)
+__device__ uinteger32 node_delta(const int i,
+                                 const uinteger32* keys,
+                                 const size_t n_keys)
 {
-    // Should be optimized away by the compiler.
-    const unsigned char n_bits = CHAR_BIT * sizeof(UInteger);
+    // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
+    // invalid ranges but are valid queries during tree construction.
+    if (i < 0 || i + 1 >= n_keys)
+        return uinteger32(-1);
 
-    if (j < 0 || j >= n_keys || i < 0 || i >= n_keys) {
-        return -1;
-    }
-    UInteger key_i = keys[i];
-    UInteger key_j = keys[j];
+    uinteger32 ki = keys[i];
+    uinteger32 kj = keys[i+1];
 
-    int prefix_length = bit_prefix_length(key_i, key_j);
-    if (prefix_length == n_bits) {
-        prefix_length += bit_prefix_length((uinteger32)i, (uinteger32)j);
-    }
-    return prefix_length;
+    return ki ^ kj;
+
 }
 
-void copy_valid_nodes(thrust::device_vector<int4>& d_nodes,
-                      const size_t N_nodes,
-                      const unsigned int stride)
+__device__ uinteger64 node_delta(const int i,
+                                 const uinteger64* keys,
+                                 const size_t n_keys)
 {
-    typedef thrust::device_vector<int4>::iterator Iterator;
-    strided_iterator<Iterator> i_nodes(d_nodes.begin(), d_nodes.end(), stride);
-    thrust::device_vector<int4> d_tmp = d_nodes;
-    strided_iterator<Iterator> i_tmp(d_tmp.begin(), d_tmp.end(), stride);
-    d_nodes.resize(stride*N_nodes);
-    thrust::copy_if(i_tmp.begin(), i_tmp.end(),
-                    i_nodes.begin(),
-                    is_valid_node());
+    // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
+    // invalid ranges but are valid queries during tree construction.
+    if (i < 0 || i + 1 >= n_keys)
+        return uinteger64(-1);
+
+    uinteger64 ki = keys[i];
+    uinteger64 kj = keys[i+1];
+
+    return ki ^ kj;
+
 }
 
-void copy_valid_levels(thrust::device_vector<unsigned int>& d_levels,
-                       const size_t N_nodes)
+// Euclidian distance metric.
+template <typename Float4>
+__device__ float node_delta(const int i,
+                            const Float4* spheres,
+                            const size_t n_spheres)
 {
-    thrust::device_vector<unsigned int> d_tmp = d_levels;
-    d_levels.resize(N_nodes);
-    thrust::copy_if(d_tmp.begin()+1, d_tmp.end(),
-                    d_levels.begin()+1,
-                    is_valid_level());
+    if (i < 0 || i + 1 >= n_spheres)
+        return CUDART_INF_F;
+
+    Float4 si = spheres[i];
+    Float4 sj = spheres[i+1];
+
+    return (si.x - sj.x) * (si.x - sj.x)
+           + (si.y - sj.y) * (si.y - sj.y)
+           + (si.z - sj.z) * (si.z - sj.z);
+}
+
+// Surface area 'distance' metric.
+// template <typename Float4>
+// __device__ float node_delta(const int i,
+//                             const Float4* spheres,
+//                             const size_t n_spheres)
+// {
+//     if (i < 0 || i + 1 >= n_spheres)
+//         return CUDART_INF_F;
+
+//     Float4 si = spheres[i];
+//     Float4 sj = spheres[i+1];
+
+//     float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
+//     float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
+//     float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
+
+//     float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
+
+//     assert(SA < CUDART_INF_F);
+//     assert(SA > 0);
+
+//     return SA;
+// }
+
+// Load/store functions to be used when specific memory behaviour is required,
+// e.g. a read/write directly from/to L2 cache, which is globally coherent.
+//
+// All take a pointer with the type of the base primitive (i.e. int* for int2
+// read/writes, float* for float4 read/writes) for flexibility.
+//
+// The "memory" clobber is added to all load/store PTX instructions to prevent
+// memory optimizations around the asm statements. We should only be using these
+// functions when we know better than the compiler!
+__device__ __forceinline__ int2 load_vec2s32(const int* const addr)
+{
+    int2 i2;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.ca.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "l"(addr) : "memory");
+    #else
+    asm("ld.global.ca.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "r"(addr) : "memory");
+    #endif
+
+    return i2;
+}
+
+__device__ __forceinline__ int4 load_vec4s32(const int* const addr)
+{
+    int4 i4;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.ca.v4.s32 {%0, %1, %2, %3}, [%4];" : "=r"(i4.x), "=r"(i4.y), "=r"(i4.z), "=r"(i4.w) : "l"(addr) : "memory");
+    #else
+    asm("ld.global.ca.v4.s32 {%0, %1, %2, %3}, [%4];" : "=r"(i4.x), "=r"(i4.y), "=r"(i4.z), "=r"(i4.w) : "r"(addr) : "memory");
+    #endif
+
+    return i4;
+}
+
+__device__ __forceinline__ float4 load_vec4f32(const float* const addr)
+{
+    float4 f4;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.ca.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "l"(addr) : "memory");
+    #else
+    asm("ld.global.ca.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "r"(addr) : "memory");
+    #endif
+
+    return f4;
+}
+
+__device__ __forceinline__ float4 load_L2_vec4f32(const float* const addr)
+{
+    float4 f4;
+
+    #if defined(__LP64__) || defined(_WIN64)
+    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "l"(addr) : "memory");
+    #else
+    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "r"(addr) : "memory");
+    #endif
+
+    return f4;
+}
+
+// Stores have no output operands, so we additionally mark them as volatile to
+// ensure they are not moved or deleted.
+__device__ __forceinline__ void store_s32(const int* const addr, const int a)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.wb.s32 [%0], %1;" :: "l"(addr), "r"(a) : "memory");
+    #else
+    asm volatile ("st.global.wb.s32 [%0], %1;" :: "r"(addr), "r"(a) : "memory");
+    #endif
+}
+
+__device__ __forceinline__ void store_vec2s32(
+    const int* const addr,
+    const int a, const int b)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.wb.v2.s32 [%0], {%1, %2};" :: "l"(addr), "r"(a), "r"(b) : "memory");
+    #else
+    asm volatile ("st.global.wb.v2.s32 [%0], {%1, %2};" :: "r"(addr), "r"(a), "r"(b) : "memory");
+    #endif
+}
+
+__device__ __forceinline__ void store_vec2f32(
+    const float* const addr,
+    const float a, const float b)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.wb.v2.f32 [%0], {%1, %2};" :: "l"(addr), "f"(a), "f"(b) : "memory");
+    #else
+    asm volatile ("st.global.wb.v2.f32 [%0], {%1, %2};" :: "r"(addr), "f"(a), "f"(b) : "memory");
+    #endif
+}
+
+__device__ __forceinline__ void store_vec4f32(
+    const float* const addr,
+    const float a, const float b, const float c, const float d)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.wb.v4.f32 [%0], {%1, %2, %3, %4};" :: "l"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
+    #else
+    asm volatile ("st.global.wb.v4.f32 [%0], {%1, %2, %3, %4};" :: "r"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
+    #endif
+}
+
+__device__ __forceinline__ void store_L2_vec2f32(
+    const float* const addr,
+    const float a, const float b)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.cg.v2.f32 [%0], {%1, %2};" :: "l"(addr), "f"(a), "f"(b) : "memory");
+    #else
+    asm volatile ("st.global.cg.v2.f32 [%0], {%1, %2};" :: "r"(addr), "f"(a), "f"(b) : "memory");
+    #endif
+}
+
+__device__ __forceinline__ void store_L2_vec4f32(
+    const float* const addr,
+    const float a, const float b, const float c, const float d)
+{
+    #if defined(__LP64__) || defined(_WIN64)
+    asm volatile ("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "l"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
+    #else
+    asm volatile ("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "r"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
+    #endif
 }
 
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename UInteger>
-__global__ void build_nodes_kernel(int4* nodes,
-                                   unsigned int* node_levels,
-                                   int4* leaves,
-                                   const unsigned int max_per_leaf,
-                                   const UInteger* keys,
-                                   const size_t n_keys)
+template <typename KeyType, typename DeltaType>
+__global__ void compute_deltas_kernel(const KeyType* keys,
+                                      const size_t n_keys,
+                                      DeltaType* deltas)
 {
-    int index, end_index, split_index, direction;
-    int prefix_left, prefix_right, min_prefix;
-    unsigned int node_prefix;
-    unsigned int span_max, l, bit;
-    int4 left, right;
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    // Index of the current node.
-    index = threadIdx.x + blockIdx.x * blockDim.x;
-
-    while (index < (n_keys-1) && index >= 0)
+    while (tid <= n_keys)
     {
-        prefix_left = common_prefix_length(index, index-1, keys, n_keys);
-        prefix_right = common_prefix_length(index, index+1, keys, n_keys);
-        // direction == +1 => index is the first key in the node.
-        //              -1 => index is the last key in the node.
-        direction = sgn(prefix_right - prefix_left);
-
-        // Calculate an upper limit to the size of the current node (the number
-        // of keys it spans).
-        span_max = 2;
-        min_prefix = common_prefix_length(index, index-direction,
-                                          keys, n_keys);
-        while (common_prefix_length(index, index + span_max*direction,
-                                    keys, n_keys) > min_prefix) {
-            span_max = span_max * 2;
-        }
-
-        // Perform a binary search for the other end of the node, beginning
-        // with the upper limit from above.
-        l = 0;
-        bit = span_max / 2;
-        while (bit >= 1) {
-            if (common_prefix_length(index, index + (l+bit)*direction,
-                                     keys, n_keys) > min_prefix) {
-                l = l + bit;
-            }
-            bit = bit / 2;
-        }
-        end_index = index + l*direction;
-
-        // Perform a binary search for the node's split position.
-        node_prefix = common_prefix_length(index, end_index, keys, n_keys);
-        bit = l;
-        l = 0;
-        do {
-            // bit = ceil(bit/2.0) in case bit odd.
-            bit = (bit+1) / 2;
-            if (common_prefix_length(index, index + (l+bit)*direction,
-                                     keys, n_keys) > node_prefix) {
-                l = l + bit;
-            }
-        } while (bit > 1);
-        // If direction == -1 we actually found split_index + 1.
-        split_index = index + l*direction + min(direction, 0);
-
-        // Check we have a valid node, i.e. its span is > max_per_leaf.
-        if (abs(end_index - index) + 1 > max_per_leaf)
-        {
-            node_levels[index] = node_prefix;
-            nodes[4*index].x = split_index; // left child index
-            nodes[4*index].y = split_index+1; // right child index
-            nodes[4*index].w = end_index;
-
-            left.x = min(index, end_index); // start
-            left.y = (split_index - left.x) + 1; // primitives count
-            right.x = left.x + left.y;
-            right.y = max(index, end_index) - split_index;
-
-            assert(left.y > 0);
-            assert(right.y > 0);
-            assert(right.x + right.y - 1 < n_keys);
-
-            // Leaves are identified by their indicies, which are >= n_nodes
-            // (and currently n_nodes == n_keys-1).
-            if (left.y <= max_per_leaf) {
-                // Left child is a leaf.
-                nodes[4*index].x += n_keys-1;
-                left.z = index;
-                leaves[split_index] = left;
-            }
-            else {
-                // Left child is a node.
-                nodes[4*split_index].z = index;
-            }
-
-            if (right.y <= max_per_leaf) {
-                nodes[4*index].y += n_keys-1;
-                right.z = index;
-                leaves[split_index+1] = right;
-            }
-            else {
-                nodes[4*(split_index+1)].z = index;
-            }
-        } // No else.  We do not write to an invalid node, nor to its leaves.
-
-        index += blockDim.x * gridDim.x;
+        // The range [-1, n_keys) is valid for querying node_delta.
+        deltas[tid] = node_delta(tid - 1, keys, n_keys);
+        tid += blockDim.x * gridDim.x;
     }
+}
+
+template <typename KeyType, typename DeltaType>
+__global__ void compute_leaf_deltas_kernel(const int4* leaves,
+                                           const size_t n_leaves,
+                                           const KeyType* keys,
+                                           const size_t n_keys,
+                                           DeltaType* deltas)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    // The range [-1, n_leaves) is valid for querying node_delta.
+    if (tid == 0)
+        deltas[0] = node_delta(-1, keys, n_keys);
+
+    while (tid < n_leaves)
+    {
+        int4 leaf = leaves[tid];
+        int last_idx = leaf.x + leaf.y - 1;
+        deltas[tid+1] = node_delta(last_idx, keys, n_keys);
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+template <typename DeltaType>
+__global__ void build_leaves_kernel(int2* nodes,
+                                    const size_t n_nodes,
+                                    const DeltaType* deltas,
+                                    const int max_per_leaf)
+{
+    extern __shared__ int flags[];
+
+    const size_t n_leaves = n_nodes + 1;
+
+    // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
+    deltas++;
+
+    int bid = blockIdx.x;
+    int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    // while() and an inner for() to ensure all threads in a block hit the
+    // __syncthreads() and wipe the flags.
+    while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
+    {
+        // Zero all SMEM flags at start of first loop and at end of subsequent
+        // loops.
+        __syncthreads();
+        for (int i = threadIdx.x;
+             i < BUILD_THREADS_PER_BLOCK + max_per_leaf;
+             i += BUILD_THREADS_PER_BLOCK)
+        {
+            flags[i] = 0;
+        }
+        __syncthreads();
+
+        // [low, high) leaf indices covered by this block, including the
+        // max_per_leaf buffer.
+        int low = bid * BUILD_THREADS_PER_BLOCK;
+        int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_leaf,
+                       (int)n_leaves);
+
+        for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
+        {
+            int cur_index = idx;
+            int parent_index;
+
+            // Compute the current leaf's parent index and write associated data
+            // to the parent. The leaf is not actually written.
+            int left = cur_index;
+            int right = cur_index;
+            DeltaType delta_L = deltas[left - 1];
+            DeltaType delta_R = deltas[right];
+            int* addr;
+            int end;
+            if (delta_L < delta_R)
+            {
+                // Leftward node is parent.
+                parent_index = left - 1;
+                // Current leaf is a right child.
+                addr = &(nodes[parent_index].y);
+                end = right;
+            }
+            else {
+                // Rightward node is parent.
+                parent_index = right;
+                // Current leaf is a left child.
+                addr = &(nodes[parent_index].x);
+                end = left;
+            }
+
+            // If the leaf's parent is outside this block do not write anything;
+            // an adjacent block will follow this path.
+            if (parent_index < low || parent_index >= high)
+                continue;
+
+            // Normal store.  Other threads in this block can read from L1 if
+            // they get a hit.  No requirement for global coherency.
+            store_s32(addr, end);
+
+            // Travel up the tree.  The second thread to reach a node writes its
+            // left or right end to its parent.  The first exits the loop.
+            __threadfence_block();
+            assert(parent_index - low >= 0);
+            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+            unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+            assert(flag < 2);
+            bool first_arrival = (flag == 0);
+
+            while (!first_arrival)
+            {
+                cur_index = parent_index;
+
+                // We are certain that a thread in this block has already
+                // written the other child of the current node, so we can read
+                // from L1 cache if we get a hit.  Normal vector int2 load.
+                int2 left_right = load_vec2s32(&(nodes[parent_index].x));
+                int left = left_right.x;
+                int right = left_right.y;
+
+                // Only the left-most leaf can have an index of 0, and only the
+                // right-most leaf can have an index of n_leaves - 1.
+                assert(left >= 0);
+                assert(left < n_leaves - 1);
+                assert(right > 0);
+                assert(right < n_leaves);
+
+                int size = right - left + 1;
+                if (size > max_per_leaf) {
+                    // Both children of the current node must be leaves.
+                    // Stop traveling up the tree and continue with outer loop.
+                    break;
+                }
+
+                DeltaType delta_L = deltas[left - 1];
+                DeltaType delta_R = deltas[right];
+                int* addr;
+                int end;
+                // Compute the current node's parent index and write associated
+                // data.
+                if (delta_L < delta_R)
+                {
+                    // Leftward node is parent.
+                    parent_index = left - 1;
+                    // Current node is a right child.
+                    addr = &(nodes[parent_index].y);
+                    end = right;
+                }
+                else {
+                    // Rightward node is parent.
+                    parent_index = right;
+                    // Current node is a left child.
+                    addr = &(nodes[parent_index].x);
+                    end = left;
+
+                }
+
+                if (parent_index < low || parent_index >= high) {
+                    // Parent node outside this block's boundaries, exit without
+                    // writing the unreachable node and flag.
+                    break;
+                }
+
+                // Normal store.
+                store_s32(addr, end);
+
+                __threadfence_block();
+                assert(parent_index - low >= 0);
+                assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+                assert(flag < 2);
+                first_arrival = (flag == 0);
+            } // while (!first_arrival)
+        } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
+        bid += gridDim.x;
+        tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    } // while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
     return;
 }
 
-// Note: nodes and leaves do not need to be declared volatile because, although
-// two threads may be reading and writing the same node simultaneously, they
-// will never be reading or writing the same data.
-__global__ void shift_tree_indices(int4* nodes,
-                                   int4* leaves,
-                                   const unsigned int* leaf_shifts,
-                                   const unsigned int n_removed,
-                                   const size_t n_nodes)
+__global__ void write_leaves_kernel(const int2* nodes,
+                                    const size_t n_nodes,
+                                    int4* big_leaves,
+                                    const int max_per_leaf)
 {
-    int4 node;
-    int tid;
-    unsigned int shift;
-    size_t n_nodes_prior;
-
-    tid = threadIdx.x + blockIdx.x * blockDim.x;
-    n_nodes_prior = n_nodes + n_removed;
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < n_nodes)
     {
-        node = nodes[4*tid];
+        int2 node = nodes[tid];
+        int left = node.x;
+        int right = node.y;
 
-        assert(node.x > 0);
-        assert(node.y > 0);
+        // If left or right are 0, size may be incorrect.
+        int size = right - left + 1;
 
-        if (node.x >= n_nodes_prior) {
-            // A leaf is identified by an index >= n_nodes.  Since n_nodes has
-            // been reduced, an additional shift is required.
-            shift = leaf_shifts[node.x-n_nodes_prior] + n_removed;
-            assert(node.x-shift >= n_nodes);
-        }
-        else {
-            shift = leaf_shifts[node.x];
-            assert(node.x-shift < n_nodes);
-        }
-        node.x -= shift;
+        // If left is 0, left_size may be incorrect:
+        // we cannot differentiate between an unwritten node.x and one
+        // written as 0.
+        int left_size = tid - left + 1;
+        // This is guaranteed to be sufficiently correct:
+        // right == 0 means node.y was unwritten, and the right child is
+        // therefore not a leaf, so its size is set accordingly.
+        int right_size = (right > 0 ? right - tid : max_per_leaf + 1);
 
-        if (node.y >= n_nodes_prior) {
-            shift = leaf_shifts[node.y-n_nodes_prior] + n_removed;
-            assert(node.y-shift >= n_nodes);
-        }
-        else {
-            // For a right node, we use the shift for its left sibling.
-            // NB: right_index-1 == left_index.
-            // (We have shifts for the leaf indices.  A left node index marks,
-            // conceptually, the end point in the node, so the shift works.
-            // A right node marks the start of a node, so we must shift by a
-            // distance equal to the number of leaves removed up to *but not
-            // including* this point, i.e. shift the same as the left sibling.)
-            shift = leaf_shifts[node.y-1];
-            assert(node.y-shift < n_nodes);
-        }
-        node.y -= shift;
+        // *These are both guarranteed to be correct*:
+        // If left_size was computed incorrectly, then the true value of
+        // node.x is not zero, and thus node.x was unwritten.  This requires
+        // that the left child not be a leaf, and hence the node index (tid)
+        // must be > max_per_leaf, resulting in left_leaf = false.
+        //
+        // right_leaf follows from the correctness of right_size.
+        bool left_leaf = (left_size <= max_per_leaf);
+        bool right_leaf = (right_size <= max_per_leaf);
 
-        // This node's index is equal to the index of the first/last leaf it
-        // contains; the far end must be shifted such that it is equal to the
-        // last/first leaf it contains, for right/left nodes, respectively.
-        node.w -= leaf_shifts[node.w];
+        // If only one child is to be written, we are certain it should be,
+        // as the current node's (unknown) size must be > max_per_leaf.
+        // Otherwise, we write only if the current node cannot be a leaf.
+        bool write_check = left_leaf != right_leaf ? true :
+                                                    (size > max_per_leaf);
 
-        nodes[4*tid].x = node.x;
-        nodes[4*tid].y = node.y;
-        nodes[4*tid].w = node.w;
-
-        // Do this near the top, when we read nodes[tid]?  May give slightly
-        // more coalesced memory accesses.
-        // Don't forget to change >= n_nodes to >= n_nodes_prior if moved!
-        // TODO: Wrap the asserts in an #ifndef NDEBUG, define some local
-        //       variables and tidy up the code.
-        if (node.x >= n_nodes) {
-            // Current node can only have shifted by some distance >= 0.
-            assert(tid <= leaves[node.x-n_nodes].z);
-            // Current node cannot have shifted  by any distance > n_removed.
-            assert(leaves[node.x-n_nodes].z - tid <= n_removed);
-            // We do not know if the current node is a left or a right child,
-            // so OR the conditions for both possibilities, respectively.
-            // The root node is technically a right child, but cannot be shifted
-            // so is a special case.
-            assert(tid == 0 || leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z] == tid || leaves[node.x-n_nodes].z - leaf_shifts[leaves[node.x-n_nodes].z-1] == tid);
-            leaves[node.x-n_nodes].z = tid;
+        // NOTE: size is guaranteed accurate only if both left_leaf and
+        // right_leaf are true, but if they are both false no write occurs
+        // anyway because of the && below.
+        int4 leaf;
+        if (left_leaf && write_check) {
+            leaf.x = left;
+            leaf.y = left_size;
+            big_leaves[left] = leaf;
         }
-        else {
-            assert(tid <= nodes[4*node.x].z);
-            assert(nodes[4*node.x].z - tid <= n_removed);
-            assert(tid == 0 || nodes[4*node.x].z - leaf_shifts[nodes[4*node.x].z] == tid || nodes[4*node.x].z - leaf_shifts[nodes[4*node.x].z-1] == tid);
-            nodes[4*node.x].z = tid;
-        }
-
-        if (node.y >= n_nodes) {
-            assert(tid <= leaves[node.y-n_nodes].z);
-            assert(leaves[node.y-n_nodes].z - tid <= n_removed);
-            assert(tid == 0 || leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z] == tid || leaves[node.y-n_nodes].z - leaf_shifts[leaves[node.y-n_nodes].z-1] == tid);
-            leaves[node.y-n_nodes].z = tid;
-        }
-        else {
-            assert(tid <= nodes[4*node.y].z);
-            assert(nodes[4*node.y].z - tid <= n_removed);
-            assert(tid == 0 || nodes[4*node.y].z - leaf_shifts[nodes[4*node.y].z] == tid || nodes[4*node.y].z - leaf_shifts[nodes[4*node.y].z-1] == tid);
-            nodes[4*node.y].z = tid;
+        if (right_leaf && write_check) {
+            leaf.x = tid + 1;
+            leaf.y = right_size;
+            big_leaves[right] = leaf;
         }
 
         tid += blockDim.x * gridDim.x;
     }
 }
 
-// No assigment operator for int4 node = volatile int4 nodes[i], so nodes and
-// v_nodes point to the same location.
-template <typename Float, typename Float4>
-__global__ void find_AABBs_kernel(const int4* nodes,
-                                  volatile float4* v_nodes,
-                                  const int4* leaves,
-                                  const size_t n_leaves,
-                                  const Float4* spheres,
-                                  unsigned int* g_flags)
+template <typename DeltaType, typename Float4>
+__global__ void build_nodes_slice_kernel(int4* nodes,
+                                         float4* f4_nodes,
+                                         const size_t n_nodes,
+                                         const int4* leaves,
+                                         const size_t n_leaves,
+                                         const Float4* spheres,
+                                         const int* base_indices,
+                                         const size_t n_base_nodes,
+                                         int* root_index,
+                                         const DeltaType* deltas,
+                                         const int max_per_node,
+                                         int* new_base_indices)
 {
-    int tid, node_index, flag_index, block_lower, block_upper;
-    int4 node;
-    Float4 sphere;
-    Float x_min, y_min, z_min;
-    Float x_max, y_max, z_max;
-    unsigned int* flags;
-    bool first_arrival, in_block;
+    extern __shared__ int SMEM[];
 
-    // Use shared memory for the N-accessed flags when all children of a node
-    // have been processed in the same block.
-    // NB: Shared memory must be initialized.
-    __shared__ unsigned int sm_flags[AABB_THREADS_PER_BLOCK];
-    sm_flags[threadIdx.x] = 0;
-    __syncthreads();
+    int* flags = SMEM;
+    volatile int2* sm_nodes
+        = (int2*)&flags[BUILD_THREADS_PER_BLOCK + max_per_node];
 
-    block_lower = blockIdx.x * AABB_THREADS_PER_BLOCK;
-    block_upper = block_lower + AABB_THREADS_PER_BLOCK - 1;
+    // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
+    deltas++;
 
-    tid = threadIdx.x + blockIdx.x * AABB_THREADS_PER_BLOCK;
+    int bid = blockIdx.x;
+    int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
 
-    // Loop provided there are > 0 threads in this block with tid < n_leaves,
-    // so all threads hit the __syncthreads().
-    while (tid - threadIdx.x < n_leaves)
+    // while() and inner for() loops to ensure all threads in a block hit the
+    // __syncthreads().
+    while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
     {
-        if (tid < n_leaves)
+        // Zero all SMEM flags and node data at start of first loop and at end
+        // of subsequent loops.
+        __syncthreads();
+        for (int i = threadIdx.x;
+             i < BUILD_THREADS_PER_BLOCK + max_per_node;
+             i += BUILD_THREADS_PER_BLOCK)
         {
-            node = leaves[tid];
-            // Leaf => node.x = first sphere index.
-            sphere = spheres[node.x];
+            flags[i] = 0;
+            // 'error: no operator "=" matches ... volatile int2 = int2':
+            // sm_nodes[i] = make_int2(0, 0);
+            sm_nodes[i].x = 0;
+            sm_nodes[i].y = 0;
+        }
+        __syncthreads();
 
-            x_max = sphere.x + sphere.w;
-            y_max = sphere.y + sphere.w;
-            z_max = sphere.z + sphere.w;
+        // The compressed/logical node indices for this block cover the range
+        // [low, high), including the max_per_node buffer.
+        int low = bid * BUILD_THREADS_PER_BLOCK;
+        int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_node,
+                       (int)n_base_nodes);
 
-            x_min = sphere.x - sphere.w;
-            y_min = sphere.y - sphere.w;
-            z_min = sphere.z - sphere.w;
+        for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
+        {
+            // For the tree climb, we start at base nodes, treating them as
+            // leaves.  The left/right values refer to the left- and right-most
+            // *base nodes* covered by the current node.  (g_left and g_right
+            // contain the left- and right-most *actual* leaf indices.)
+            // The current index (i.e. the idx-th base node) is thus a logical,
+            // or compressed node index, and is used for writing to shared
+            // memory.
+            int cur_index = idx;
+            int parent_index;
 
-            for (int i=1; i<node.y; i++)
-            {
-                sphere = spheres[node.x+i];
+            // These are real node indices (for writing to global memory).
+            int g_cur_index = base_indices[cur_index];
+            int g_parent_index;
 
-                x_max = max(x_max, sphere.x + sphere.w);
-                y_max = max(y_max, sphere.y + sphere.w);
-                z_max = max(z_max, sphere.z + sphere.w);
+            // Node index can be >= n_nodes if a leaf.
+            assert(g_cur_index < n_nodes + n_leaves);
 
-                x_min = min(x_min, sphere.x - sphere.w);
-                y_min = min(y_min, sphere.y - sphere.w);
-                z_min = min(z_min, sphere.z - sphere.w);
-            }
-
-            node_index = node.z;
-            node = nodes[4*node_index + 0];
-
-            // Write the leaf's AABB to its *parent*.
-            // Would be simpler if e.g. node.w => leaf is a left child.
-            if (tid == node.x-(n_leaves-1))
-            {
-                // leaves[tid] is a left child; write left AABB.
-                v_nodes[4*node_index + 1].x = x_min;
-                v_nodes[4*node_index + 1].y = x_max;
-                v_nodes[4*node_index + 2].x = y_min;
-                v_nodes[4*node_index + 2].y = y_max;
-                v_nodes[4*node_index + 3].x = z_min;
-                v_nodes[4*node_index + 3].y = z_max;
-            }
+            int4 node;
+            if (g_cur_index < n_nodes)
+                node = nodes[4 * g_cur_index + 0];
             else
-            {
-                // leaves[tid] is a right child; write right AABB.
-                v_nodes[4*node_index + 1].z = x_min;
-                v_nodes[4*node_index + 1].w = x_max;
-                v_nodes[4*node_index + 2].z = y_min;
-                v_nodes[4*node_index + 2].w = y_max;
-                v_nodes[4*node_index + 3].z = z_min;
-                v_nodes[4*node_index + 3].w = z_max;
-            }
+                node = leaves[g_cur_index - n_nodes];
 
-            // Travel up the tree.  The second thread to reach a node writes
-            // its AABB to its parent.  The first exits the loop.
-            in_block = (min(node_index, node.w) >= block_lower &&
-                        max(node_index, node.w) <= block_upper);
+            float x_min, y_min, z_min;
+            float x_max, y_max, z_max;
+            if (g_cur_index < n_nodes) {
+                float4 AABB_L  = f4_nodes[4 * g_cur_index + 1];
+                float4 AABB_R  = f4_nodes[4 * g_cur_index + 2];
+                float4 AABB_LR = f4_nodes[4 * g_cur_index + 3];
 
-            if (in_block) {
-                flags = sm_flags;
-                flag_index = node_index % AABB_THREADS_PER_BLOCK;
-                __threadfence_block();
+                // Compute the current node's AABB (union of its children's
+                // AABBs).
+                x_min = min(AABB_L.x, AABB_R.x);
+                x_max = max(AABB_L.y, AABB_R.y);
+
+                y_min = min(AABB_L.z, AABB_R.z);
+                y_max = max(AABB_L.w, AABB_R.w);
+
+                z_min = min(AABB_LR.x, AABB_LR.z);
+                z_max = max(AABB_LR.y, AABB_LR.w);
             }
             else {
-                flags = g_flags;
-                flag_index = node_index;
-                __threadfence();
+                x_min = y_min = z_min = CUDART_INF_F;
+                x_max = y_max = z_max = -1.f;
+
+                // Current node is a leaf; compute it's AABB from the spheres
+                // it contains.
+                #pragma unroll 4
+                for (int i = 0; i < node.y; i++) {
+                    Float4 sphere = spheres[node.x + i];
+
+                    x_min = min(x_min, sphere.x - sphere.w);
+                    x_max = max(x_max, sphere.x + sphere.w);
+
+                    y_min = min(y_min, sphere.y - sphere.w);
+                    y_max = max(y_max, sphere.y + sphere.w);
+
+                    z_min = min(z_min, sphere.z - sphere.w);
+                    z_max = max(z_max, sphere.z + sphere.w);
+                }
             }
 
-            first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+            // Note, they should never be equal.
+            assert(x_min < x_max);
+            assert(y_min < y_max);
+            assert(z_min < z_max);
+
+            // Recall that leaf left/right limits are equal to the leaf index,
+            // minus the leaf-identifying offset.
+            int g_left = (g_cur_index < n_nodes ? node.z :
+                                                  g_cur_index - n_nodes);
+            int g_right = (g_cur_index < n_nodes ? node.w :
+                                                   g_cur_index - n_nodes);
+
+            // Only the left-most leaf can have an index of 0, and only the
+            // right-most leaf can have an index of n_leaves - 1.
+            if (g_cur_index < n_nodes) {
+                assert(g_left >= 0);
+                assert(g_left < n_leaves - 1);
+                assert(g_right > 0);
+                assert(g_right < n_leaves);
+            }
+            else {
+                assert(g_left >= 0);
+                assert(g_left < n_leaves);
+                assert(g_right >= 0);
+                assert(g_right < n_leaves);
+            }
+
+            int left = cur_index;
+            int right = cur_index;
+
+            DeltaType delta_L = deltas[g_left - 1];
+            DeltaType delta_R = deltas[g_right];
+            int* child_addr;
+            int* end_addr;
+            volatile int* sm_addr;
+            float* AABB_f2_addr;
+            float* AABB_f4_addr;
+            int end, sm_end;
+            // Compute the current node's parent index and write-to locations.
+            if (delta_L < delta_R)
+            {
+                // Leftward node is parent.
+                parent_index = left - 1;
+                g_parent_index = g_left - 1;
+
+                // Current node is a right child.
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
+                child_addr = &(nodes[4 * g_parent_index + 0].y);
+                end_addr = &(nodes[4 * g_parent_index + 0].w);
+                end = -1 * (right + 1);
+
+                // Right-most global node index.
+                sm_addr = &(sm_nodes[parent_index - low].y);
+                sm_end = g_right;
+
+                // Right child AABB.
+                AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 2].x);
+                AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].z);
+            }
+            else {
+                // Rightward node is parent.
+                parent_index = right;
+                g_parent_index = g_right;
+
+                // Current node is a left child.
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
+                child_addr = &(nodes[4 * g_parent_index + 0].x);
+                end_addr = &(nodes[4 * g_parent_index + 0].z);
+                end = -1 * (left + 1);
+
+                // Left-most global node index.
+                sm_addr = &(sm_nodes[parent_index - low].x);
+                sm_end = g_left;
+
+                // Left child AABB.
+                AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 1].x);
+                AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].x);
+            }
+
+            // If the leaf's parent is outside this block do not write anything;
+            // an adjacent block will follow this path.
+            if (parent_index < low || parent_index >= high)
+                continue;
+
+            // Parent index must be at a valid location for writing to sm_nodes
+            // and the SMEM flags.
+            assert(parent_index - low >= 0);
+            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
+
+            // Normal stores.  Other threads in this block can read from L1 if
+            // they get a cache hit, i.e. there is no requirement for global
+            // coherency.
+            store_s32(child_addr, g_cur_index);
+            store_s32(end_addr, end);
+            store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+            store_vec2f32(AABB_f2_addr, z_min, z_max);
+            *sm_addr = sm_end;
+
+            // Travel up the tree.  The second thread to reach a node writes its
+            // logical/compressed left or right end to its parent; the first
+            // exits the loop.
+            __threadfence_block();
+            unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+            assert(flag < 2);
+            bool first_arrival = (flag == 0);
+
             while (!first_arrival)
             {
-                // Compute AABB of current node from AABBs of child nodes, i.e.
-                //   AABB.min = min(left_AABB.min, right_AABB.min)
-                //   AABB.max = max(left_AABB.max, right_AABB.max)
-                x_min = min(v_nodes[4*node_index + 1].x,
-                            v_nodes[4*node_index + 1].z);
-                x_max = max(v_nodes[4*node_index + 1].y,
-                            v_nodes[4*node_index + 1].w);
-                y_min = min(v_nodes[4*node_index + 2].x,
-                            v_nodes[4*node_index + 2].z);
-                y_max = max(v_nodes[4*node_index + 2].y,
-                            v_nodes[4*node_index + 2].w);
-                z_min = min(v_nodes[4*node_index + 3].x,
-                            v_nodes[4*node_index + 3].z);
-                z_max = max(v_nodes[4*node_index + 3].y,
-                            v_nodes[4*node_index + 3].w);
+                cur_index = parent_index;
+                g_cur_index = g_parent_index;
 
-                // Note, they should never be equal.
+                assert(cur_index < n_base_nodes);
+                assert(g_cur_index < n_nodes);
+
+                // We are certain that a thread in this block has already
+                // *written* the other child of the current node, so we can read
+                // from L1 if we get a cache hit.
+                int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+
+                // 'error: class "int2" has no suitable copy constructor'
+                // int2 left_right = sm_nodes[cur_index - low];
+                // int g_left = left_right.x;
+                // int g_right = left_right.y;
+                int g_left = sm_nodes[cur_index - low].x;
+                int g_right = sm_nodes[cur_index - low].y;
+                assert(g_left >= 0);
+                assert(g_left < n_leaves - 1);
+                assert(g_right > 0);
+                assert(g_right < n_leaves);
+
+                // Undo the -ve sign encoding.
+                int left = -1 * node.z - 1;
+                int right = -1 * node.w - 1;
+                // We are the second thread in this block to reach this node.
+                // Both of its logical/compressed end-indices must also be in
+                // this block.
+                assert(left >= low);
+                assert(left < high - 1);
+                assert(right > low);
+                assert(right < high);
+
+                // Even if this is true, the following compacted/logical size
+                // test can be false.
+                if (g_right - g_left == n_leaves - 1)
+                    *root_index = g_cur_index;
+
+                // Check our compacted/logical size, and exit the loop if we are
+                // large enough to become a base layer in the next iteration.
+                if (right - left + 1 > max_per_node) {
+                    // Both children of the current node must be leaves.  Stop
+                    // travelling up the tree and continue with the outer loop.
+                    break;
+                }
+
+                // Again, L1 data will be accurate.
+                float4 AABB_L  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
+                float4 AABB_R  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
+                float4 AABB_LR = load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
+
+                float x_min = min(AABB_L.x, AABB_R.x);
+                float x_max = max(AABB_L.y, AABB_R.y);
+                float y_min = min(AABB_L.z, AABB_R.z);
+                float y_max = max(AABB_L.w, AABB_R.w);
+                float z_min = min(AABB_LR.x, AABB_LR.z);
+                float z_max = max(AABB_LR.y, AABB_LR.w);
+
                 assert(x_min < x_max);
                 assert(y_min < y_max);
                 assert(z_min < z_max);
 
-                // Write the node's AABB to its *parent*.
-                if (node.w < node_index)
+                DeltaType delta_L = deltas[g_left - 1];
+                DeltaType delta_R = deltas[g_right];
+                int* child_addr;
+                int* end_addr;
+                volatile int* sm_addr;
+                float* AABB_f2_addr;
+                float* AABB_f4_addr;
+                int end, sm_end;
+                if (delta_L < delta_R)
                 {
-                    // Current node is a left child; write left AABB.
-                    v_nodes[4*node.z + 1].x = x_min;
-                    v_nodes[4*node.z + 1].y = x_max;
-                    v_nodes[4*node.z + 2].x = y_min;
-                    v_nodes[4*node.z + 2].y = y_max;
-                    v_nodes[4*node.z + 3].x = z_min;
-                    v_nodes[4*node.z + 3].y = z_max;
+                    // Leftward node is parent.
+                    parent_index = left - 1;
+                    g_parent_index = g_left - 1;
+
+                    // Current node is a right child.
+                    child_addr = &(nodes[4 * g_parent_index + 0].y);
+                    end_addr = &(nodes[4 * g_parent_index + 0].w);
+                    end = -1 * (right + 1);
+
+                    sm_addr = &(sm_nodes[parent_index - low].y);
+                    sm_end = g_right;
+
+                    // Right child AABB.
+                    AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 2].x);
+                    AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].z);
+
                 }
-                else
-                {
-                    // Current node is a right child; write right AABB.
-                    v_nodes[4*node.z + 1].z = x_min;
-                    v_nodes[4*node.z + 1].w = x_max;
-                    v_nodes[4*node.z + 2].z = y_min;
-                    v_nodes[4*node.z + 2].w = y_max;
-                    v_nodes[4*node.z + 3].z = z_min;
-                    v_nodes[4*node.z + 3].w = z_max;
+                else {
+                    // Rightward node is parent.
+                    parent_index = right;
+                    g_parent_index = g_right;
+
+                    // Current node is a left child.
+                    child_addr = &(nodes[4 * g_parent_index + 0].x);
+                    end_addr = &(nodes[4 * g_parent_index + 0].z);
+                    end = -1 * (left + 1);
+
+                    sm_addr = &(sm_nodes[parent_index - low].x);
+                    sm_end = g_left;
+
+                    // Left child AABB.
+                    AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 1].x);
+                    AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].x);
                 }
 
-                if (node.z == 0) {
-                    // Second and final AABB written for root node, so all
-                    // nodes processed.
-                    // Break rather than return because of the __syncthreads()
+                if (parent_index < low || parent_index >= high) {
+                    // Parent node outside this block's boundaries.  Either a
+                    // thread in an adjacent block will follow this path, or the
+                    // current node will be a base node in the next iteration.
                     break;
                 }
 
-                node_index = node.z;
-                node = nodes[4*node_index + 0];
-                in_block = (min(node_index, node.w) >= block_lower &&
-                            max(node_index, node.w) <= block_upper);
+                store_s32(child_addr, g_cur_index);
+                store_s32(end_addr, end);
+                store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+                store_vec2f32(AABB_f2_addr, z_min, z_max);
+                *sm_addr = sm_end;
 
-                if (in_block) {
-                    flags = sm_flags;
-                    flag_index = node_index % AABB_THREADS_PER_BLOCK;
-                    __threadfence_block();
-                }
-                else {
-                    flags = g_flags;
-                    flag_index = node_index;
-                    __threadfence();
-                }
+                __threadfence_block();
+                assert(parent_index - low >= 0);
+                assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
+                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+                assert(flag < 2);
+                first_arrival = (flag == 0);
+            } // while (!first_arrival)
+        } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_node)
 
-                first_arrival = (atomicAdd(&flags[flag_index], 1) == 0);
+        bid += gridDim.x;
+        tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    } // while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
+    return;
+}
+
+__global__ void fill_output_queue(const int4* nodes,
+                                  const size_t n_nodes,
+                                  const int max_per_node,
+                                  int* new_base_indices)
+{
+    int tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+
+    while (tid < n_nodes)
+    {
+        int4 node = nodes[4 * tid + 0];
+
+        // The left/right values are negative IFF they were written in this
+        // iteration.  A negative index represents a logical/compacted index.
+        bool left_written = (node.z < 0);
+        bool right_written = (node.w < 0);
+
+        // Undo the -ve encoding.
+        int left = -1 * node.z - 1;
+        int right = -1 * node.w - 1;
+
+        if (left_written != right_written) {
+            // Only one child was written; it must be placed in the output queue
+            // at a *unique* location.
+            int index = left_written ? left : right;
+            assert(new_base_indices[index] == -1);
+            new_base_indices[index] = left_written ? node.x : node.y;
+        }
+        else if (left_written) {
+            // Both were written, so the current node must be added to the
+            // output queue IFF it is sufficiently large; that is, if its size
+            // is such that it would have caused the thread to end its tree
+            // climb.
+            // Again, the location we write to must be unique.
+            int size = right - left + 1;
+            if (size > max_per_node) {
+                assert(new_base_indices[left] == -1);
+                new_base_indices[left] = tid;
             }
         }
-        // Before we move on to a new block of leaves to process, wipe shared
-        // memory flags so all threads agree what sm_flags[i] corresponds to.
-        __syncthreads();
-        sm_flags[threadIdx.x] = 0;
-        __syncthreads();
 
-        tid += AABB_THREADS_PER_BLOCK * gridDim.x;
-        block_lower += AABB_THREADS_PER_BLOCK * gridDim.x;
-        block_upper += AABB_THREADS_PER_BLOCK * gridDim.x;
+        tid += blockDim.x * gridDim.x;
     }
-    return;
+}
+
+__global__ void fix_node_ranges(int4* nodes,
+                                const size_t n_nodes,
+                                const int4* leaves,
+                                const int* old_base_indices)
+{
+    int tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+
+    while (tid < n_nodes)
+    {
+        int4 node = nodes[4 * tid + 0];
+
+        // We only need to fix nodes whose ranges were written, *in full*, this
+        // iteration.
+        if (node.z < 0 && node.w < 0)
+        {
+            int left = node.z < 0 ? (-1 * node.z - 1) : node.z;
+            int right = node.w < 0 ? (-1 * node.w - 1) : node.w;
+
+            // All base nodes have correct range indices.  If we know our
+            // left/right-most base node, we can therefore find our
+            // left/right-most leaf indices.
+            // Note that for leaves, the left and right ranges are simply the
+            // (corrected) index of the leaf.
+            int index = old_base_indices[left];
+            left = index < n_nodes ? nodes[4 * index + 0].z : index - n_nodes;
+
+            index = old_base_indices[right];
+            right = index < n_nodes ? nodes[4 * index + 0].w : index - n_nodes;
+
+            // Only the left-most leaf can have index 0.
+            assert(left >= 0);
+            assert(left < n_nodes);
+            assert(right > 0);
+            // Only the right-most leaf can have index n_leaves - 1 == n_nodes.
+            assert(right <= n_nodes);
+
+            node.z = left;
+            node.w = right;
+            nodes[4 * tid + 0] = node;
+        }
+
+        tid += blockDim.x * gridDim.x;
+    }
 }
 
 } // namespace gpu
@@ -564,78 +955,198 @@ __global__ void find_AABBs_kernel(const int4* nodes,
 // C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename UInteger>
-void build_tree(Tree& d_tree,
-                 const thrust::device_vector<UInteger>& d_keys,
-                 const int max_per_leaf=1)
+template<typename KeyType, typename DeltaType>
+void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
+                    thrust::device_vector<DeltaType>& d_deltas)
 {
+    assert(d_keys.size() + 1 == d_deltas.size());
+
+    int blocks = min(MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
+    gpu::compute_deltas_kernel<<<blocks, 512>>>(
+        thrust::raw_pointer_cast(d_keys.data()),
+        d_keys.size(),
+        thrust::raw_pointer_cast(d_deltas.data()));
+}
+
+template<typename KeyType, typename DeltaType>
+void compute_leaf_deltas(const thrust::device_vector<int4>& d_leaves,
+                         const thrust::device_vector<KeyType>& d_keys,
+                         thrust::device_vector<DeltaType>& d_deltas)
+{
+    assert(d_leaves.size() + 1 == d_deltas.size());
+
+    int blocks = min(MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
+    gpu::compute_leaf_deltas_kernel<<<blocks, 512>>>(
+        thrust::raw_pointer_cast(d_leaves.data()),
+        d_leaves.size(),
+        thrust::raw_pointer_cast(d_keys.data()),
+        d_keys.size(),
+        thrust::raw_pointer_cast(d_deltas.data()));
+}
+
+template <typename DeltaType>
+void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
+                  thrust::device_vector<int4>& d_tmp_leaves,
+                  const int max_per_leaf,
+                  const thrust::device_vector<DeltaType>& d_deltas)
+{
+    const size_t n_leaves = d_tmp_leaves.size();
+    const size_t n_nodes = n_leaves - 1;
+
+
+    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
+                                        / BUILD_THREADS_PER_BLOCK));
+    int smem_size = sizeof(int) * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
+
+    gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
+        thrust::raw_pointer_cast(d_tmp_nodes.data()),
+        n_nodes,
+        thrust::raw_pointer_cast(d_deltas.data()),
+        max_per_leaf);
+
+    blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
+                                     / BUILD_THREADS_PER_BLOCK));
+
+    gpu::write_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_tmp_nodes.data()),
+        n_nodes,
+        thrust::raw_pointer_cast(d_tmp_leaves.data()),
+        max_per_leaf);
+}
+
+void remove_empty_leaves(Tree& d_tree)
+{
+    // A transform_reduce (with unary op 'is_valid_node()') followed by a
+    // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
+    // than the below.  However, this method does not require a temporary leaves
+    // array, which would be the largest temporary memory allocation in the
+    // build process.
+
+    // error: no operator "==" matches these operands
+    //         operand types are: const int4 == const int4
+    // thrust::remove(.., .., make_int4(0, 0, 0, 0))
+
+    typedef thrust::device_vector<int4>::iterator Int4Iter;
+    Int4Iter end = thrust::remove_if(d_tree.leaves.begin(), d_tree.leaves.end(),
+                                     is_empty_node());
+
+    const size_t n_new_leaves = end - d_tree.leaves.begin();
+    const size_t n_new_nodes = n_new_leaves - 1;
+    d_tree.nodes.resize(4 * n_new_nodes);
+    d_tree.leaves.resize(n_new_leaves);
+}
+
+template <typename DeltaType, typename Float4>
+void build_nodes(Tree& d_tree,
+                 const thrust::device_vector<DeltaType>& d_deltas,
+                 const thrust::device_vector<Float4>& d_spheres)
+{
+    const size_t n_leaves = d_tree.leaves.size();
+    const size_t n_nodes = n_leaves - 1;
+
+    thrust::device_vector<int> d_queue1(n_leaves);
+    thrust::device_vector<int> d_queue2(n_leaves);
+    // The first input queue of base layer nodes is simply all the leaves.
+    // The first leaf has index n_nodes.
+    thrust::sequence(d_queue1.begin(), d_queue1.end(), n_nodes);
+
+    typedef thrust::device_vector<int>::iterator QIter;
+    QIter in_q_begin  = d_queue1.begin();
+    QIter in_q_end    = d_queue1.end();
+    QIter out_q_begin = d_queue2.begin();
+    QIter out_q_end   = d_queue2.end();
+
+    int* d_in_ptr = thrust::raw_pointer_cast(d_queue1.data());
+    int* d_out_ptr = thrust::raw_pointer_cast(d_queue2.data());
+
+    while (in_q_end - in_q_begin > 1)
+    {
+        const size_t n_in = in_q_end - in_q_begin;
+
+        // Output queue is always filled with invalid values so we can remove them
+        // and use it as an input in the next iteration.
+        thrust::fill(out_q_begin, out_q_end, -1);
+
+        int blocks = min(MAX_BLOCKS, (int) ((n_in + BUILD_THREADS_PER_BLOCK-1)
+                                             / BUILD_THREADS_PER_BLOCK));
+        // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
+        // AND int2 nodes.
+        int smem_size = (sizeof(int) + sizeof(int2))
+                        * (BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
+        gpu::build_nodes_slice_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
+            thrust::raw_pointer_cast(d_tree.nodes.data()),
+            reinterpret_cast<float4*>(
+                thrust::raw_pointer_cast(d_tree.nodes.data())),
+            n_nodes,
+            thrust::raw_pointer_cast(d_tree.leaves.data()),
+            n_leaves,
+            thrust::raw_pointer_cast(d_spheres.data()),
+            d_in_ptr,
+            n_in,
+            d_tree.root_index_ptr,
+            thrust::raw_pointer_cast(d_deltas.data()),
+            d_tree.max_per_leaf, // This can actually be anything.
+            d_out_ptr);
+
+        blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
+                                             / BUILD_THREADS_PER_BLOCK));
+        gpu::fill_output_queue<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_tree.nodes.data()),
+            n_nodes,
+            d_tree.max_per_leaf,
+            d_out_ptr);
+
+        gpu::fix_node_ranges<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+            thrust::raw_pointer_cast(d_tree.nodes.data()),
+            n_nodes,
+            thrust::raw_pointer_cast(d_tree.leaves.data()),
+            d_in_ptr);
+
+        QIter end = thrust::remove(out_q_begin, out_q_end, -1);
+        out_q_end = end;
+
+        // New output queue becomes the input queue next iteration.
+        thrust::swap(d_in_ptr, d_out_ptr);
+        thrust::swap(in_q_begin, out_q_begin);
+        in_q_end = out_q_end;
+        // The new output queue need be no larger than the input queue. This is
+        // worth doing since we need to fill it with -1's.
+        out_q_end = out_q_begin + (in_q_end - in_q_begin);
+    }
+}
+
+template <typename KeyType, typename DeltaType, typename Float4>
+void build_tree(Tree& d_tree,
+                const thrust::device_vector<KeyType>& d_keys,
+                const thrust::device_vector<DeltaType>& d_deltas,
+                const thrust::device_vector<Float4>& d_spheres,
+                const bool wipe = false)
+{
+    // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
+
     // In case this ever changes.
     assert(sizeof(int4) == sizeof(float4));
 
-    // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
-    // TODO: Error if max_per_leaf >= n_keys
+    if (wipe) {
+        int4 empty = make_int4(0, 0, 0, 0);
+        thrust::fill(d_tree.nodes.begin(), d_tree.nodes.end(), empty);
+        thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(), empty);
+    }
 
-    size_t n_keys = d_keys.size();
+    const size_t n_leaves = d_tree.leaves.size();
+    const size_t n_nodes = n_leaves - 1;
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + BUILD_THREADS_PER_BLOCK-1)
-                                        / BUILD_THREADS_PER_BLOCK));
+    thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    gpu::build_nodes_kernel<<<blocks,BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.nodes.data()),
-        thrust::raw_pointer_cast(d_tree.levels.data()),
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        max_per_leaf,
-        thrust::raw_pointer_cast(d_keys.data()),
-        n_keys);
+    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf, d_deltas);
+    remove_empty_leaves(d_tree);
+
+    const size_t n_new_leaves = d_tree.leaves.size();
+
+    thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
+    compute_leaf_deltas(d_tree.leaves, d_keys, d_new_deltas);
+
+    build_nodes(d_tree, d_new_deltas, d_spheres);
 }
-
-void compact_tree(Tree& d_tree)
-{
-    thrust::device_vector<unsigned int> d_leaf_shifts(d_tree.leaves.size());
-    thrust::transform_inclusive_scan(d_tree.leaves.begin(),
-                                     d_tree.leaves.end(),
-                                     d_leaf_shifts.begin(),
-                                     flag_null_node(),
-                                     thrust::plus<unsigned int>());
-    const unsigned int N_removed = d_leaf_shifts.back();
-    const size_t N_nodes = d_tree.leaves.size() - 1 - N_removed;
-    // Also try remove(_copy)_if with un-scanned flags as a stencil.
-    // Then assert *(d_leaf_shifts.back()) == d_leaves.indices.size()
-    gpu::copy_valid_nodes(d_tree.nodes, N_nodes, 4);
-    gpu::copy_valid_nodes(d_tree.leaves, N_nodes+1, 1);
-    gpu::copy_valid_levels(d_tree.levels, N_nodes);
-
-    int blocks = min(MAX_BLOCKS, (int) ((N_nodes + SHIFTS_THREADS_PER_BLOCK-1)
-                                        / SHIFTS_THREADS_PER_BLOCK));
-
-    gpu::shift_tree_indices<<<blocks,SHIFTS_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.nodes.data()),
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        thrust::raw_pointer_cast(d_leaf_shifts.data()),
-        N_removed,
-        N_nodes);
-}
-
-template <typename Float4>
-void find_AABBs(Tree& d_tree,
-                const thrust::device_vector<Float4>& d_spheres)
-{
-    size_t n_leaves = d_tree.leaves.size();
-
-    thrust::device_vector<unsigned int> d_AABB_flags(n_leaves-1);
-
-    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + AABB_THREADS_PER_BLOCK-1)
-                                        / AABB_THREADS_PER_BLOCK));
-
-    gpu::find_AABBs_kernel<float, Float4><<<blocks,AABB_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.nodes.data()),
-        reinterpret_cast<float4*>(
-            thrust::raw_pointer_cast(d_tree.nodes.data())),
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        n_leaves,
-        thrust::raw_pointer_cast(d_spheres.data()),
-        thrust::raw_pointer_cast(d_AABB_flags.data()));
-}
-
 
 } // namespace grace

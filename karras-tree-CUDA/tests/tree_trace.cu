@@ -63,11 +63,11 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N+1);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
     // Keys no longer needed.
     d_keys.clear();
@@ -88,7 +88,7 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<unsigned int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts, d_tree,
-                           d_spheres_xyzr, max_per_leaf);
+                           d_spheres_xyzr);
 
 
     /* Loop through all rays and test for interestion with all particles
@@ -148,6 +148,7 @@ int main(int argc, char* argv[]) {
     {
         std::cout << std::endl;
         std::cout << failures << " intersections failed." << std::endl;
+        std::cout << std::endl;
         std::cout << "Device code may compile to FMA instructions; try "
                   << "compiling this file" << std::endl;
         std::cout << "with nvcc's -fmad=false option."  << std::endl;

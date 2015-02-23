@@ -18,6 +18,8 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N_rays = 512*512;
+    // DO NOT CHANGE. There are only two spheres.
+    const int max_per_leaf = 1;
 
     if (argc > 1)
         N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
@@ -70,10 +72,11 @@ int main(int argc, char* argv[]) {
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
     grace::sort_by_key(d_keys, d_spheres_xyzr, d_pmasses);
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::build_tree(d_tree, d_keys);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
     /* Generate the rays, all emitted in +z direction from a box side. */
 
@@ -128,7 +131,6 @@ int main(int argc, char* argv[]) {
                                  d_traced_pmass,
                                  d_tree,
                                  d_spheres_xyzr,
-                                 1,
                                  d_pmasses);
 
     // ~ Integrate over x and y.

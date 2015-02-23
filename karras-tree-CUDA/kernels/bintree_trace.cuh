@@ -127,34 +127,34 @@ __device__ __inline__ float maxf_vminf(float f1, float f2, float f3) {
 }
 
 __device__ int AABBs_hit(const float3 invd, const float3 origin, const float len,
-                         const float4 AABBx,
-                         const float4 AABBy,
-                         const float4 AABBz)
+                         const float4 AABB_L,
+                         const float4 AABB_R,
+                         const float4 AABB_LR)
 {
-    float bx_l = (AABBx.x - origin.x) * invd.x;
-    float tx_l = (AABBx.y - origin.x) * invd.x;
-    float by_l = (AABBy.x - origin.y) * invd.y;
-    float ty_l = (AABBy.y - origin.y) * invd.y;
-    float bz_l = (AABBz.x - origin.z) * invd.z;
-    float tz_l = (AABBz.y - origin.z) * invd.z;
+    float bx_L = (AABB_L.x - origin.x) * invd.x;
+    float tx_L = (AABB_L.y - origin.x) * invd.x;
+    float by_L = (AABB_L.z - origin.y) * invd.y;
+    float ty_L = (AABB_L.w - origin.y) * invd.y;
+    float bz_L = (AABB_LR.x - origin.z) * invd.z;
+    float tz_L = (AABB_LR.y - origin.z) * invd.z;
 
-    float bx_r = (AABBx.z - origin.x) * invd.x;
-    float tx_r = (AABBx.w - origin.x) * invd.x;
-    float by_r = (AABBy.z - origin.y) * invd.y;
-    float ty_r = (AABBy.w - origin.y) * invd.y;
-    float bz_r = (AABBz.z - origin.z) * invd.z;
-    float tz_r = (AABBz.w - origin.z) * invd.z;
+    float bx_R = (AABB_R.x - origin.x) * invd.x;
+    float tx_R = (AABB_R.y - origin.x) * invd.x;
+    float by_R = (AABB_R.z - origin.y) * invd.y;
+    float ty_R = (AABB_R.w - origin.y) * invd.y;
+    float bz_R = (AABB_LR.z - origin.z) * invd.z;
+    float tz_R = (AABB_LR.w - origin.z) * invd.z;
 
-    float tmin_l = maxf_vmaxf( fmin(bx_l, tx_l), fmin(by_l, ty_l),
-                               maxf_vminf(bz_l, tz_l, 0) );
-    float tmax_l = minf_vminf( fmax(bx_l, tx_l), fmax(by_l, ty_l),
-                               minf_vmaxf(bz_l, tz_l, len) );
-    float tmin_r = maxf_vmaxf( fmin(bx_r, tx_r), fmin(by_r, ty_r),
-                               maxf_vminf(bz_r, tz_r, 0) );
-    float tmax_r = minf_vminf( fmax(bx_r, tx_r), fmax(by_r, ty_r),
-                               minf_vmaxf(bz_r, tz_r, len) );
+    float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
+                               maxf_vminf(bz_L, tz_L, 0) );
+    float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
+                               minf_vmaxf(bz_L, tz_L, len) );
+    float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
+                               maxf_vminf(bz_R, tz_R, 0) );
+    float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
+                               minf_vmaxf(bz_R, tz_R, len) );
 
-    return (int)(tmax_l >= tmin_l) + 2*((int)(tmax_r >= tmin_r));
+    return (int)(tmax_L >= tmin_L) + 2*((int)(tmax_R >= tmin_R));
 }
 
 template <typename Float4, typename Float>
@@ -214,21 +214,22 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const float4* nodes,
                                        size_t n_nodes,
                                        const int4* leaves,
+                                       const int* root_index,
                                        const Float4* spheres,
                                        const size_t n_spheres,
-                                       const unsigned int max_per_leaf)
+                                       const int max_per_leaf)
 {
     int tid = threadIdx.x % WARP_SIZE; // ID of thread within warp.
     int wid = threadIdx.x / WARP_SIZE; // ID of warp within block.
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
+    // The index of the root node, where tracing begins.
+    int root = *root_index;
+
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
-    // TODO: Alocate dynamically based on key length.
-    // Including leaves there are 31 levels for 30-bit keys.
-    // One more element required for exit sentinel.
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + 32*wid;
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
     // to the same location to avoid any need for volatile declarations, or
@@ -251,7 +252,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
         // Push root to stack
         stack_ptr++;
-        *stack_ptr = 0;
+        *stack_ptr = root;
 
         while (*stack_ptr >= 0)
         {
@@ -267,16 +268,22 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 // warning: taking the address of a temporary.
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                assert(node.x > 0);
+                // A left child can be nodes[0].
+                // A right child cannot be nodes[0].
+                assert(node.x >= 0);
                 assert(node.y > 0);
+                // Similarly for the last nodes, noting leaf indices are offset
+                // by += n_nodes.
+                assert(node.x < 2 * n_nodes);
+                assert(node.y <= 2 * n_nodes);
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 // If any hit right child, push it to the stack.
                 if (__any(lr_hit >= 2))
@@ -290,6 +297,9 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     stack_ptr++;
                     *stack_ptr = node.x;
                 }
+
+                assert(stack_ptr < sm_stacks + STACK_SIZE * (wid + 1));
+
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -342,8 +352,9 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const float4* nodes,
                                       const size_t n_nodes,
                                       const int4* leaves,
+                                      const int* root_index,
                                       const Float4* spheres,
-                                      const unsigned int max_per_leaf,
+                                      const int max_per_leaf,
                                       const Tin* p_data,
                                       const Float* g_b_integrals)
 {
@@ -351,12 +362,14 @@ __global__ void trace_property_kernel(const Ray* rays,
     int wid = threadIdx.x / WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
+    int root = *root_index;
+
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {
@@ -382,7 +395,7 @@ __global__ void trace_property_kernel(const Ray* rays,
         origin.z = ray.oz;
 
         stack_ptr++;
-        *stack_ptr = 0;
+        *stack_ptr = root;
 
         while (*stack_ptr >= 0)
         {
@@ -390,13 +403,13 @@ __global__ void trace_property_kernel(const Ray* rays,
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -468,8 +481,9 @@ __global__ void trace_kernel(const Ray* rays,
                              const float4* nodes,
                              const size_t n_nodes,
                              const int4* leaves,
+                             const int* root_index,
                              const Float4* spheres,
-                             const unsigned int max_per_leaf,
+                             const int max_per_leaf,
                              const Tin* p_data,
                              const Float* g_b_integrals)
 {
@@ -477,12 +491,14 @@ __global__ void trace_kernel(const Ray* rays,
     int wid = threadIdx.x / WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
+    int root = *root_index;
+
     // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + 32*wid;
+    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
     {
@@ -507,7 +523,7 @@ __global__ void trace_kernel(const Ray* rays,
         origin.z = ray.oz;
 
         stack_ptr++;
-        *stack_ptr = 0;
+        *stack_ptr = root;
 
         while (*stack_ptr >= 0)
         {
@@ -515,13 +531,13 @@ __global__ void trace_kernel(const Ray* rays,
             {
                 float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
                 int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABBx = FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABBy = FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABBz = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
+                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
+                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
+                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
                 unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABBx, AABBy, AABBz);
+                                                AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -589,14 +605,11 @@ __global__ void trace_kernel(const Ray* rays,
 // C-like wrappers for tracing kernels
 //-----------------------------------------------------------------------------
 
-// TODO: For consistency with the tree build kernels, max_per_leaf should
-// default to the same value (currently 1).
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                      thrust::device_vector<unsigned int>& d_hit_counts,
                      const Tree& d_tree,
-                     const thrust::device_vector<Float4>& d_spheres,
-                     const unsigned int max_per_leaf)
+                     const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -618,7 +631,7 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
@@ -626,9 +639,13 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size(),
-        max_per_leaf);
+        d_tree.max_per_leaf);
+
+    CUDA_HANDLE_ERR(cudaPeekAtLastError());
+    CUDA_HANDLE_ERR(cudaDeviceSynchronize());
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
@@ -644,7 +661,6 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
                     thrust::device_vector<Tout>& d_out_data,
                     const Tree& d_tree,
                     const thrust::device_vector<Float4>& d_spheres,
-                    const unsigned int max_per_leaf,
                     const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
@@ -675,7 +691,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -683,8 +699,9 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
@@ -707,14 +724,13 @@ void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Float>& d_hit_distances,
            const Tree& d_tree,
            const thrust::device_vector<Float4>& d_spheres,
-           const unsigned int max_per_leaf,
            const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres, max_per_leaf);
+    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
     unsigned int last_ray_hits = d_ray_offsets[n_rays-1];
 
     // Allocate output array based on per-ray hit counts, and calculate
@@ -757,7 +773,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -768,8 +784,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 
@@ -794,7 +811,6 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           const Float distance_sentinel,
                           const Tree& d_tree,
                           const thrust::device_vector<Float4>& d_spheres,
-                          const unsigned int max_per_leaf,
                           const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
@@ -859,7 +875,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -870,8 +886,9 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
-        max_per_leaf,
+        d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
 

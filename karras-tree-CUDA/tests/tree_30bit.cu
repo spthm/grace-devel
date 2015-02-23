@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int N = 100000;
-    unsigned int max_per_leaf = 1;
+    unsigned int max_per_leaf = 32;
     bool save_in = false;
     bool save_out = false;
     unsigned int seed_factor = 1u;
@@ -154,11 +154,11 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
-    grace::Tree d_tree(N);
+    grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N+1);
 
-    grace::build_tree(d_tree, d_keys, max_per_leaf);
-    grace::compact_tree(d_tree);
-    grace::find_AABBs(d_tree, d_spheres_xyzr);
+    grace::compute_deltas(d_spheres_xyzr, d_deltas);
+    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
 
     /* Save node and leaf data. */
 
@@ -167,8 +167,10 @@ int main(int argc, char* argv[]) {
     grace::H_Tree h_tree(N_leaves);
 
     h_tree.nodes = d_tree.nodes;
-    h_tree.levels = d_tree.levels;
+    h_tree.heights = d_tree.heights;
     h_tree.leaves = d_tree.leaves;
+    cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
+               sizeof(int), cudaMemcpyDeviceToHost);
 
     // Copy AABBs into a more output-friendly format.
     // AABB[2*i+0] = (bx, by, bz) of the ith node.
@@ -182,10 +184,10 @@ int main(int argc, char* argv[]) {
         // Left child's AABB.
         // NB: bot and top defined as float3s above.
         bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].x);
-        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].x);
-        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].x);
         top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].y);
-        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].y);
+        bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].z);
+        top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].w);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].x);
         top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].y);
         if (left_i < N_leaves-1) {
             // Left is a node.
@@ -200,11 +202,11 @@ int main(int argc, char* argv[]) {
         }
 
         // Right child's AABB.
-        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].z);
+        bot.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].x);
+        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].y);
         bot.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].z);
-        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].z);
-        top.x = *reinterpret_cast<float*>(&h_tree.nodes[4*i+1].w);
         top.y = *reinterpret_cast<float*>(&h_tree.nodes[4*i+2].w);
+        bot.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].z);
         top.z = *reinterpret_cast<float*>(&h_tree.nodes[4*i+3].w);
         if (right_i < N_leaves-1) {
             // Right is a node.
@@ -220,26 +222,28 @@ int main(int argc, char* argv[]) {
     }
 
     // The root node's AABB is implicit.  Compute it.
-    bot.x = min(*reinterpret_cast<float*>(&h_tree.nodes[1].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[1].z));
-    bot.y = min(*reinterpret_cast<float*>(&h_tree.nodes[2].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[2].z));
-    bot.z = min(*reinterpret_cast<float*>(&h_tree.nodes[3].x),
-                *reinterpret_cast<float*>(&h_tree.nodes[3].z));
-    top.x = max(*reinterpret_cast<float*>(&h_tree.nodes[1].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[1].w));
-    top.y = max(*reinterpret_cast<float*>(&h_tree.nodes[2].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[2].w));
-    top.z = max(*reinterpret_cast<float*>(&h_tree.nodes[3].y),
-                *reinterpret_cast<float*>(&h_tree.nodes[3].w));
-    node_AABBs[0] = bot;
-    node_AABBs[1] = top;
+    bot.x = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].x));
+    top.x = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].y));
+    bot.y = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].z),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].z));
+    top.y = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+1].w),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+2].w));
+    bot.z = min(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].x),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].z));
+    top.z = max(*reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].y),
+                *reinterpret_cast<float*>(&h_tree.nodes[4*h_tree.root_index+3].w));
+    node_AABBs[2*h_tree.root_index+0] = bot;
+    node_AABBs[2*h_tree.root_index+1] = top;
 
     if (save_out) {
         outfile.open("outdata/nodes.txt");
+        outfile << "root index: " << h_tree.root_index << std::endl;
+        outfile << std::endl;
         for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
-            outfile << "level:           " << h_tree.levels[i] << std::endl;
+            outfile << "height           " << h_tree.heights[i] << std::endl;
             int4 node = h_tree.nodes[4*i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.
@@ -261,7 +265,8 @@ int main(int argc, char* argv[]) {
                 outfile << "right leaf flag: False" << std::endl;
                 outfile << "right:           " << node.y << std::endl;
             }
-            outfile << "parent:          " << node.z << std::endl;
+            outfile << "left-most leaf:  " << node.z << std::endl;
+            outfile << "right-most leaf: " << node.w << std::endl;
             outfile << "AABB_bottom:     " << node_AABBs[2*i+0].x << ", "
                                            << node_AABBs[2*i+0].y << ", "
                                            << node_AABBs[2*i+0].z
