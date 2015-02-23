@@ -210,7 +210,7 @@ namespace gpu {
 template <typename Float4>
 __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_rays,
-                                       unsigned int* hit_counts,
+                                       int* hit_counts,
                                        const float4* nodes,
                                        size_t n_nodes,
                                        const int4* leaves,
@@ -219,17 +219,18 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                                        const size_t n_spheres,
                                        const int max_per_leaf)
 {
-    int tid = threadIdx.x % WARP_SIZE; // ID of thread within warp.
-    int wid = threadIdx.x / WARP_SIZE; // ID of warp within block.
+    int tid = threadIdx.x % grace::WARP_SIZE; // ID of thread within warp.
+    int wid = threadIdx.x / grace::WARP_SIZE; // ID of warp within block.
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
     // The index of the root node, where tracing begins.
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
-    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
-    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
+    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
+                                                  / grace::WARP_SIZE)];
+    int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
     // to the same location to avoid any need for volatile declarations, or
@@ -238,7 +239,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        unsigned int ray_hit_count = 0;
+        int ray_hit_count = 0;
 
         Ray ray = rays[ray_index];
 
@@ -282,8 +283,8 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 assert(node.x < 2 * n_nodes);
                 assert(node.y <= 2 * n_nodes);
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABB_L, AABB_R, AABB_LR);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABB_L, AABB_R, AABB_LR);
 
                 // If any hit right child, push it to the stack.
                 if (__any(lr_hit >= 2))
@@ -298,7 +299,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                     *stack_ptr = node.x;
                 }
 
-                assert(stack_ptr < sm_stacks + STACK_SIZE * (wid + 1));
+                assert(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1));
 
             }
 
@@ -318,7 +319,7 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
                 // following loop) than to have an if (tid < 32).
                 // This additionally requires n_spheres be a multiple of 32.
                 // sm_spheres[32*wid+tid] = FETCH_SPHERE(spheres, node.x+tid);
-                for (int i=tid; i<node.y; i+=WARP_SIZE)
+                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
                 {
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
@@ -358,20 +359,21 @@ __global__ void trace_property_kernel(const Ray* rays,
                                       const Tin* p_data,
                                       const Float* g_b_integrals)
 {
-    int tid = threadIdx.x % WARP_SIZE;
-    int wid = threadIdx.x / WARP_SIZE;
+    int tid = threadIdx.x % grace::WARP_SIZE;
+    int wid = threadIdx.x / grace::WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
+                                                  / grace::WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
+    int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
-    for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
+    for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
     {
         b_integrals[i] = g_b_integrals[i];
     }
@@ -408,8 +410,8 @@ __global__ void trace_property_kernel(const Ray* rays,
                 float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABB_L, AABB_R, AABB_LR);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -428,7 +430,7 @@ __global__ void trace_property_kernel(const Ray* rays,
                 int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
                 stack_ptr--;
 
-                for (int i=tid; i<node.y; i+=WARP_SIZE)
+                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
                 {
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
@@ -477,7 +479,7 @@ __global__ void trace_kernel(const Ray* rays,
                              Tout* out_data,
                              unsigned int* hit_indices,
                              Float* hit_distances,
-                             const unsigned int* ray_offsets,
+                             const int* ray_offsets,
                              const float4* nodes,
                              const size_t n_nodes,
                              const int4* leaves,
@@ -487,20 +489,21 @@ __global__ void trace_kernel(const Ray* rays,
                              const Tin* p_data,
                              const Float* g_b_integrals)
 {
-    int tid = threadIdx.x % WARP_SIZE;
-    int wid = threadIdx.x / WARP_SIZE;
+    int tid = threadIdx.x % grace::WARP_SIZE;
+    int wid = threadIdx.x / grace::WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
     extern __shared__ float4 sm_spheres[];
     __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[STACK_SIZE*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)];
+    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
+                                                  / grace::WARP_SIZE)];
 
-    int* stack_ptr = sm_stacks + STACK_SIZE * wid;
+    int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
-    for (int i=threadIdx.x; i<N_table; i+=TRACE_THREADS_PER_BLOCK)
+    for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
     {
         b_integrals[i] = g_b_integrals[i];
     }
@@ -510,7 +513,7 @@ __global__ void trace_kernel(const Ray* rays,
 
     while (ray_index < n_rays)
     {
-        unsigned int out_index = ray_offsets[ray_index];
+        int out_index = ray_offsets[ray_index];
 
         Ray ray = rays[ray_index];
 
@@ -536,8 +539,8 @@ __global__ void trace_kernel(const Ray* rays,
                 float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                unsigned int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                                AABB_L, AABB_R, AABB_LR);
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                                       AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit >= 2))
                 {
@@ -556,7 +559,7 @@ __global__ void trace_kernel(const Ray* rays,
                 int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
                 stack_ptr--;
 
-                for (int i=tid; i<node.y; i+=WARP_SIZE)
+                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
                 {
                     sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
                                                                   node.x+i);
@@ -607,15 +610,16 @@ __global__ void trace_kernel(const Ray* rays,
 
 template <typename Float4>
 void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
-                     thrust::device_vector<unsigned int>& d_hit_counts,
+                     thrust::device_vector<int>& d_hit_counts,
                      const Tree& d_tree,
                      const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
-                                        / TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                             / grace::TRACE_THREADS_PER_BLOCK));
 
 #ifdef GRACE_NODES_TEX
     cudaBindTexture(0, nodes_tex,
@@ -631,7 +635,7 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_hitcounts_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_hitcounts_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
@@ -674,8 +678,9 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
-                                        / TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                             / grace::TRACE_THREADS_PER_BLOCK));
 
 #ifdef GRACE_NODES_TEX
     cudaBindTexture(0, nodes_tex,
@@ -691,7 +696,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_property_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_property_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -719,7 +724,7 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace(const thrust::device_vector<Ray>& d_rays,
            thrust::device_vector<Tout>& d_out_data,
-           thrust::device_vector<unsigned int>& d_ray_offsets,
+           thrust::device_vector<int>& d_ray_offsets,
            thrust::device_vector<unsigned int>& d_hit_indices,
            thrust::device_vector<Float>& d_hit_distances,
            const Tree& d_tree,
@@ -756,8 +761,9 @@ void trace(const thrust::device_vector<Ray>& d_rays,
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
-                                        / TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                             / grace::TRACE_THREADS_PER_BLOCK));
 
 #ifdef GRACE_NODES_TEX
     cudaBindTexture(0, nodes_tex,
@@ -773,7 +779,7 @@ void trace(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -804,7 +810,7 @@ template <typename Float, typename Tout, typename Float4, typename Tin>
 void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                           thrust::device_vector<Tout>& d_out_data,
                           const Tout out_sentinel,
-                          thrust::device_vector<unsigned int>& d_ray_offsets,
+                          thrust::device_vector<int>& d_ray_offsets,
                           thrust::device_vector<unsigned int>& d_hit_indices,
                           const unsigned int hit_sentinel,
                           thrust::device_vector<Float>& d_hit_distances,
@@ -858,8 +864,9 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_rays + TRACE_THREADS_PER_BLOCK-1)
-                                        / TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                             / grace::TRACE_THREADS_PER_BLOCK));
 
 #ifdef GRACE_NODES_TEX
     cudaBindTexture(0, nodes_tex,
@@ -875,7 +882,7 @@ void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(TRACE_THREADS_PER_BLOCK / WARP_SIZE)>>>(
+    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),

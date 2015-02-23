@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
 
     /* Trace for per-ray hit counts. */
 
-    thrust::device_vector<unsigned int> d_hit_counts(N_rays);
+    thrust::device_vector<int> d_hit_counts(N_rays);
     grace::trace_hitcounts(d_rays, d_hit_counts, d_tree,
                            d_spheres_xyzr);
 
@@ -97,8 +97,8 @@ int main(int argc, char* argv[]) {
 
     thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
     thrust::host_vector<grace::Ray> h_rays = d_rays;
-    thrust::host_vector<unsigned int> h_hit_counts(N_rays);
-    thrust::host_vector<unsigned int> h_d_hit_counts = d_hit_counts;
+    thrust::host_vector<int> h_hit_counts(N_rays);
+    thrust::host_vector<int> h_d_hit_counts = d_hit_counts;
 
     for (unsigned int i=0; i<N_rays; i++)
     {
@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
         // -fma=false (only available for CC >= 2.0); in this case host and
         // device agree, but both are inaccurate.
         double dummy1, dummy2;
-        unsigned int hits = 0;
+        int hits = 0;
 
         for (unsigned int j=0; j<N; j++)
         {

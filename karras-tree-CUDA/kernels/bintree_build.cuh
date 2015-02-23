@@ -300,17 +300,17 @@ __global__ void build_leaves_kernel(int2* nodes,
     deltas++;
 
     int bid = blockIdx.x;
-    int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
     // while() and an inner for() to ensure all threads in a block hit the
     // __syncthreads() and wipe the flags.
-    while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
+    while (bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves)
     {
         // Zero all SMEM flags at start of first loop and at end of subsequent
         // loops.
         __syncthreads();
         for (int i = threadIdx.x;
-             i < BUILD_THREADS_PER_BLOCK + max_per_leaf;
-             i += BUILD_THREADS_PER_BLOCK)
+             i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf;
+             i += grace::BUILD_THREADS_PER_BLOCK)
         {
             flags[i] = 0;
         }
@@ -318,11 +318,11 @@ __global__ void build_leaves_kernel(int2* nodes,
 
         // [low, high) leaf indices covered by this block, including the
         // max_per_leaf buffer.
-        int low = bid * BUILD_THREADS_PER_BLOCK;
-        int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_leaf,
+        int low = bid * grace::BUILD_THREADS_PER_BLOCK;
+        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_leaf,
                        (int)n_leaves);
 
-        for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
+        for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
             int cur_index = idx;
             int parent_index;
@@ -364,7 +364,7 @@ __global__ void build_leaves_kernel(int2* nodes,
             // left or right end to its parent.  The first exits the loop.
             __threadfence_block();
             assert(parent_index - low >= 0);
-            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+            assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
             unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
             assert(flag < 2);
             bool first_arrival = (flag == 0);
@@ -428,14 +428,14 @@ __global__ void build_leaves_kernel(int2* nodes,
 
                 __threadfence_block();
                 assert(parent_index - low >= 0);
-                assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_leaf);
+                assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
                 unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
                 assert(flag < 2);
                 first_arrival = (flag == 0);
             } // while (!first_arrival)
         } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
         bid += gridDim.x;
-        tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+        tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
     } // while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
     return;
 }
@@ -518,24 +518,24 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
 
     int* flags = SMEM;
     volatile int2* sm_nodes
-        = (int2*)&flags[BUILD_THREADS_PER_BLOCK + max_per_node];
+        = (int2*)&flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     deltas++;
 
     int bid = blockIdx.x;
-    int tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+    int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
 
     // while() and inner for() loops to ensure all threads in a block hit the
     // __syncthreads().
-    while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
+    while (bid * grace::BUILD_THREADS_PER_BLOCK < n_base_nodes)
     {
         // Zero all SMEM flags and node data at start of first loop and at end
         // of subsequent loops.
         __syncthreads();
         for (int i = threadIdx.x;
-             i < BUILD_THREADS_PER_BLOCK + max_per_node;
-             i += BUILD_THREADS_PER_BLOCK)
+             i < grace::BUILD_THREADS_PER_BLOCK + max_per_node;
+             i += grace::BUILD_THREADS_PER_BLOCK)
         {
             flags[i] = 0;
             // 'error: no operator "=" matches ... volatile int2 = int2':
@@ -547,11 +547,11 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
 
         // The compressed/logical node indices for this block cover the range
         // [low, high), including the max_per_node buffer.
-        int low = bid * BUILD_THREADS_PER_BLOCK;
-        int high = min((bid + 1) * BUILD_THREADS_PER_BLOCK + max_per_node,
+        int low = bid * grace::BUILD_THREADS_PER_BLOCK;
+        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_node,
                        (int)n_base_nodes);
 
-        for (int idx = tid; idx < high; idx += BUILD_THREADS_PER_BLOCK)
+        for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
             // For the tree climb, we start at base nodes, treating them as
             // leaves.  The left/right values refer to the left- and right-most
@@ -704,7 +704,7 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
             // Parent index must be at a valid location for writing to sm_nodes
             // and the SMEM flags.
             assert(parent_index - low >= 0);
-            assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
+            assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
 
             // Normal stores.  Other threads in this block can read from L1 if
             // they get a cache hit, i.e. there is no requirement for global
@@ -847,7 +847,7 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
 
                 __threadfence_block();
                 assert(parent_index - low >= 0);
-                assert(parent_index - low < BUILD_THREADS_PER_BLOCK + max_per_node);
+                assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
                 unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
                 assert(flag < 2);
                 first_arrival = (flag == 0);
@@ -855,7 +855,7 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
         } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_node)
 
         bid += gridDim.x;
-        tid = threadIdx.x + bid * BUILD_THREADS_PER_BLOCK;
+        tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
     } // while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
     return;
 }
@@ -865,7 +865,7 @@ __global__ void fill_output_queue(const int4* nodes,
                                   const int max_per_node,
                                   int* new_base_indices)
 {
-    int tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+    int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
     while (tid < n_nodes)
     {
@@ -909,7 +909,7 @@ __global__ void fix_node_ranges(int4* nodes,
                                 const int4* leaves,
                                 const int* old_base_indices)
 {
-    int tid = threadIdx.x + blockIdx.x * BUILD_THREADS_PER_BLOCK;
+    int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
     while (tid < n_nodes)
     {
@@ -961,7 +961,7 @@ void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
 {
     assert(d_keys.size() + 1 == d_deltas.size());
 
-    int blocks = min(MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
+    int blocks = min(grace::MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
     gpu::compute_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_keys.data()),
         d_keys.size(),
@@ -975,7 +975,7 @@ void compute_leaf_deltas(const thrust::device_vector<int4>& d_leaves,
 {
     assert(d_leaves.size() + 1 == d_deltas.size());
 
-    int blocks = min(MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
+    int blocks = min(grace::MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
     gpu::compute_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
@@ -994,20 +994,22 @@ void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
     const size_t n_nodes = n_leaves - 1;
 
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_leaves + BUILD_THREADS_PER_BLOCK-1)
-                                        / BUILD_THREADS_PER_BLOCK));
-    int smem_size = sizeof(int) * (BUILD_THREADS_PER_BLOCK + max_per_leaf);
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
+                             / grace::BUILD_THREADS_PER_BLOCK));
+    int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
-    gpu::build_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
+    gpu::build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_deltas.data()),
         max_per_leaf);
 
-    blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
-                                     / BUILD_THREADS_PER_BLOCK));
+    blocks = min(grace::MAX_BLOCKS,
+                 (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
+                         / grace::BUILD_THREADS_PER_BLOCK));
 
-    gpu::write_leaves_kernel<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+    gpu::write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
@@ -1067,13 +1069,14 @@ void build_nodes(Tree& d_tree,
         // and use it as an input in the next iteration.
         thrust::fill(out_q_begin, out_q_end, -1);
 
-        int blocks = min(MAX_BLOCKS, (int) ((n_in + BUILD_THREADS_PER_BLOCK-1)
-                                             / BUILD_THREADS_PER_BLOCK));
+        int blocks = min(grace::MAX_BLOCKS,
+                         (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
+                                 / grace::BUILD_THREADS_PER_BLOCK));
         // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
         // AND int2 nodes.
         int smem_size = (sizeof(int) + sizeof(int2))
-                        * (BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
-        gpu::build_nodes_slice_kernel<<<blocks, BUILD_THREADS_PER_BLOCK, smem_size>>>(
+                        * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
+        gpu::build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             reinterpret_cast<float4*>(
                 thrust::raw_pointer_cast(d_tree.nodes.data())),
@@ -1088,15 +1091,16 @@ void build_nodes(Tree& d_tree,
             d_tree.max_per_leaf, // This can actually be anything.
             d_out_ptr);
 
-        blocks = min(MAX_BLOCKS, (int) ((n_nodes + BUILD_THREADS_PER_BLOCK-1)
-                                             / BUILD_THREADS_PER_BLOCK));
-        gpu::fill_output_queue<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+        blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
+                             / grace::BUILD_THREADS_PER_BLOCK));
+        gpu::fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             d_tree.max_per_leaf,
             d_out_ptr);
 
-        gpu::fix_node_ranges<<<blocks, BUILD_THREADS_PER_BLOCK>>>(
+        gpu::fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             thrust::raw_pointer_cast(d_tree.leaves.data()),

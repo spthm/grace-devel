@@ -21,7 +21,7 @@ int main(int argc, char* argv[]) {
     /* Initialize run parameters. */
 
     unsigned int device_ID = 0;
-    unsigned int max_per_leaf = 100;
+    unsigned int max_per_leaf = 32;
     unsigned int N_iter = 100;
     unsigned int start = 20;
     unsigned int end = 23;
@@ -61,13 +61,14 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "AABB_THREADS_PER_BLOCK:     " << AABB_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "MORTON_THREADS_PER_BLOCK:   "
+              << grace::MORTON_THREADS_PER_BLOCK << std::endl;
+    std::cout << "BUILD_THREADS_PER_BLOCK:    "
+              << grace::BUILD_THREADS_PER_BLOCK << std::endl;
+    std::cout << "AABB_THREADS_PER_BLOCK:     "
+              << grace::AABB_THREADS_PER_BLOCK << std::endl;
+    std::cout << "MAX_BLOCKS:                 "
+              << grace::MAX_BLOCKS << std::endl;
     std::cout << "Starting log2(N_points):    " << start << std::endl;
     std::cout << "Finishing log2(N_points):   " << end << std::endl;
     std::cout << "Max points per leaf:        " << max_per_leaf << std::endl;

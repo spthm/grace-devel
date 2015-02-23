@@ -84,9 +84,10 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "TRACE_THREADS_PER_BLOCK:    " << TRACE_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "TRACE_THREADS_PER_BLOCK:    "
+              << grace::TRACE_THREADS_PER_BLOCK << std::endl;
+    std::cout << "MAX_BLOCKS:                 "
+              << grace::MAX_BLOCKS << std::endl;
     std::cout << "Gadget data file:           " << fname << std::endl;
     std::cout << "Number of gas particles:    " << N << std::endl;
     std::cout << "Number of rays:             " << N_rays << std::endl;
@@ -177,7 +178,7 @@ int main(int argc, char* argv[]) {
         // Distances, from the ray origin, to all ray-particle intersections.
         thrust::device_vector<float> d_hit_distances;
         // Offsets into the above vector where each ray's data starts.
-        thrust::device_vector<unsigned int> d_ray_offsets(N_rays);
+        thrust::device_vector<int> d_ray_offsets(N_rays);
 
         cudaEventRecord(part_start);
         grace::trace<float>(d_rays,
@@ -193,14 +194,9 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         trace_full_tot += elapsed;
 
-        // If offets = [0, 3, 3, 7], then
-        //    segments = [0, 0, 0, 1, 1, 1, 1, 2(, 2 ... )]
-        thrust::device_vector<unsigned int> d_ray_segments(d_hit_indices.size());
-
         cudaEventRecord(part_start);
-        grace::offsets_to_segments(d_ray_offsets, d_ray_segments);
         grace::sort_by_distance(d_hit_distances,
-                                d_ray_segments,
+                                d_ray_offsets,
                                 d_hit_indices,
                                 d_traced_rho);
         cudaEventRecord(part_stop);
@@ -242,7 +238,6 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
             trace_bytes += d_hit_distances.size() * sizeof(float);
-            trace_bytes += d_ray_segments.size() * sizeof(unsigned int);
 
             unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);

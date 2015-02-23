@@ -45,11 +45,12 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Device " << device_ID
                     << ":                   " << deviceProp.name << std::endl;
-    std::cout << "MORTON_THREADS_PER_BLOCK:   " << MORTON_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "BUILD_THREADS_PER_BLOCK:    " << BUILD_THREADS_PER_BLOCK
-            << std::endl;
-    std::cout << "MAX_BLOCKS:                 " << MAX_BLOCKS << std::endl;
+    std::cout << "MORTON_THREADS_PER_BLOCK:   "
+              << grace::MORTON_THREADS_PER_BLOCK << std::endl;
+    std::cout << "BUILD_THREADS_PER_BLOCK:    "
+              << grace::BUILD_THREADS_PER_BLOCK << std::endl;
+    std::cout << "MAX_BLOCKS:                 "
+              << grace::MAX_BLOCKS << std::endl;
     std::cout << "Max particles per leaf:     " << max_per_leaf << std::endl;
     std::cout << "Iterations per tree:        " << N_iter << std::endl;
     std::cout << "Gadget data file name:      " << infile_name << std::endl;
