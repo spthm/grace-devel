@@ -13,9 +13,9 @@ int main(int argc, char* argv[]) {
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(5);
 
-    size_t N_rays = 10000;
+    size_t N_rays = 32 * 300; // = 9600
     if (argc > 1) {
-        N_rays = (size_t) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
     }
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);

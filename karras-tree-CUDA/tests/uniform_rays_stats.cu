@@ -75,10 +75,10 @@ int main(int argc, char* argv[]) {
     // on the device.
     typedef double Real;
 
-    size_t N_rays = 10000;
+    size_t N_rays = 32 * 300; // = 9600
     bool save_out = false;
     if (argc > 1) {
-        N_rays = (size_t) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
         if (strcmp("save", argv[2]) == 0) {
