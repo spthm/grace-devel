@@ -30,10 +30,14 @@ TEST_BIN= sort_by_distance.out \
 	trace_gadget_hproj.out \
 	trace_hproj.out \
 	tree_trace.out \
-	uniform_rays.out
+	uniform_rays_ripleyk.out \
+	uniform_rays_stats.out
 TEST_BIN:= $(addprefix $(OUT_DIR)/,$(TEST_BIN))
 
-TEST_DUMP_BIN= project_gadget.out trace_hitcounts.out tree_30bit.out
+TEST_DUMP_BIN= project_gadget.out \
+	trace_hitcounts.out \
+	tree_30bit.out \
+	uniform_rays_stats.out
 TEST_DUMP_BIN:= $(addprefix $(OUT_DIR)/,$(TEST_DUMP_BIN))
 
 PROFILER_BIN= AABB_speed.out \
