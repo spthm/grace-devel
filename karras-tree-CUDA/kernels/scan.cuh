@@ -1,37 +1,49 @@
-/******************************************************************************
- * Copyright (c) 2013, NVIDIA CORPORATION.  All rights reserved.
+/*
+ * Copyright (c) 2015 Sam Thomson
  *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions are met:
- *     * Redistributions of source code must retain the above copyright
- *       notice, this list of conditions and the following disclaimer.
- *     * Redistributions in binary form must reproduce the above copyright
- *       notice, this list of conditions and the following disclaimer in the
- *       documentation and/or other materials provided with the distribution.
- *     * Neither the name of the NVIDIA CORPORATION nor the
- *       names of its contributors may be used to endorse or promote products
- *       derived from this software without specific prior written permission.
+ *  This file is free software: you may copy, redistribute and/or modify it
+ *  under the terms of the GNU General Public License as published by the
+ *  Free Software Foundation, either version 2 of the License, or (at your
+ *  option) any later version.
  *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
- * AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
- * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
- * ARE DISCLAIMED. IN NO EVENT SHALL NVIDIA CORPORATION BE LIABLE FOR ANY
- * DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
- * (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
- * LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
- * ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
- * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
- * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *  This file is distributed in the hope that it will be useful, but
+ *  WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ *  General Public License for more details.
  *
- ******************************************************************************/
-
-/******************************************************************************
+ *  You should have received a copy of the GNU General Public License
+ *  along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Code and text originally by Sean Baxter, NVIDIA Research
+ * This file incorporates work covered by the following copyright and
+ * permission notice:
+ *
+ *     Copyright (c) 2013, NVIDIA CORPORATION.  All rights reserved.
+ *
+ *     Redistribution and use in source and binary forms, with or without
+ *     modification, are permitted provided that the following conditions are met:
+ *         * Redistributions of source code must retain the above copyright
+ *           notice, this list of conditions and the following disclaimer.
+ *         * Redistributions in binary form must reproduce the above copyright
+ *           notice, this list of conditions and the following disclaimer in the
+ *           documentation and/or other materials provided with the distribution.
+ *         * Neither the name of the NVIDIA CORPORATION nor the
+ *           names of its contributors may be used to endorse or promote products
+ *           derived from this software without specific prior written permission.
+ *
+ *     THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+ *     AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ *     IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ *     ARE DISCLAIMED. IN NO EVENT SHALL NVIDIA CORPORATION BE LIABLE FOR ANY
+ *     DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+ *     (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+ *     LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+ *     ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+ *     (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+ *     SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ *
+ * Original code and text by Sean Baxter, NVIDIA Research.
  * See http://nvlabs.github.io/moderngpu for repository and documentation.
- * Modification by Samuel Thomson, University of Edinburgh.
- *
- ******************************************************************************/
+ */
 
 #pragma once
 
@@ -100,8 +112,10 @@ MGPU_DEVICE void DeviceThreadToGlobalHalfCapacity(
     __syncthreads();
 
     count2 = min(count - Capacity, Capacity);
-    dest += Capacity;
-    mgpu::DeviceSharedToGlobal<NT, VT>(count2, shared, tid, dest, sync);
+    if (count2 > 0) {
+        dest += Capacity;
+        mgpu::DeviceSharedToGlobal<NT, VT>(count2, shared, tid, dest, sync);
+    }
 }
 
 // Copy of MGPU's KernelSegReduceApply in kernels/segreducecsr.cuh, modified to
@@ -428,7 +442,7 @@ MGPU_LAUNCH_BOUNDS void KernelSegScanSpineApply(
         int limit1 = limits_global[block + 1];
         int threadCodes = threadCodes_global[NT * block + tid];
 
-        int carryIn = carryIn_global[block];
+        T carryIn = carryIn_global[block];
 
         // Compute the range.
         mgpu::SegReduceRange range = mgpu::DeviceShiftRange(limit0, limit1);
@@ -719,8 +733,8 @@ MGPU_HOST void SegScanCsrPreprocess(
     // Then each block's segment limits and per-thread data required for the
     // scans are computed and saved.
     typedef typename grace::SegScanPreprocessTuning<sizeof(T)>::Tuning Tuning;
-    SegScanPreprocess<Tuning>(count, csr_global, numSegments,
-                                supportEmpty, ppData, context);
+    SegScanPreprocess<Tuning>(count, csr_global, numSegments, supportEmpty,
+                              ppData, context);
 }
 
 // Copy of MGPU's SegReduceApply in kernels/segreducecsr.cuh, but calling
@@ -763,6 +777,32 @@ MGPU_HOST void SegScanApply(
 
     // Reset the bank-size to its original state.
     // cudaDeviceSetSharedMemConfig(pConfig);
+}
+
+template <typename Real>
+void exclusive_segmented_scan(
+    const thrust::device_vector<int>& d_segment_offsets,
+    thrust::device_vector<Real>& d_data,
+    thrust::device_vector<Real>& d_results)
+{
+    // MGPU calls require a context.
+    int device_ID = 0;
+    cudaGetDevice(&device_ID);
+    mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
+
+    std::auto_ptr<grace::SegScanPreprocessData> pp_data_ptr;
+
+    // TODO: Can the segmented scan be done in-place?
+    size_t N_data = d_data.size();
+    size_t N_segments = d_segment_offsets.size();
+
+    SegScanCsrPreprocess<Real>(
+        N_data, thrust::raw_pointer_cast(d_segment_offsets.data()),
+        N_segments, true, &pp_data_ptr, *mgpu_context_ptr);
+
+    SegScanApply(*pp_data_ptr, thrust::raw_pointer_cast(d_data.data()),
+                 Real(0), mgpu::plus<Real>(),
+                 thrust::raw_pointer_cast(d_results.data()), *mgpu_context_ptr);
 }
 
 } // namespace grace

@@ -1,10 +1,13 @@
 GRACE_FLAGS= -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
 
 MGPU_DIR= $(HOME)/Code/moderngpu/
-INCLUDES= -I $(MGPU_DIR)/include
+# MGPU_DIR= $(HOME)/Code/CUDA/moderngpu/
+
+INCLUDES= -I $(MGPU_DIR)/include/
 
 NVCC= nvcc
 
+# MGPU REQUIRES that compilation targets devices you will run on.
 GENCODE_20= -gencode arch=compute_20,code=sm_20
 GENCODE_21= -gencode arch=compute_21,code=sm_21
 GENCODE_30= -gencode arch=compute_30,code=sm_30
@@ -13,8 +16,9 @@ GENCODE_35= -gencode arch=compute_35,code=sm_35
 CUDARCH= $(GENCODE_20) $(GENCODE_30)
 
 NVCCFLAGS= $(CUDARCH) $(INCLUDES) $(GRACE_FLAGS)
-NVCCLIBS= -L $(HOME)/usr/local/cuda/lib64 -lcuda -lcurand
-# NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
+
+NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
+# NVCCLIBS= -L $(HOME)/usr/local/cuda/lib64 -lcuda -lcurand
 
 
 OUT_DIR= bin

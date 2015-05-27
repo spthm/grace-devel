@@ -1,5 +1,7 @@
 #pragma once
 
+#include "../utils.cuh"
+
 #include "../../../moderngpu/include/kernels/segmentedsort.cuh"
 
 #include <thrust/device_vector.h>
