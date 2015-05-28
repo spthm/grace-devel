@@ -2,7 +2,7 @@
 
 #include "../utils.cuh"
 
-#include "../../moderngpu/include/kernels/segmentedsort.cuh"
+#include "../../../moderngpu/include/kernels/segmentedsort.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

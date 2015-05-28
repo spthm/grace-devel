@@ -14,7 +14,8 @@
 namespace grace
 {
 
-inline void cudaErrorCheck(cudaError_t code, char* file, int line, bool abort=true)
+inline void cudaErrorCheck(cudaError_t code, const char* file, int line,
+                           bool abort=true)
 {
     if (code != cudaSuccess) {
         fprintf(stderr,"CUDA Error!\nMsg:  %s\nFile: %s @ line %d\n",
