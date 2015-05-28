@@ -1,15 +1,20 @@
-MGPU_DIR= /home/spth/Code/CUDA/moderngpu/
-#MGPU_DIR= /home/sam/Code/moderngpu/
+GRACE_FLAGS= -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
 
+MGPU_DIR= $(HOME)/Code/moderngpu/
 INCLUDES= -I $(MGPU_DIR)/include
 
 NVCC= nvcc
 
-# MGPU REQUIRES that compilation targets devices you will run on.
-CUDARCH= -gencode arch=compute_20,code=sm_20 -gencode arch=compute_30,code=sm_30
-NVCCFLAGS= $(CUDARCH) $(INCLUDES) -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
-NVCCLIBS= -L /home/spth/usr/local/cuda/lib64 -lcuda -lcurand
-#NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
+GENCODE_20= -gencode arch=compute_20,code=sm_20
+GENCODE_21= -gencode arch=compute_21,code=sm_21
+GENCODE_30= -gencode arch=compute_30,code=sm_30
+GENCODE_35= -gencode arch=compute_35,code=sm_35
+
+CUDARCH= $(GENCODE_20) $(GENCODE_30)
+
+NVCCFLAGS= $(CUDARCH) $(INCLUDES) $(GRACE_FLAGS)
+NVCCLIBS= -L $(HOME)/usr/local/cuda/lib64 -lcuda -lcurand
+# NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
 
 
 OUT_DIR= bin
@@ -26,7 +31,8 @@ UNIT_TEST_BIN= bit_prefix_32bit.out \
 	morton_kernel_63bit.out
 UNIT_TEST_BIN:= $(addprefix $(OUT_DIR)/,$(UNIT_TEST_BIN))
 
-TEST_BIN= sort_by_distance.out \
+TEST_BIN= benchmarksegscan.out \
+	sort_by_distance.out \
 	trace_gadget_hproj.out \
 	trace_hproj.out \
 	tree_trace.out \
