@@ -17,8 +17,10 @@
 #include <thrust/sequence.h>
 #include <thrust/swap.h>
 
+#include "../device/loadstore.cuh"
 #include "../kernel_config.h"
 #include "../nodes.h"
+#include "../types.h"
 #include "bits.cuh"
 #include "morton.cuh"
 
@@ -30,7 +32,7 @@ namespace grace {
 
 struct is_empty_node : public thrust::unary_function<int4, bool>
 {
-    __host__ __device__
+    GRACE_HOST_DEVICE
     bool operator()(const int4 node) const
     {
         // Note: a node's right child can never be node 0, and a leaf can never
@@ -45,9 +47,10 @@ namespace gpu {
 // GPU helper functions for tree build kernels.
 //-----------------------------------------------------------------------------
 
-__device__ uinteger32 node_delta(const int i,
-                                 const uinteger32* keys,
-                                 const size_t n_keys)
+GRACE_DEVICE uinteger32 node_delta(
+    const int i,
+    const uinteger32* keys,
+    const size_t n_keys)
 {
     // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
     // invalid ranges but are valid queries during tree construction.
@@ -61,9 +64,10 @@ __device__ uinteger32 node_delta(const int i,
 
 }
 
-__device__ uinteger64 node_delta(const int i,
-                                 const uinteger64* keys,
-                                 const size_t n_keys)
+GRACE_DEVICE uinteger64 node_delta(
+    const int i,
+    const uinteger64* keys,
+    const size_t n_keys)
 {
     // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
     // invalid ranges but are valid queries during tree construction.
@@ -79,9 +83,10 @@ __device__ uinteger64 node_delta(const int i,
 
 // Euclidian distance metric.
 template <typename Float4>
-__device__ float node_delta(const int i,
-                            const Float4* spheres,
-                            const size_t n_spheres)
+GRACE_DEVICE float node_delta(
+    const int i,
+    const Float4* spheres,
+    const size_t n_spheres)
 {
     if (i < 0 || i + 1 >= n_spheres)
         return CUDART_INF_F;
@@ -96,9 +101,10 @@ __device__ float node_delta(const int i,
 
 // Surface area 'distance' metric.
 // template <typename Float4>
-// __device__ float node_delta(const int i,
-//                             const Float4* spheres,
-//                             const size_t n_spheres)
+// GRACE_DEVICE float node_delta(
+//     const int i,
+//     const Float4* spheres,
+//     const size_t n_spheres)
 // {
 //     if (i < 0 || i + 1 >= n_spheres)
 //         return CUDART_INF_F;
@@ -118,141 +124,15 @@ __device__ float node_delta(const int i,
 //     return SA;
 // }
 
-// Load/store functions to be used when specific memory behaviour is required,
-// e.g. a read/write directly from/to L2 cache, which is globally coherent.
-//
-// All take a pointer with the type of the base primitive (i.e. int* for int2
-// read/writes, float* for float4 read/writes) for flexibility.
-//
-// The "memory" clobber is added to all load/store PTX instructions to prevent
-// memory optimizations around the asm statements. We should only be using these
-// functions when we know better than the compiler!
-__device__ __forceinline__ int2 load_vec2s32(const int* const addr)
-{
-    int2 i2;
-
-    #if defined(__LP64__) || defined(_WIN64)
-    asm("ld.global.ca.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "l"(addr) : "memory");
-    #else
-    asm("ld.global.ca.v2.s32 {%0, %1}, [%2];" : "=r"(i2.x), "=r"(i2.y) : "r"(addr) : "memory");
-    #endif
-
-    return i2;
-}
-
-__device__ __forceinline__ int4 load_vec4s32(const int* const addr)
-{
-    int4 i4;
-
-    #if defined(__LP64__) || defined(_WIN64)
-    asm("ld.global.ca.v4.s32 {%0, %1, %2, %3}, [%4];" : "=r"(i4.x), "=r"(i4.y), "=r"(i4.z), "=r"(i4.w) : "l"(addr) : "memory");
-    #else
-    asm("ld.global.ca.v4.s32 {%0, %1, %2, %3}, [%4];" : "=r"(i4.x), "=r"(i4.y), "=r"(i4.z), "=r"(i4.w) : "r"(addr) : "memory");
-    #endif
-
-    return i4;
-}
-
-__device__ __forceinline__ float4 load_vec4f32(const float* const addr)
-{
-    float4 f4;
-
-    #if defined(__LP64__) || defined(_WIN64)
-    asm("ld.global.ca.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "l"(addr) : "memory");
-    #else
-    asm("ld.global.ca.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "r"(addr) : "memory");
-    #endif
-
-    return f4;
-}
-
-__device__ __forceinline__ float4 load_L2_vec4f32(const float* const addr)
-{
-    float4 f4;
-
-    #if defined(__LP64__) || defined(_WIN64)
-    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "l"(addr) : "memory");
-    #else
-    asm("ld.global.cg.v4.f32 {%0, %1, %2, %3}, [%4];" : "=f"(f4.x), "=f"(f4.y), "=f"(f4.z), "=f"(f4.w) : "r"(addr) : "memory");
-    #endif
-
-    return f4;
-}
-
-// Stores have no output operands, so we additionally mark them as volatile to
-// ensure they are not moved or deleted.
-__device__ __forceinline__ void store_s32(const int* const addr, const int a)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.wb.s32 [%0], %1;" :: "l"(addr), "r"(a) : "memory");
-    #else
-    asm volatile ("st.global.wb.s32 [%0], %1;" :: "r"(addr), "r"(a) : "memory");
-    #endif
-}
-
-__device__ __forceinline__ void store_vec2s32(
-    const int* const addr,
-    const int a, const int b)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.wb.v2.s32 [%0], {%1, %2};" :: "l"(addr), "r"(a), "r"(b) : "memory");
-    #else
-    asm volatile ("st.global.wb.v2.s32 [%0], {%1, %2};" :: "r"(addr), "r"(a), "r"(b) : "memory");
-    #endif
-}
-
-__device__ __forceinline__ void store_vec2f32(
-    const float* const addr,
-    const float a, const float b)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.wb.v2.f32 [%0], {%1, %2};" :: "l"(addr), "f"(a), "f"(b) : "memory");
-    #else
-    asm volatile ("st.global.wb.v2.f32 [%0], {%1, %2};" :: "r"(addr), "f"(a), "f"(b) : "memory");
-    #endif
-}
-
-__device__ __forceinline__ void store_vec4f32(
-    const float* const addr,
-    const float a, const float b, const float c, const float d)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.wb.v4.f32 [%0], {%1, %2, %3, %4};" :: "l"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
-    #else
-    asm volatile ("st.global.wb.v4.f32 [%0], {%1, %2, %3, %4};" :: "r"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
-    #endif
-}
-
-__device__ __forceinline__ void store_L2_vec2f32(
-    const float* const addr,
-    const float a, const float b)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.cg.v2.f32 [%0], {%1, %2};" :: "l"(addr), "f"(a), "f"(b) : "memory");
-    #else
-    asm volatile ("st.global.cg.v2.f32 [%0], {%1, %2};" :: "r"(addr), "f"(a), "f"(b) : "memory");
-    #endif
-}
-
-__device__ __forceinline__ void store_L2_vec4f32(
-    const float* const addr,
-    const float a, const float b, const float c, const float d)
-{
-    #if defined(__LP64__) || defined(_WIN64)
-    asm volatile ("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "l"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
-    #else
-    asm volatile ("st.global.cg.v4.f32 [%0], {%1, %2, %3, %4};" :: "r"(addr), "f"(a), "f"(b), "f"(c), "f"(d) : "memory");
-    #endif
-}
-
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
 template <typename KeyType, typename DeltaType>
-__global__ void compute_deltas_kernel(const KeyType* keys,
-                                      const size_t n_keys,
-                                      DeltaType* deltas)
+__global__ void compute_deltas_kernel(
+    const KeyType* keys,
+    const size_t n_keys,
+    DeltaType* deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -265,11 +145,12 @@ __global__ void compute_deltas_kernel(const KeyType* keys,
 }
 
 template <typename KeyType, typename DeltaType>
-__global__ void compute_leaf_deltas_kernel(const int4* leaves,
-                                           const size_t n_leaves,
-                                           const KeyType* keys,
-                                           const size_t n_keys,
-                                           DeltaType* deltas)
+__global__ void compute_leaf_deltas_kernel(
+    const int4* leaves,
+    const size_t n_leaves,
+    const KeyType* keys,
+    const size_t n_keys,
+    DeltaType* deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -287,10 +168,11 @@ __global__ void compute_leaf_deltas_kernel(const int4* leaves,
 }
 
 template <typename DeltaType>
-__global__ void build_leaves_kernel(int2* nodes,
-                                    const size_t n_nodes,
-                                    const DeltaType* deltas,
-                                    const int max_per_leaf)
+__global__ void build_leaves_kernel(
+    int2* nodes,
+    const size_t n_nodes,
+    const DeltaType* deltas,
+    const int max_per_leaf)
 {
     extern __shared__ int flags[];
 
@@ -440,10 +322,11 @@ __global__ void build_leaves_kernel(int2* nodes,
     return;
 }
 
-__global__ void write_leaves_kernel(const int2* nodes,
-                                    const size_t n_nodes,
-                                    int4* big_leaves,
-                                    const int max_per_leaf)
+__global__ void write_leaves_kernel(
+    const int2* nodes,
+    const size_t n_nodes,
+    int4* big_leaves,
+    const int max_per_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -501,18 +384,19 @@ __global__ void write_leaves_kernel(const int2* nodes,
 }
 
 template <typename DeltaType, typename Float4>
-__global__ void build_nodes_slice_kernel(int4* nodes,
-                                         float4* f4_nodes,
-                                         const size_t n_nodes,
-                                         const int4* leaves,
-                                         const size_t n_leaves,
-                                         const Float4* spheres,
-                                         const int* base_indices,
-                                         const size_t n_base_nodes,
-                                         int* root_index,
-                                         const DeltaType* deltas,
-                                         const int max_per_node,
-                                         int* new_base_indices)
+__global__ void build_nodes_slice_kernel(
+    int4* nodes,
+    float4* f4_nodes,
+    const size_t n_nodes,
+    const int4* leaves,
+    const size_t n_leaves,
+    const Float4* spheres,
+    const int* base_indices,
+    const size_t n_base_nodes,
+    int* root_index,
+    const DeltaType* deltas,
+    const int max_per_node,
+    int* new_base_indices)
 {
     extern __shared__ int SMEM[];
 
@@ -860,10 +744,11 @@ __global__ void build_nodes_slice_kernel(int4* nodes,
     return;
 }
 
-__global__ void fill_output_queue(const int4* nodes,
-                                  const size_t n_nodes,
-                                  const int max_per_node,
-                                  int* new_base_indices)
+__global__ void fill_output_queue(
+    const int4* nodes,
+    const size_t n_nodes,
+    const int max_per_node,
+    int* new_base_indices)
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
@@ -904,10 +789,11 @@ __global__ void fill_output_queue(const int4* nodes,
     }
 }
 
-__global__ void fix_node_ranges(int4* nodes,
-                                const size_t n_nodes,
-                                const int4* leaves,
-                                const int* old_base_indices)
+__global__ void fix_node_ranges(
+    int4* nodes,
+    const size_t n_nodes,
+    const int4* leaves,
+    const int* old_base_indices)
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
@@ -956,8 +842,9 @@ __global__ void fix_node_ranges(int4* nodes,
 //-----------------------------------------------------------------------------
 
 template<typename KeyType, typename DeltaType>
-void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
-                    thrust::device_vector<DeltaType>& d_deltas)
+GRACE_HOST void compute_deltas(
+    const thrust::device_vector<KeyType>& d_keys,
+    thrust::device_vector<DeltaType>& d_deltas)
 {
     assert(d_keys.size() + 1 == d_deltas.size());
 
@@ -969,9 +856,10 @@ void compute_deltas(const thrust::device_vector<KeyType>& d_keys,
 }
 
 template<typename KeyType, typename DeltaType>
-void compute_leaf_deltas(const thrust::device_vector<int4>& d_leaves,
-                         const thrust::device_vector<KeyType>& d_keys,
-                         thrust::device_vector<DeltaType>& d_deltas)
+GRACE_HOST void compute_leaf_deltas(
+    const thrust::device_vector<int4>& d_leaves,
+    const thrust::device_vector<KeyType>& d_keys,
+    thrust::device_vector<DeltaType>& d_deltas)
 {
     assert(d_leaves.size() + 1 == d_deltas.size());
 
@@ -985,10 +873,11 @@ void compute_leaf_deltas(const thrust::device_vector<int4>& d_leaves,
 }
 
 template <typename DeltaType>
-void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
-                  thrust::device_vector<int4>& d_tmp_leaves,
-                  const int max_per_leaf,
-                  const thrust::device_vector<DeltaType>& d_deltas)
+GRACE_HOST void build_leaves(
+    thrust::device_vector<int2>& d_tmp_nodes,
+    thrust::device_vector<int4>& d_tmp_leaves,
+    const int max_per_leaf,
+    const thrust::device_vector<DeltaType>& d_deltas)
 {
     const size_t n_leaves = d_tmp_leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -1016,7 +905,7 @@ void build_leaves(thrust::device_vector<int2>& d_tmp_nodes,
         max_per_leaf);
 }
 
-void remove_empty_leaves(Tree& d_tree)
+GRACE_HOST void remove_empty_leaves(Tree& d_tree)
 {
     // A transform_reduce (with unary op 'is_valid_node()') followed by a
     // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
@@ -1039,9 +928,10 @@ void remove_empty_leaves(Tree& d_tree)
 }
 
 template <typename DeltaType, typename Float4>
-void build_nodes(Tree& d_tree,
-                 const thrust::device_vector<DeltaType>& d_deltas,
-                 const thrust::device_vector<Float4>& d_spheres)
+GRACE_HOST void build_nodes(
+    Tree& d_tree,
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const thrust::device_vector<Float4>& d_spheres)
 {
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -1120,11 +1010,12 @@ void build_nodes(Tree& d_tree,
 }
 
 template <typename KeyType, typename DeltaType, typename Float4>
-void build_tree(Tree& d_tree,
-                const thrust::device_vector<KeyType>& d_keys,
-                const thrust::device_vector<DeltaType>& d_deltas,
-                const thrust::device_vector<Float4>& d_spheres,
-                const bool wipe = false)
+GRACE_HOST void build_tree(
+    Tree& d_tree,
+    const thrust::device_vector<KeyType>& d_keys,
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const thrust::device_vector<Float4>& d_spheres,
+    const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
 

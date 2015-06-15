@@ -47,6 +47,8 @@
 
 #pragma once
 
+#include "../types.h"
+
 #include "../../../moderngpu/include/mgpuhost.cuh"
 #include "../../../moderngpu/include/mgpuenums.h"
 
@@ -87,7 +89,12 @@ struct SegScanPreprocessTuning {
 
 template<int NT, int VT, int Capacity, typename T, typename OutputIt>
 MGPU_DEVICE void DeviceThreadToGlobalHalfCapacity(
-    int count, const T* threadReg, int tid, OutputIt dest, T* shared, bool sync)
+    int count,
+    const T* threadReg,
+    int tid,
+    OutputIt dest,
+    T* shared,
+    bool sync)
 {
     // The below assumes that Capacity = NV/2 is a multiple of VT!
     assert(NT*VT % 2 == 0);
@@ -124,9 +131,16 @@ MGPU_DEVICE void DeviceThreadToGlobalHalfCapacity(
 template<typename Tuning, typename InputIt, typename DestIt, typename T,
          typename Op>
 MGPU_LAUNCH_BOUNDS void KernelSegScanApply(
-    const int* threadCodes_global, int count, int numBlocks,
-    const int* limits_global, InputIt data_global, T identity, Op op,
-    DestIt dest_global, T* carryOut_global)
+    const int* threadCodes_global,
+    int count,
+    int numBlocks,
+    const int* limits_global,
+    InputIt data_global,
+    T identity,
+    Op op,
+    DestIt dest_global,
+    T* carryOut_global)
+
 {
     typedef MGPU_LAUNCH_PARAMS Params;
     const int NT = Params::NT;
@@ -264,7 +278,11 @@ MGPU_LAUNCH_BOUNDS void KernelSegScanApply(
 // for scanning rather than reduction.
 template<int NT, typename T, typename Op>
 __global__ void KernelSegScanSpine1(
-    const int* limits_global, int count, T* carryIn_global, T identity, Op op,
+    const int* limits_global,
+    int count,
+    T* carryIn_global,
+    T identity,
+    Op op,
     T* carryOut_global)
 {
     typedef mgpu::CTASegScan<NT, Op> SegScan;
@@ -308,8 +326,13 @@ __global__ void KernelSegScanSpine1(
 // output the scan result rather than reduction.
 template<int NT, typename T, typename Op>
 __global__ void KernelSegScanSpine2a(
-    const int* limits_global, int numBlocks, int count, int nv,
-    T* carryIn_global, T identity, Op op)
+    const int* limits_global,
+    int numBlocks,
+    int count,
+    int nv,
+    T* carryIn_global,
+    T identity,
+    Op op)
 {
     typedef mgpu::CTASegScan<NT, Op> SegScan;
     struct Shared {
@@ -372,8 +395,12 @@ __global__ void KernelSegScanSpine2a(
 
 template<int NT, typename T, typename Op>
 __global__ void KernelSegScanSpine2b(
-    const int* limits_global, int count, const T* carryIn2_global,
-    T* carryIn_global, T identity, Op op)
+    const int* limits_global,
+    int count,
+    const T* carryIn2_global,
+    T* carryIn_global,
+    T identity,
+    Op op)
 {
     int tid = threadIdx.x;
     int block = blockIdx.x;
@@ -400,9 +427,14 @@ __global__ void KernelSegScanSpine2b(
 
 template<typename Tuning, typename ScanIt, typename T, typename Op>
 MGPU_LAUNCH_BOUNDS void KernelSegScanSpineApply(
-    const int* threadCodes_global, const int* limits_global, int count,
-    int numBlocks, const T* carryIn_global, ScanIt scan_global,
-    T identity, Op op)
+    const int* threadCodes_global,
+    const int* limits_global,
+    int count,
+    int numBlocks,
+    const T* carryIn_global,
+    ScanIt scan_global,
+    T identity,
+    Op op)
 {
     typedef MGPU_LAUNCH_PARAMS Params;
     const int NT = Params::NT;
@@ -536,9 +568,16 @@ MGPU_LAUNCH_BOUNDS void KernelSegScanSpineApply(
 // kernels for scanning rather than reduction.
 template<typename T, typename Op, typename InputIt, typename DestIt>
 MGPU_HOST void SegScanSpine(
-    const int* threadCodes_global, const int* limits_global,
-    const InputIt data_global, int count, int numBlocks, int numLaunchBlocks,
-    DestIt dest_global, T* carryIn_global, T identity, Op op,
+    const int* threadCodes_global,
+    const int* limits_global,
+    const InputIt data_global,
+    int count,
+    int numBlocks,
+    int numLaunchBlocks,
+    DestIt dest_global,
+    T* carryIn_global,
+    T identity,
+    Op op,
     mgpu::CudaContext& context)
 {
     const int NT = 128;
@@ -583,7 +622,10 @@ MGPU_HOST void SegScanSpine(
 
 template<typename Tuning, typename CsrIt>
 MGPU_LAUNCH_BOUNDS void KernelBuildCsrPlus(
-    int count, int numBlocks, CsrIt csr_global, const int* limits_global,
+    int count,
+    int numBlocks,
+    CsrIt csr_global,
+    const int* limits_global,
     int* threadCodes_global) {
 
     typedef MGPU_LAUNCH_PARAMS Params;
@@ -642,8 +684,12 @@ MGPU_LAUNCH_BOUNDS void KernelBuildCsrPlus(
 
 template<typename Tuning, typename CsrIt>
 MGPU_HOST MGPU_MEM(int) BuildCsrPlus(
-    int count, CsrIt csr_global, const int* limits_global,
-    int numBlocks, int numLaunchBlocks, mgpu::CudaContext& context) {
+    int count,
+    CsrIt csr_global,
+    const int* limits_global,
+    int numBlocks,
+    int numLaunchBlocks,
+    mgpu::CudaContext& context) {
 
     int2 launch = Tuning::GetLaunchParams(context);
 
@@ -682,7 +728,10 @@ struct SegScanPreprocessData {
 // modified BuildCsrPlus to handle numBlocks > device limit.
 template<typename Tuning, typename CsrIt>
 MGPU_HOST void SegScanPreprocess(
-    int count, CsrIt csr_global, int numSegments, bool supportEmpty,
+    int count,
+    CsrIt csr_global,
+    int numSegments,
+    bool supportEmpty,
     std::auto_ptr<SegScanPreprocessData>* ppData,
     mgpu::CudaContext& context) {
 
@@ -722,7 +771,9 @@ MGPU_HOST void SegScanPreprocess(
 
 template<typename T, typename CsrIt>
 MGPU_HOST void SegScanCsrPreprocess(
-    int count, CsrIt csr_global, int numSegments, bool supportEmpty,
+    int count, CsrIt csr_global,
+    int numSegments,
+    bool supportEmpty,
     std::auto_ptr<SegScanPreprocessData>* ppData,
     mgpu::CudaContext& context)
 {
@@ -742,7 +793,10 @@ MGPU_HOST void SegScanCsrPreprocess(
 template<typename InputIt, typename DestIt, typename T, typename Op>
 MGPU_HOST void SegScanApply(
     const SegScanPreprocessData& preprocess,
-    InputIt data_global, T identity, Op op, DestIt dest_global,
+    InputIt data_global,
+    T identity,
+    Op op,
+    DestIt dest_global,
     mgpu::CudaContext& context)
 {
     typedef typename grace::SegScanPreprocessTuning<sizeof(T)>::Tuning Tuning;
@@ -780,7 +834,7 @@ MGPU_HOST void SegScanApply(
 }
 
 template <typename Real>
-void exclusive_segmented_scan(
+GRACE_HOST void exclusive_segmented_scan(
     const thrust::device_vector<int>& d_segment_offsets,
     thrust::device_vector<Real>& d_data,
     thrust::device_vector<Real>& d_results)

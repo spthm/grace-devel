@@ -16,7 +16,7 @@ namespace gpu {
 
 // See below for CPU alternative.
 template <typename UInteger>
-__device__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
+GRACE_DEVICE UInteger bit_prefix_length(const UInteger a, const UInteger b)
 {
     // The conditional return should be optimized away at compile time.
     return (CHAR_BIT * sizeof(UInteger)) > 32 ? __clzll(a^b) : __clz(a^b);
@@ -29,7 +29,7 @@ __device__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
-__host__ __device__ uinteger32 space_by_two_10bit(const UInteger x)
+GRACE_HOST_DEVICE uinteger32 space_by_two_10bit(const UInteger x)
 {
     // Mask high bits away first, and ensure we have enough bits.
     uinteger32 x_32 = (uinteger32)x & ((1u << 10) - 1);
@@ -40,9 +40,8 @@ __host__ __device__ uinteger32 space_by_two_10bit(const UInteger x)
     return x_32;
 }
 
-// Courtesy of http://stackoverflow.com/a/18529061/927046
 template <typename UInteger>
-__host__ __device__ uinteger64 space_by_two_21bit(const UInteger x)
+GRACE_HOST_DEVICE uinteger64 space_by_two_21bit(const UInteger x)
 {
     // This spaced integer requires 3*21 = 63 bits
     uinteger64 x_64 = (uinteger64)x & ((1u << 21) - 1);
@@ -55,7 +54,7 @@ __host__ __device__ uinteger64 space_by_two_21bit(const UInteger x)
 }
 
 template <typename UInteger>
-__host__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
+GRACE_HOST UInteger bit_prefix_length(const UInteger a, const UInteger b)
 {
     unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
     UInteger x_or = a ^ b;
@@ -68,7 +67,7 @@ __host__ UInteger bit_prefix_length(const UInteger a, const UInteger b)
 }
 
 template <typename T>
-__host__ __device__ int sgn(T val)
+GRACE_HOST_DEVICE int sgn(T val)
 {
     return (T(0) < val) - (val < T(0));
 }

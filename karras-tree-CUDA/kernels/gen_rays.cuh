@@ -9,14 +9,16 @@
 #include "sort.cuh"
 #include "../kernel_config.h"
 #include "../ray.h"
+#include "../types.h"
 #include "../utils.cuh"
 
 namespace grace {
 
 namespace gpu {
 
-__global__ void init_PRNG(curandState* const prng_states,
-                          const unsigned long long seed)
+__global__ void init_PRNG(
+    curandState* const prng_states,
+    const unsigned long long seed)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -34,11 +36,12 @@ __global__ void init_PRNG(curandState* const prng_states,
  * http://www.math.niu.edu/~rusin/known-math/96/sph.rand
  */
 template <typename Float4>
-__global__ void gen_uniform_rays(curandState* const prng_states,
-                                 const Float4 ol, // ox, oy, oz, length.
-                                 Ray* rays,
-                                 unsigned int* keys,
-                                 const size_t N_rays)
+__global__ void gen_uniform_rays(
+    curandState* const prng_states,
+    const Float4 ol, // ox, oy, oz, length.
+    Ray* rays,
+    unsigned int* keys,
+    const size_t N_rays)
 {
     unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -75,12 +78,13 @@ __global__ void gen_uniform_rays(curandState* const prng_states,
 } // namespace gpu
 
 template <typename Float>
-void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
-                         const Float ox,
-                         const Float oy,
-                         const Float oz,
-                         const Float length,
-                         const unsigned long long seed = 1234)
+GRACE_HOST void uniform_random_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const Float ox,
+    const Float oy,
+    const Float oz,
+    const Float length,
+    const unsigned long long seed = 1234)
 {
     size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, oz, length);
@@ -123,9 +127,10 @@ void uniform_random_rays(thrust::device_vector<Ray>& d_rays,
 }
 
 // template <typename Float4>
-// void square_grid_rays_z(thrust::device_vector<Ray>& d_rays,
-//                         const thrust::device_vector<Float4>& d_spheres,
-//                         const unsigned int N_rays_side)
+// GRACE_HOST void square_grid_rays_z(
+//     thrust::device_vector<Ray>& d_rays,
+//     const thrust::device_vector<Float4>& d_spheres,
+//     const unsigned int N_rays_side)
 // {
 //     float min_x, max_x;
 //     min_max_x(&min_x, &max_x, d_spheres);

@@ -2,18 +2,17 @@
 
 #include <stdint.h>
 
+#ifdef __CUDACC__
+    #define GRACE_HOST __host__ inline
+    #define GRACE_DEVICE __device__ inline
+    #define GRACE_HOST_DEVICE __host__ __device__ inline
+#endif
+
 namespace grace {
 
 typedef uint32_t uinteger32;
 typedef uint64_t uinteger64;
 typedef int32_t integer32;
 typedef int64_t integer64;
-
-template <typename T>
-struct Vector3 {
-    T x, y, z;
-    Vector3() : x(0), y(0), z(0) {}
-    Vector3(T x_, T y_, T z_) : x(x_), y(y_), z(z_) {}
-};
 
 } // namespace grace

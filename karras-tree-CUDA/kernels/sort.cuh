@@ -1,5 +1,6 @@
 #pragma once
 
+#include "../types.h"
 #include "../utils.cuh"
 
 #include "../../../moderngpu/include/kernels/segmentedsort.cuh"
@@ -17,8 +18,9 @@
 
 namespace grace {
 
-void offsets_to_segments(const thrust::device_vector<int>& d_offsets,
-                         thrust::device_vector<unsigned int>& d_segments)
+GRACE_HOST void offsets_to_segments(
+        const thrust::device_vector<int>& d_offsets,
+    thrust::device_vector<unsigned int>& d_segments)
 {
     size_t N_offsets = d_offsets.size();
     thrust::constant_iterator<unsigned int> first(1);
@@ -38,8 +40,9 @@ void offsets_to_segments(const thrust::device_vector<int>& d_offsets,
 }
 
 template <typename UInteger, typename T>
-void order_by_index(const thrust::device_vector<UInteger>& d_indices,
-                    thrust::device_vector<T>& d_unordered)
+GRACE_HOST void order_by_index(
+    const thrust::device_vector<UInteger>& d_indices,
+    thrust::device_vector<T>& d_unordered)
 {
     thrust::device_vector<T> d_tmp = d_unordered;
     thrust::gather(d_indices.begin(), d_indices.end(),
@@ -48,8 +51,9 @@ void order_by_index(const thrust::device_vector<UInteger>& d_indices,
 }
 
 template <typename T, typename UInteger>
-void sort_and_map(thrust::device_vector<T>& d_unsorted,
-                  thrust::device_vector<UInteger>& d_map)
+GRACE_HOST void sort_and_map(
+    thrust::device_vector<T>& d_unsorted,
+    thrust::device_vector<UInteger>& d_map)
 {
     thrust::sequence(d_map.begin(), d_map.end(), 0u);
     thrust::sort_by_key(d_unsorted.begin(), d_unsorted.end(), d_map.begin());
@@ -57,8 +61,9 @@ void sort_and_map(thrust::device_vector<T>& d_unsorted,
 
 // Like sort_and_map, but does not touch the original, unsorted vector.
 template <typename T, typename UInteger>
-void sort_map(thrust::device_vector<T>& d_unsorted,
-              thrust::device_vector<UInteger>& d_map)
+GRACE_HOST void sort_map(
+    thrust::device_vector<T>& d_unsorted,
+    thrust::device_vector<UInteger>& d_map)
 {
     thrust::sequence(d_map.begin(), d_map.end(), 0u);
     thrust::device_vector<T> d_tmp = d_unsorted;
@@ -66,9 +71,10 @@ void sort_map(thrust::device_vector<T>& d_unsorted,
 }
 
 template <typename T_key, typename Ta, typename Tb>
-void sort_by_key(thrust::host_vector<T_key>& h_keys,
-                 thrust::host_vector<Ta>& h_a,
-                 thrust::host_vector<Tb>& h_b)
+GRACE_HOST void sort_by_key(
+    thrust::host_vector<T_key>& h_keys,
+    thrust::host_vector<Ta>& h_a,
+    thrust::host_vector<Tb>& h_b)
 {
     thrust::host_vector<T_key> h_keys2 = h_keys;
 
@@ -78,9 +84,10 @@ void sort_by_key(thrust::host_vector<T_key>& h_keys,
 }
 
 template <typename T_key, typename Ta, typename Tb>
-void sort_by_key(thrust::device_vector<T_key>& d_keys,
-                 thrust::device_vector<Ta>& d_a,
-                 thrust::device_vector<Tb>& d_b)
+GRACE_HOST void sort_by_key(
+    thrust::device_vector<T_key>& d_keys,
+    thrust::device_vector<Ta>& d_a,
+    thrust::device_vector<Tb>& d_b)
 {
     thrust::device_vector<T_key> d_keys2 = d_keys;
 
@@ -95,9 +102,15 @@ template<typename Tuning, bool Stable, bool HasValues, typename InputIt1,
          typename InputIt2, typename OutputIt1, typename OutputIt2,
          typename Comp>
 MGPU_LAUNCH_BOUNDS void KernelSegBlocksortIndices(
-    InputIt1 keys_global, InputIt2 values_global, int count, int numBlocks,
-    const int* indices_global, const int* partitions_global,
-    OutputIt1 keysDest_global, OutputIt2 valsDest_global, int* ranges_global,
+    InputIt1 keys_global,
+    InputIt2 values_global,
+    int count,
+    int numBlocks,
+    const int* indices_global,
+    const int* partitions_global,
+    OutputIt1 keysDest_global,
+    OutputIt2 valsDest_global,
+    int* ranges_global,
     Comp comp) {
 
     typedef typename std::iterator_traits<InputIt1>::value_type KeyType;
@@ -154,9 +167,14 @@ MGPU_LAUNCH_BOUNDS void KernelSegBlocksortIndices(
 // capability 2.0 hardware without first running out of memory.)
 template<typename KeyType, typename ValType, typename Comp>
 MGPU_HOST void SegSortPairsFromIndices(
-    KeyType* keys_global, ValType* values_global, int count,
-    const int* indices_global, int indicesCount, mgpu::CudaContext& context,
-    Comp comp, bool verbose = false)
+    KeyType* keys_global,
+    ValType* values_global,
+    int count,
+    const int* indices_global,
+    int indicesCount,
+    mgpu::CudaContext& context,
+    Comp comp,
+    bool verbose = false)
 {
     const bool Stable = true;
     typedef mgpu::LaunchBoxVT<
@@ -212,10 +230,11 @@ MGPU_HOST void SegSortPairsFromIndices(
 }
 
 template <typename Float, typename T>
-void sort_by_distance(thrust::device_vector<Float>& d_hit_distances,
-                      const thrust::device_vector<int>& d_ray_offsets,
-                      thrust::device_vector<unsigned int>& d_hit_indices,
-                      thrust::device_vector<T>& d_hit_data)
+GRACE_HOST void sort_by_distance(
+    thrust::device_vector<Float>& d_hit_distances,
+    const thrust::device_vector<int>& d_ray_offsets,
+    thrust::device_vector<unsigned int>& d_hit_indices,
+    thrust::device_vector<T>& d_hit_data)
 {
     // MGPU calls require a context.
     int device_ID = 0;

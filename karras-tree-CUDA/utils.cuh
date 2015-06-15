@@ -1,5 +1,7 @@
 #pragma once
 
+#include "types.h"
+
 #include <fstream>
 
 #include <thrust/device_vector.h>
@@ -14,8 +16,11 @@
 namespace grace
 {
 
-inline void cudaErrorCheck(cudaError_t code, const char* file, int line,
-                           bool abort=true)
+GRACE_HOST void cudaErrorCheck(
+    cudaError_t code,
+    const char* file,
+    int line,
+    bool abort=true)
 {
     if (code != cudaSuccess) {
         fprintf(stderr,"CUDA Error!\nMsg:  %s\nFile: %s @ line %d\n",
@@ -38,7 +43,7 @@ inline void cudaErrorCheck(cudaError_t code, const char* file, int line,
 
 
 // Thomas Wang hash.
-__host__ __device__ unsigned int hash(unsigned int a)
+GRACE_HOST_DEVICE unsigned int hash(unsigned int a)
 {
     a = (a+0x7ed55d16) + (a<<12);
     a = (a^0xc761c23c) ^ (a>>19);
@@ -89,7 +94,7 @@ public:
                                   const unsigned int seed_factor_) :
         offset(offset_), uniform(low_, high_), seed_factor(seed_factor_) {}
 
-    __host__ __device__ float operator() (unsigned int n)
+    GRACE_HOST_DEVICE float operator() (unsigned int n)
     {
         unsigned int seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {
@@ -143,7 +148,7 @@ public:
                                    const unsigned int seed_factor_) :
         offset(offset_), uniform(low_, high_), seed_factor(seed_factor_) {}
 
-    __host__ __device__ double operator() (unsigned int n)
+    GRACE_HOST_DEVICE double operator() (unsigned int n)
     {
         unsigned int seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {
@@ -196,7 +201,7 @@ public:
                                    const unsigned int seed_factor_) :
         uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
-    __host__ __device__ float4 operator() (unsigned int n)
+    GRACE_HOST_DEVICE float4 operator() (unsigned int n)
     {
         seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {
@@ -252,7 +257,7 @@ public:
                                     const unsigned int seed_factor_) :
         uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
 
-    __host__ __device__ double4 operator() (unsigned int n)
+    GRACE_HOST_DEVICE double4 operator() (unsigned int n)
     {
         seed = n;
         for (unsigned int i=0; i<seed_factor; i++) {
@@ -276,7 +281,7 @@ public:
 struct float4_compare_x
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
+      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
       {
           return a.x < b.x;
       }
@@ -285,7 +290,7 @@ struct float4_compare_x
 struct float4_compare_y
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
+      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
       {
           return a.y < b.y;
       }
@@ -294,7 +299,7 @@ struct float4_compare_y
 struct float4_compare_z
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
+      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
       {
           return a.z < b.z;
       }
@@ -303,16 +308,17 @@ struct float4_compare_z
 struct float4_compare_w
 {
       template<typename Float4>
-      __host__ __device__ bool operator()(const Float4 a, const Float4 b)
+      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
       {
           return a.w < b.w;
       }
 };
 
 template <typename Float4, typename Float>
-void min_max_x(Float* min_x,
-               Float* max_x,
-               const thrust::device_vector<Float4>& d_data)
+GRACE_HOST void min_max_x(
+    Float* min_x,
+    Float* max_x,
+    const thrust::device_vector<Float4>& d_data)
 {
     typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
@@ -323,9 +329,10 @@ void min_max_x(Float* min_x,
 }
 
 template <typename Float4, typename Float>
-void min_max_y(Float* min_y,
-               Float* max_y,
-               const thrust::device_vector<Float4>& d_data)
+GRACE_HOST void min_max_y(
+    Float* min_y,
+    Float* max_y,
+    const thrust::device_vector<Float4>& d_data)
 {
     typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
@@ -336,9 +343,10 @@ void min_max_y(Float* min_y,
 }
 
 template <typename Float4, typename Float>
-void min_max_z(Float* min_z,
-               Float* max_z,
-               const thrust::device_vector<Float4>& d_data)
+GRACE_HOST void min_max_z(
+    Float* min_z,
+    Float* max_z,
+    const thrust::device_vector<Float4>& d_data)
 {
     typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
@@ -349,9 +357,10 @@ void min_max_z(Float* min_z,
 }
 
 template <typename Float4, typename Float>
-void min_max_w(Float* min_w,
-               Float* max_w,
-               const thrust::device_vector<Float4>& d_data)
+GRACE_HOST void min_max_w(
+    Float* min_w,
+    Float* max_w,
+    const thrust::device_vector<Float4>& d_data)
 {
     typedef typename thrust::device_vector<Float4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
@@ -365,7 +374,7 @@ void min_max_w(Float* min_w,
 // Utilities for reading in Gadget-2 (type 1) files
 //-----------------------------------------------------------------------------
 
-inline void skip_spacer(std::ifstream& file) {
+GRACE_HOST void skip_spacer(std::ifstream& file) {
     int dummy;
     file.read((char*)&dummy, sizeof(dummy));
 }
@@ -389,7 +398,7 @@ struct gadget_header
   char fill [256 - 6*4 - 6*8];
 };
 
-gadget_header read_gadget_header(std::ifstream& file) {
+GRACE_HOST gadget_header read_gadget_header(std::ifstream& file) {
     gadget_header header;
     skip_spacer(file);
     file.read((char*)&header.npart, sizeof(int)*6);
@@ -399,7 +408,7 @@ gadget_header read_gadget_header(std::ifstream& file) {
     return header;
 }
 
-void read_gadget_gas(std::ifstream& file,
+GRACE_HOST void read_gadget_gas(std::ifstream& file,
                      thrust::host_vector<float4>& xyzh,
                      thrust::host_vector<unsigned int>& ID,
                      thrust::host_vector<float>& m,

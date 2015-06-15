@@ -12,9 +12,11 @@
 #include <thrust/sequence.h>
 #include <thrust/transform.h>
 
+#include "../device/intrinsics.cuh"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
+#include "../types.h"
 
 #ifdef GRACE_NODES_TEX
 #define FETCH_NODE(nodes, i) tex1Dfetch(nodes##_tex, i)
@@ -78,90 +80,12 @@ template <typename Float>
     0.000000000000000E+000
     };
 
-// See http://hpc.oit.uci.edu/nvidia-doc/sdk-cuda-doc/C/doc/ptx_isa_3.0.pdf
-// for details of the scalar vmin/vmax.
-// min(min(a, b), c)
-__device__ __inline__ int min_vmin(int a, int b, int c) {
-    int mvm;
-    asm("vmin.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
-    return mvm;
-}
-// max(max(a, b), c)
-__device__ __inline__ int max_vmax(int a, int b, int c) {
-    int mvm;
-    asm("vmax.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
-    return mvm;
-}
-// max(min(a, b), c)
-__device__ __inline__ int max_vmin(int a, int b, int c) {
-    int mvm;
-    asm("vmin.s32.s32.s32.max %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
-    return mvm;
-}
-// min(max(a, b), c)
-__device__ __inline__ int min_vmax(int a, int b, int c) {
-    int mvm;
-    asm("vmax.s32.s32.s32.min %0, %1, %2, %3;" : "=r"(mvm) : "r"(a), "r"(b), "r"(c));
-    return mvm;
-}
-
-__device__ __inline__ float minf_vminf(float f1, float f2, float f3) {
-    return __int_as_float(min_vmin(__float_as_int(f1),
-                                   __float_as_int(f2),
-                                   __float_as_int(f3)));
-}
-__device__ __inline__ float maxf_vmaxf(float f1, float f2, float f3) {
-    return __int_as_float(max_vmax(__float_as_int(f1),
-                                   __float_as_int(f2),
-                                   __float_as_int(f3)));
-}
-__device__ __inline__ float minf_vmaxf(float f1, float f2, float f3) {
-    return __int_as_float(min_vmax(__float_as_int(f1),
-                                   __float_as_int(f2),
-                                   __float_as_int(f3)));
-}
-__device__ __inline__ float maxf_vminf(float f1, float f2, float f3) {
-    return __int_as_float(max_vmin(__float_as_int(f1),
-                                   __float_as_int(f2),
-                                   __float_as_int(f3)));
-}
-
-__device__ int AABBs_hit(const float3 invd, const float3 origin, const float len,
-                         const float4 AABB_L,
-                         const float4 AABB_R,
-                         const float4 AABB_LR)
-{
-    float bx_L = (AABB_L.x - origin.x) * invd.x;
-    float tx_L = (AABB_L.y - origin.x) * invd.x;
-    float by_L = (AABB_L.z - origin.y) * invd.y;
-    float ty_L = (AABB_L.w - origin.y) * invd.y;
-    float bz_L = (AABB_LR.x - origin.z) * invd.z;
-    float tz_L = (AABB_LR.y - origin.z) * invd.z;
-
-    float bx_R = (AABB_R.x - origin.x) * invd.x;
-    float tx_R = (AABB_R.y - origin.x) * invd.x;
-    float by_R = (AABB_R.z - origin.y) * invd.y;
-    float ty_R = (AABB_R.w - origin.y) * invd.y;
-    float bz_R = (AABB_LR.z - origin.z) * invd.z;
-    float tz_R = (AABB_LR.w - origin.z) * invd.z;
-
-    float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
-                               maxf_vminf(bz_L, tz_L, 0) );
-    float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
-                               minf_vmaxf(bz_L, tz_L, len) );
-    float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
-                               maxf_vminf(bz_R, tz_R, 0) );
-    float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
-                               minf_vmaxf(bz_R, tz_R, len) );
-
-    return (int)(tmax_L >= tmin_L) + 2*((int)(tmax_R >= tmin_R));
-}
-
 template <typename Float4, typename Float>
-__host__ __device__ bool sphere_hit(const Ray& ray,
-                                    const Float4& sphere,
-                                    Float& b2,
-                                    Float& dot_p)
+GRACE_HOST_DEVICE bool sphere_hit(
+    const Ray& ray,
+    const Float4& sphere,
+    Float& b2,
+    Float& dot_p)
 {
     float px = sphere.x - ray.ox;
     float py = sphere.y - ray.oy;
@@ -203,21 +127,54 @@ __host__ __device__ bool sphere_hit(const Ray& ray,
 
 namespace gpu {
 
+GRACE_DEVICE int AABBs_hit(
+    const float3 invd, const float3 origin, const float len,
+    const float4 AABB_L,
+    const float4 AABB_R,
+    const float4 AABB_LR)
+{
+    float bx_L = (AABB_L.x - origin.x) * invd.x;
+    float tx_L = (AABB_L.y - origin.x) * invd.x;
+    float by_L = (AABB_L.z - origin.y) * invd.y;
+    float ty_L = (AABB_L.w - origin.y) * invd.y;
+    float bz_L = (AABB_LR.x - origin.z) * invd.z;
+    float tz_L = (AABB_LR.y - origin.z) * invd.z;
+
+    float bx_R = (AABB_R.x - origin.x) * invd.x;
+    float tx_R = (AABB_R.y - origin.x) * invd.x;
+    float by_R = (AABB_R.z - origin.y) * invd.y;
+    float ty_R = (AABB_R.w - origin.y) * invd.y;
+    float bz_R = (AABB_LR.z - origin.z) * invd.z;
+    float tz_R = (AABB_LR.w - origin.z) * invd.z;
+
+    float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
+                               maxf_vminf(bz_L, tz_L, 0) );
+    float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
+                               minf_vmaxf(bz_L, tz_L, len) );
+    float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
+                               maxf_vminf(bz_R, tz_R, 0) );
+    float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
+                               minf_vmaxf(bz_R, tz_R, len) );
+
+    return (int)(tmax_L >= tmin_L) + 2*((int)(tmax_R >= tmin_R));
+}
+
 //-----------------------------------------------------------------------------
 // CUDA tracing kernels.
 //-----------------------------------------------------------------------------
 
 template <typename Float4>
-__global__ void trace_hitcounts_kernel(const Ray* rays,
-                                       const size_t n_rays,
-                                       int* hit_counts,
-                                       const float4* nodes,
-                                       size_t n_nodes,
-                                       const int4* leaves,
-                                       const int* root_index,
-                                       const Float4* spheres,
-                                       const size_t n_spheres,
-                                       const int max_per_leaf)
+__global__ void trace_hitcounts_kernel(
+    const Ray* rays,
+    const size_t n_rays,
+    int* hit_counts,
+    const float4* nodes,
+    size_t n_nodes,
+    const int4* leaves,
+    const int* root_index,
+    const Float4* spheres,
+    const size_t n_spheres,
+    const int max_per_leaf)
 {
     int tid = threadIdx.x % grace::WARP_SIZE; // ID of thread within warp.
     int wid = threadIdx.x / grace::WARP_SIZE; // ID of warp within block.
@@ -347,17 +304,18 @@ __global__ void trace_hitcounts_kernel(const Ray* rays,
 }
 
 template <typename Tout, typename Float4, typename Tin, typename Float>
-__global__ void trace_property_kernel(const Ray* rays,
-                                      const size_t n_rays,
-                                      Tout* out_data,
-                                      const float4* nodes,
-                                      const size_t n_nodes,
-                                      const int4* leaves,
-                                      const int* root_index,
-                                      const Float4* spheres,
-                                      const int max_per_leaf,
-                                      const Tin* p_data,
-                                      const Float* g_b_integrals)
+__global__ void trace_property_kernel(
+    const Ray* rays,
+    const size_t n_rays,
+    Tout* out_data,
+    const float4* nodes,
+    const size_t n_nodes,
+    const int4* leaves,
+    const int* root_index,
+    const Float4* spheres,
+    const int max_per_leaf,
+    const Tin* p_data,
+    const Float* g_b_integrals)
 {
     int tid = threadIdx.x % grace::WARP_SIZE;
     int wid = threadIdx.x / grace::WARP_SIZE;
@@ -474,20 +432,21 @@ __global__ void trace_property_kernel(const Ray* rays,
 }
 
 template <typename Tout, typename Float, typename Float4, typename Tin>
-__global__ void trace_kernel(const Ray* rays,
-                             const size_t n_rays,
-                             Tout* out_data,
-                             unsigned int* hit_indices,
-                             Float* hit_distances,
-                             const int* ray_offsets,
-                             const float4* nodes,
-                             const size_t n_nodes,
-                             const int4* leaves,
-                             const int* root_index,
-                             const Float4* spheres,
-                             const int max_per_leaf,
-                             const Tin* p_data,
-                             const Float* g_b_integrals)
+__global__ void trace_kernel(
+    const Ray* rays,
+    const size_t n_rays,
+    Tout* out_data,
+    unsigned int* hit_indices,
+    Float* hit_distances,
+    const int* ray_offsets,
+    const float4* nodes,
+    const size_t n_nodes,
+    const int4* leaves,
+    const int* root_index,
+    const Float4* spheres,
+    const int max_per_leaf,
+    const Tin* p_data,
+    const Float* g_b_integrals)
 {
     int tid = threadIdx.x % grace::WARP_SIZE;
     int wid = threadIdx.x / grace::WARP_SIZE;
@@ -609,10 +568,11 @@ __global__ void trace_kernel(const Ray* rays,
 //-----------------------------------------------------------------------------
 
 template <typename Float4>
-void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
-                     thrust::device_vector<int>& d_hit_counts,
-                     const Tree& d_tree,
-                     const thrust::device_vector<Float4>& d_spheres)
+GRACE_HOST void trace_hitcounts(
+    const thrust::device_vector<Ray>& d_rays,
+    thrust::device_vector<int>& d_hit_counts,
+    const Tree& d_tree,
+    const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -661,11 +621,12 @@ void trace_hitcounts(const thrust::device_vector<Ray>& d_rays,
 }
 
 template <typename Float, typename Tout, typename Float4, typename Tin>
-void trace_property(const thrust::device_vector<Ray>& d_rays,
-                    thrust::device_vector<Tout>& d_out_data,
-                    const Tree& d_tree,
-                    const thrust::device_vector<Float4>& d_spheres,
-                    const thrust::device_vector<Tin>& d_in_data)
+GRACE_HOST void trace_property(
+    const thrust::device_vector<Ray>& d_rays,
+    thrust::device_vector<Tout>& d_out_data,
+    const Tree& d_tree,
+    const thrust::device_vector<Float4>& d_spheres,
+    const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -722,14 +683,15 @@ void trace_property(const thrust::device_vector<Ray>& d_rays,
 // TODO: Allow the user to supply correctly-sized hit-distance and output
 //       arrays to this function, handling any memory issues therein themselves.
 template <typename Float, typename Tout, typename Float4, typename Tin>
-void trace(const thrust::device_vector<Ray>& d_rays,
-           thrust::device_vector<Tout>& d_out_data,
-           thrust::device_vector<int>& d_ray_offsets,
-           thrust::device_vector<unsigned int>& d_hit_indices,
-           thrust::device_vector<Float>& d_hit_distances,
-           const Tree& d_tree,
-           const thrust::device_vector<Float4>& d_spheres,
-           const thrust::device_vector<Tin>& d_in_data)
+GRACE_HOST void trace(
+    const thrust::device_vector<Ray>& d_rays,
+    thrust::device_vector<Tout>& d_out_data,
+    thrust::device_vector<int>& d_ray_offsets,
+    thrust::device_vector<unsigned int>& d_hit_indices,
+    thrust::device_vector<Float>& d_hit_distances,
+    const Tree& d_tree,
+    const thrust::device_vector<Float4>& d_spheres,
+    const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -807,17 +769,18 @@ void trace(const thrust::device_vector<Ray>& d_rays,
 
 // TODO: Break this and trace() into multiple functions.
 template <typename Float, typename Tout, typename Float4, typename Tin>
-void trace_with_sentinels(const thrust::device_vector<Ray>& d_rays,
-                          thrust::device_vector<Tout>& d_out_data,
-                          const Tout out_sentinel,
-                          thrust::device_vector<int>& d_ray_offsets,
-                          thrust::device_vector<unsigned int>& d_hit_indices,
-                          const unsigned int hit_sentinel,
-                          thrust::device_vector<Float>& d_hit_distances,
-                          const Float distance_sentinel,
-                          const Tree& d_tree,
-                          const thrust::device_vector<Float4>& d_spheres,
-                          const thrust::device_vector<Tin>& d_in_data)
+GRACE_HOST void trace_with_sentinels(
+    const thrust::device_vector<Ray>& d_rays,
+    thrust::device_vector<Tout>& d_out_data,
+    const Tout out_sentinel,
+    thrust::device_vector<int>& d_ray_offsets,
+    thrust::device_vector<unsigned int>& d_hit_indices,
+    const unsigned int hit_sentinel,
+    thrust::device_vector<Float>& d_hit_distances,
+    const Float distance_sentinel,
+    const Tree& d_tree,
+    const thrust::device_vector<Float4>& d_spheres,
+    const thrust::device_vector<Tin>& d_in_data)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
