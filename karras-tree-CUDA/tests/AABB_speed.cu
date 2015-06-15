@@ -1054,7 +1054,7 @@ int main(int argc, char* argv[]) {
         if (h_eisemann_ray_hits[i] != h_plucker_ray_hits[i])
         {
             std::cout << "Ray " << i << ": Eisemann (" << h_eisemann_ray_hits[i]
-                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker"
                       << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
             std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
@@ -1063,7 +1063,9 @@ int main(int argc, char* argv[]) {
             std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
                       << h_rays[i].dy << ", " << h_rays[i].dz << ")."
                       << std::endl;
+            std::cout << "Exiting loop..." << std::endl;
             std::cout << std::endl;
+            break;
         }
     }
 
@@ -1074,7 +1076,7 @@ int main(int argc, char* argv[]) {
         if (h_aila_laine_ray_hits[i] != h_plucker_ray_hits[i])
         {
             std::cout << "Ray " << i << ": Aila (" << h_aila_laine_ray_hits[i]
-                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker"
                       << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
             std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
@@ -1083,7 +1085,9 @@ int main(int argc, char* argv[]) {
             std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
                       << h_rays[i].dy << ", " << h_rays[i].dz << ")."
                       << std::endl;
+            std::cout << "Exiting loop..." << std::endl;
             std::cout << std::endl;
+            break;
         }
     }
 
@@ -1094,7 +1098,7 @@ int main(int argc, char* argv[]) {
         if (h_williams_ray_hits[i] != h_plucker_ray_hits[i])
         {
             std::cout << "Ray " << i << ": Williams (" << h_williams_ray_hits[i]
-                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker"
                       << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
             std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
@@ -1103,7 +1107,9 @@ int main(int argc, char* argv[]) {
             std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
                       << h_rays[i].dy << ", " << h_rays[i].dz << ")."
                       << std::endl;
+            std::cout << "Exiting loop..." << std::endl;
             std::cout << std::endl;
+            break;
         }
     }
 
@@ -1114,7 +1120,7 @@ int main(int argc, char* argv[]) {
         if (h_williams_noif_ray_hits[i] != h_plucker_ray_hits[i])
         {
             std::cout << "Ray " << i << ": Williams no ifs (" << h_williams_noif_ray_hits[i]
-                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker!"
+                      << ") != (" << h_plucker_ray_hits[i] << ") Plucker"
                       << std::endl;
             std::cout << "ray.dclass = " << h_rays[i].dclass << std::endl;
             std::cout << "ray (ox, oy, oz): (" << h_rays[i].ox << ", "
@@ -1123,7 +1129,9 @@ int main(int argc, char* argv[]) {
             std::cout << "ray (dx, dy, dz): (" << h_rays[i].dx << ", "
                       << h_rays[i].dy << ", " << h_rays[i].dz << ")."
                       << std::endl;
+            std::cout << "Exiting loop..." << std::endl;
             std::cout << std::endl;
+            break;
         }
     }
 

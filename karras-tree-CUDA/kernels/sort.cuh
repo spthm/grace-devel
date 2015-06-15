@@ -19,7 +19,7 @@
 namespace grace {
 
 GRACE_HOST void offsets_to_segments(
-        const thrust::device_vector<int>& d_offsets,
+    const thrust::device_vector<int>& d_offsets,
     thrust::device_vector<unsigned int>& d_segments)
 {
     size_t N_offsets = d_offsets.size();
