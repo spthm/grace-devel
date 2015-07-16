@@ -1,5 +1,8 @@
 *.o
-*.mod
 *.out
-*.pyc
+*.log
+
+Makefile
+
+# Mac stuff
 *.DS_Store
