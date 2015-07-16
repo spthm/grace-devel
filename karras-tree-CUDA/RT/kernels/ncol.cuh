@@ -28,7 +28,6 @@ __global__ void multiply_by_weights(const Float* unweighted,
 
 } // namespace gpu
 
-
 template <typename Float>
 GRACE_HOST void cum_weighted_sum(
     const thrust::device_vector<Float>& d_to_sum,
