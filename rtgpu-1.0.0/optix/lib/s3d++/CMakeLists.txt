@@ -1,5 +1,0 @@
-add_subdirectory(util)
-add_subdirectory(math)
-add_subdirectory(color)
-add_subdirectory(image)
-add_subdirectory(mesh)
