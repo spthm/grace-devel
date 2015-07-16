@@ -49,16 +49,15 @@
 
 #include "../types.h"
 
-#include "../../../moderngpu/include/mgpuhost.cuh"
-#include "../../../moderngpu/include/mgpuenums.h"
-
-#include "../../../moderngpu/include/device/ctascan.cuh"
-#include "../../../moderngpu/include/device/ctasegreduce.cuh"
-#include "../../../moderngpu/include/device/ctasegscan.cuh"
-#include "../../../moderngpu/include/device/launchbox.cuh"
-#include "../../../moderngpu/include/device/loadstore.cuh"
-
-#include "../../../moderngpu/include/kernels/segreducecsr.cuh"
+// moderngpu/include must be in the INC path
+#include "mgpuhost.cuh"
+#include "mgpuenums.h"
+#include "device/ctascan.cuh"
+#include "device/ctasegreduce.cuh"
+#include "device/ctasegscan.cuh"
+#include "device/launchbox.cuh"
+#include "device/loadstore.cuh"
+#include "kernels/segreducecsr.cuh"
 
 #include <assert.h>
 

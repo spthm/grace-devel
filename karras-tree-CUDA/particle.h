@@ -7,7 +7,7 @@ namespace grace {
 
 // Particle specific properties. Similar to RT_Cell_struct, but compacted and
 // without rates.
-struct particle_ion
+struct ParticleIon
 {
     float n_H, n_He, rho;
     float T, entropy;
@@ -18,7 +18,7 @@ struct particle_ion
 // Similar to RT_Rates_struct.  Can apply to a single particle during an update,
 // or to a ray-particle intersection.  Multiple ray-particle intersections
 // may map to the same particle (i.e. a particle can be hit by multiple rays).
-struct particle_rates
+struct ParticleRates
 {
     float gamma_HI, gamma_HeI, gamma_HeII;
     float H_HI, H_HeI, H_HeII;

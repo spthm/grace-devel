@@ -3,7 +3,8 @@
 #include "../types.h"
 #include "../utils.cuh"
 
-#include "../../../moderngpu/include/kernels/segmentedsort.cuh"
+// moderngpu/include must be in the INC path
+#include "kernels/segmentedsort.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -20,7 +21,7 @@ namespace grace {
 
 GRACE_HOST void offsets_to_segments(
     const thrust::device_vector<int>& d_offsets,
-    thrust::device_vector<unsigned int>& d_segments)
+    thrust::device_vector<int>& d_segments)
 {
     size_t N_offsets = d_offsets.size();
     thrust::constant_iterator<unsigned int> first(1);

@@ -106,7 +106,7 @@ void TestCsrScan(int count, int randomSize, int numIterations,
 
     // Compute using Thrust.
     // Thrust requires per-item keys rather than per-segment offsets.
-    thrust::device_vector<unsigned int> keys(count);
+    thrust::device_vector<int> keys(count);
     grace::offsets_to_segments(d_csr, keys);
 
     context.Start();
