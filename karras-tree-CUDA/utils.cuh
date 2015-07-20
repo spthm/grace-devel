@@ -166,40 +166,71 @@ class random_float4_functor
 {
     float4 xyzw;
     unsigned int seed;
-    thrust::uniform_real_distribution<float> uniform;
-    const float w_scale;
+    thrust::uniform_real_distribution<float> xyz_uniform;
+    thrust::uniform_real_distribution<float> w_uniform;
     const unsigned int seed_factor;
 
 public:
-    random_float4_functor() : uniform(0.0f, 1.0f), w_scale(1.0f),
-                              seed_factor(1u) {}
+    random_float4_functor() :
+        xyz_uniform(0.0f, 1.0f),
+        w_uniform(0.0f, 1.0f),
+        seed_factor(1u) {}
 
-    explicit random_float4_functor(const float low_,
-                                   const float high_) :
-        uniform(low_, high_), w_scale(1.0f), seed_factor(1u) {}
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0f, 1.0f),
+        seed_factor(1u) {}
 
-    explicit random_float4_functor(const float w_scale_) :
-        uniform(0.0f, 1.0f), w_scale(w_scale_), seed_factor(1u) {}
+    explicit random_float4_functor(const float w_high) :
+        xyz_uniform(0.0f, 1.0f),
+        w_uniform(0.0f, w_high),
+        seed_factor(1u) {}
 
-    explicit random_float4_functor(const float low_,
-                                   const float high_,
-                                   const float w_scale_) :
-        uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high,
+                                   const float w_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0f, w_high),
+        seed_factor(1u) {}
 
-    explicit random_float4_functor(const float low_,
-                                   const float high_,
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high,
+                                   const float w_low,
+                                   const float w_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(w_low, w_high),
+        seed_factor(1u) {}
+
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high,
                                    const unsigned int seed_factor_) :
-        uniform(low_, high_), w_scale(1.0f), seed_factor(seed_factor_) {}
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0f, 1.0f),
+        seed_factor(seed_factor_) {}
 
-    explicit random_float4_functor(const float w_scale_,
+    explicit random_float4_functor(const float w_high,
                                    const unsigned int seed_factor_) :
-        uniform(0.0f, 1.0f), w_scale(w_scale_), seed_factor(seed_factor_) {}
+        xyz_uniform(0.0f, 1.0f),
+        w_uniform(0.0f, w_high),
+        seed_factor(seed_factor_) {}
 
-    explicit random_float4_functor(const float low_,
-                                   const float high_,
-                                   const float w_scale_,
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high,
+                                   const float w_high,
                                    const unsigned int seed_factor_) :
-        uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0f, w_high),
+        seed_factor(seed_factor_) {}
+
+    explicit random_float4_functor(const float xyz_low,
+                                   const float xyz_high,
+                                   const float w_low,
+                                   const float w_high,
+                                   const unsigned int seed_factor_) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(w_low, w_high),
+        seed_factor(seed_factor_) {}
 
     GRACE_HOST_DEVICE float4 operator() (unsigned int n)
     {
@@ -209,10 +240,10 @@ public:
         }
         thrust::default_random_engine rng(seed);
 
-        xyzw.x = uniform(rng);
-        xyzw.y = uniform(rng);
-        xyzw.z = uniform(rng);
-        xyzw.w = w_scale*xyzw.x;
+        xyzw.x = xyz_uniform(rng);
+        xyzw.y = xyz_uniform(rng);
+        xyzw.z = xyz_uniform(rng);
+        xyzw.w = w_uniform(rng);
 
         return xyzw;
     }
@@ -222,40 +253,71 @@ class random_double4_functor
 {
     double4 xyzw;
     unsigned int seed;
-    thrust::uniform_real_distribution<double> uniform;
-    const double w_scale;
+    thrust::uniform_real_distribution<double> xyz_uniform;
+    thrust::uniform_real_distribution<double> w_uniform;
     const unsigned int seed_factor;
 
 public:
-    random_double4_functor() : uniform(0.0, 1.0), w_scale(1.0),
-                              seed_factor(1u) {}
+    random_double4_functor() :
+        xyz_uniform(0.0, 1.0),
+        w_uniform(0.0, 1.0),
+        seed_factor(1u) {}
 
-    explicit random_double4_functor(const double low_,
-                                    const double high_) :
-        uniform(low_, high_), w_scale(1.0), seed_factor(1u) {}
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0, 1.0),
+        seed_factor(1u) {}
 
-    explicit random_double4_functor(const double w_scale_) :
-        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(1u) {}
+    explicit random_double4_functor(const double w_high) :
+        xyz_uniform(0.0, 1.0),
+        w_uniform(0.0, w_high),
+        seed_factor(1u) {}
 
-    explicit random_double4_functor(const double low_,
-                                    const double high_,
-                                    const double w_scale_) :
-        uniform(low_, high_), w_scale(w_scale_), seed_factor(1u) {}
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high,
+                                    const double w_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0, w_high),
+        seed_factor(1u) {}
 
-    explicit random_double4_functor(const double low_,
-                                    const double high_,
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high,
+                                    const double w_low,
+                                    const double w_high) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(w_low, w_high),
+        seed_factor(1u) {}
+
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high,
                                     const unsigned int seed_factor_) :
-        uniform(low_, high_), w_scale(1.0), seed_factor(seed_factor_) {}
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0, 1.0),
+        seed_factor(seed_factor_) {}
 
-    explicit random_double4_functor(const double w_scale_,
+    explicit random_double4_functor(const double w_high,
                                     const unsigned int seed_factor_) :
-        uniform(0.0, 1.0), w_scale(w_scale_), seed_factor(seed_factor_) {}
+        xyz_uniform(0.0, 1.0),
+        w_uniform(0.0, w_high),
+        seed_factor(seed_factor_) {}
 
-    explicit random_double4_functor(const double low_,
-                                    const double high_,
-                                    const double w_scale_,
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high,
+                                    const double w_high,
                                     const unsigned int seed_factor_) :
-        uniform(low_, high_), w_scale(w_scale_), seed_factor(seed_factor_) {}
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(0.0, w_high),
+        seed_factor(seed_factor_) {}
+
+    explicit random_double4_functor(const double xyz_low,
+                                    const double xyz_high,
+                                    const double w_low,
+                                    const double w_high,
+                                    const unsigned int seed_factor_) :
+        xyz_uniform(xyz_low, xyz_high),
+        w_uniform(w_low, w_high),
+        seed_factor(seed_factor_) {}
 
     GRACE_HOST_DEVICE double4 operator() (unsigned int n)
     {
@@ -265,10 +327,10 @@ public:
         }
         thrust::default_random_engine rng(seed);
 
-        xyzw.x = uniform(rng);
-        xyzw.y = uniform(rng);
-        xyzw.z = uniform(rng);
-        xyzw.w = w_scale*xyzw.x;
+        xyzw.x = xyz_uniform(rng);
+        xyzw.y = xyz_uniform(rng);
+        xyzw.z = xyz_uniform(rng);
+        xyzw.w = w_uniform(rng);
 
         return xyzw;
     }
