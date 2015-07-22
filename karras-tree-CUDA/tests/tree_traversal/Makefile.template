@@ -1,0 +1,37 @@
+GRACE_FLAGS = -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX -DNDEBUG
+MGPU_DIR = $(HOME)/moderngpu/
+
+GENCODE_20 = -gencode arch=compute_20,code=sm_20
+GENCODE_21 = -gencode arch=compute_21,code=sm_21
+GENCODE_30 = -gencode arch=compute_30,code=sm_30
+GENCODE_35 = -gencode arch=compute_35,code=sm_35
+
+# Include from above as appropriate.
+CUARCH = $(GENCODE_20) $(GENCODE_30)
+
+NVCC = nvcc
+NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
+# Ensure float/double calculations on the CPU obey IEEE binary32/64 rules,
+# rather than being computed by the x87 FPU.
+NVCCFLAGS += -Xcompiler "-fopenmp -mfpmath=sse -msse2"
+# Similarly, do not let nvcc compile FMA instructions for the GPU, otherwise
+# its intersection results may differ from the CPU's.
+NVCCFLAGS += -fmad=false
+NVCCINCLUDES = -I$(MGPU_DIR)/include/
+NVCCLFLAGS = -L$(HOME)/local/cuda/lib64
+NVCCLIBS = -lcurand
+NVCCDEPS = $(wildcard ../../kernels/*.cuh) $(wildcard ../../*.*h) Makefile
+
+all: tree_traversal
+
+tree_traversal: tree_traversal.cu $(NVCCDEPS)
+	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(NVCCLFLAGS) $(NVCCLIBS)
+
+
+.PHONY: clean
+
+clean:
+	-rm -f *.o
+
+distclean: clean
+	-rm -f tree_traversal
