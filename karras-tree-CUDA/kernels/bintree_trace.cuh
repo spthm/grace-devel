@@ -183,10 +183,14 @@ __global__ void trace_hitcounts_kernel(
     // The index of the root node, where tracing begins.
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
-    extern __shared__ float4 sm_spheres[];
-    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
-                                                  / grace::WARP_SIZE)];
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t spheres_size = max_per_leaf * N_warps;
+
+    extern __shared__ int smem[];
+    // Offsets into the kernel's shared memory allocation must ensure correct
+    // allignment!
+    float4* sm_spheres = reinterpret_cast<float4*>(smem);
+    int* sm_stacks = reinterpret_cast<int*>(&sm_spheres[spheres_size]);
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
@@ -323,12 +327,15 @@ __global__ void trace_property_kernel(
 
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
-    extern __shared__ float4 sm_spheres[];
-    __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
-                                                  / grace::WARP_SIZE)];
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t spheres_size = max_per_leaf * N_warps;
 
+    extern __shared__ int smem[];
+    // Offsets into the kernel's shared memory allocation must ensure correct
+    // allignment!
+    float4* sm_spheres = reinterpret_cast<float4*>(smem);
+    Float* b_integrals = reinterpret_cast<Float*>(&sm_spheres[spheres_size]);
+    int* sm_stacks = reinterpret_cast<int*>(&b_integrals[grace::N_table]);
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
@@ -454,12 +461,15 @@ __global__ void trace_kernel(
 
     int root = *root_index;
 
-    // __shared__ float4 sm_spheres[32*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)];
-    extern __shared__ float4 sm_spheres[];
-    __shared__ Float b_integrals[N_table];
-    __shared__ int sm_stacks[grace::STACK_SIZE * (grace::TRACE_THREADS_PER_BLOCK
-                                                  / grace::WARP_SIZE)];
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t spheres_size = max_per_leaf * N_warps;
 
+    extern __shared__ int smem[];
+    // Offsets into the kernel's shared memory allocation must ensure correct
+    // allignment!
+    float4* sm_spheres = reinterpret_cast<float4*>(smem);
+    Float* b_integrals = reinterpret_cast<Float*>(&sm_spheres[spheres_size]);
+    int* sm_stacks = reinterpret_cast<int*>(&b_integrals[grace::N_table]);
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
     for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
@@ -595,7 +605,10 @@ GRACE_HOST void trace_hitcounts(
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_hitcounts_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(int) * grace::STACK_SIZE * N_warps;
+    gpu::trace_hitcounts_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_hit_counts.data()),
@@ -657,7 +670,11 @@ GRACE_HOST void trace_property(
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_property_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float) * grace::N_table
+                           + sizeof(int) * grace::STACK_SIZE * N_warps;
+    gpu::trace_property_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -741,7 +758,11 @@ GRACE_HOST void trace(
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float) * grace::N_table
+                           + sizeof(int) * grace::STACK_SIZE * N_warps;
+    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
@@ -845,7 +866,11 @@ GRACE_HOST void trace_with_sentinels(
                     d_spheres.size()*sizeof(float4));
 #endif
 
-    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sizeof(float4)*d_tree.max_per_leaf*(grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE)>>>(
+    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float) * grace::N_table
+                           + sizeof(int) * grace::STACK_SIZE * N_warps;
+    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
         thrust::raw_pointer_cast(d_out_data.data()),
