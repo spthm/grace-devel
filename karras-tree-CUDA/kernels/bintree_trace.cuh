@@ -4,6 +4,8 @@
 #include <stdexcept>
 #include <string>
 
+#include <cstddef>
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -11,6 +13,8 @@
 
 #include "../device/intrinsics.cuh"
 #include "../error.h"
+#include "../device/trace_functors.cuh"
+#include "../device/util.cuh"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
@@ -22,10 +26,10 @@
 #define FETCH_NODE(nodes, i) nodes[i]
 #endif
 
-#ifdef GRACE_SPHERES_TEX
-#define FETCH_SPHERE(spheres, i) tex1Dfetch(spheres##_tex, i)
+#ifdef GRACE_PRIMITIVES_TEX
+#define FETCH_PRIMITIVE(primitives, i) tex1Dfetch(primitives##_tex, i)
 #else
-#define FETCH_SPHERE(spheres, i) spheres[i]
+#define FETCH_PRIMITIVE(primitives, i) primitives[i]
 #endif
 
 
@@ -42,8 +46,10 @@ texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
 #endif
 
-#ifdef GRACE_SPHERES_TEX
-texture<float4, cudaTextureType1D, cudaReadModeElementType> spheres_tex;
+// FIXME: this now depends on the templated type of the primitives.
+//        can it be placed within a function?
+#ifdef GRACE_PRIMITIVES_TEX
+texture<float4, cudaTextureType1D, cudaReadModeElementType> primitives_tex;
 #endif
 
 //-----------------------------------------------------------------------------
@@ -158,37 +164,55 @@ GRACE_DEVICE int AABBs_hit(
 }
 
 //-----------------------------------------------------------------------------
-// CUDA tracing kernels.
+// CUDA tracing kernel.
 //-----------------------------------------------------------------------------
 
-template <typename Float4>
-__global__ void trace_hitcounts_kernel(
+template <typename RayData,
+          typename TPrimitives,
+          typename Init,
+          typename Intersection, typename OnHit,
+          typename OnRayEntry, typename OnRayExit>
+__global__ void trace_kernel(
     const Ray* rays,
     const size_t n_rays,
-    int* hit_counts,
     const float4* nodes,
-    size_t n_nodes,
+    const size_t n_nodes,
     const int4* leaves,
     const int* root_index,
-    const Float4* spheres,
-    const size_t n_spheres,
-    const int max_per_leaf)
+    const TPrimitive* prims, // Pointer to primitive spatial-data wrapper type
+    const size_t n_primitives,
+    const int max_per_leaf,
+    const size_t user_smem_bytes, // User's SMEM allocation, in bytes.
+    Init init,              // pre-traversal functor
+    Intersection intersect, // ray-primitive intersection test functor
+    OnHit on_hit,           // ray-primitive intersection processing functor
+    OnRayEntry ray_entry,   // ray-traversal entry functor
+    OnRayExit ray_exit)     // ray-traversal exit functor
 {
-    int tid = threadIdx.x % grace::WARP_SIZE; // ID of thread within warp.
-    int wid = threadIdx.x / grace::WARP_SIZE; // ID of warp within block.
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+    const int wid  = threadIdx.x / grace::WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
 
-    // The index of the root node, where tracing begins.
-    int root = *root_index;
+    // The tree's root index can be anywhere in ALBVH.
+    const int root = *root_index;
 
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
-    const size_t spheres_size = max_per_leaf * N_warps;
+    const size_t prims_smem_count = max_per_leaf * N_warps;
 
-    extern __shared__ int smem[];
-    // Offsets into the kernel's shared memory allocation must ensure correct
-    // allignment!
-    float4* sm_spheres = reinterpret_cast<float4*>(smem);
-    int* sm_stacks = reinterpret_cast<int*>(&sm_spheres[spheres_size]);
+    extern __shared__ char smem_trace[];
+    const UserSmemPtr sm_ptr_usr(smem, user_smem_bytes);
+    init(sm_ptr_usr);
+    __syncthreads();
+
+    // Shared memory accesses must ensure correct alignment relative to the
+    // access size.
+    char* sm_ptr = smem + user_smem_bytes;
+    int rem = sm_ptr % sizeof(TPrimitives);
+    if (rem != 0) {
+        sm_ptr += sizeof(TPrimitives) - rem;
+    }
+    TPrimitives* sm_prims = reinterpret_cast<TPrimitives*>(sm_ptr);
+    int* sm_stacks = reinterpret_cast<int*>(&sm_prims[prims_smem_count]);
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
@@ -198,9 +222,10 @@ __global__ void trace_hitcounts_kernel(
 
     while (ray_index < n_rays)
     {
-        int ray_hit_count = 0;
-
-        Ray ray = rays[ray_index];
+        // Ray must not be modified by user.
+        const Ray ray = rays[ray_index];
+        RayAux ray_data;
+        ray_entry(ray_index, ray, ray_data);
 
         float3 invd, origin;
         invd.x = 1.f / ray.dx;
@@ -210,7 +235,7 @@ __global__ void trace_hitcounts_kernel(
         origin.y = ray.oy;
         origin.z = ray.oz;
 
-        // Push root to stack
+        // Push root to stack.
         stack_ptr++;
         *stack_ptr = root;
 
@@ -221,7 +246,7 @@ __global__ void trace_hitcounts_kernel(
             // signed >= 0. This is also our stack-empty check.
             while (*stack_ptr < n_nodes && *stack_ptr >= 0)
             {
-                GRACE_ASSERT(4*(*stack_ptr) + 3 < 4*n_nodes);
+                GRACE_ASSERT(4 * (*stack_ptr) + 3 < 4 * n_nodes);
 
                 // Pop stack.
                 // If we immediately do a reinterpret_cast, the compiler states:
@@ -233,338 +258,58 @@ __global__ void trace_hitcounts_kernel(
                 float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
                 stack_ptr--;
 
-                // A left child can be nodes[0].
-                // A right child cannot be nodes[0].
                 GRACE_ASSERT(node.x >= 0);
                 GRACE_ASSERT(node.y > 0);
-                // Similarly for the last nodes, noting leaf indices are offset
-                // by += n_nodes.
+                // Recall that lead indices are offset by += n_nodes.
                 GRACE_ASSERT(node.x < 2 * n_nodes);
                 GRACE_ASSERT(node.y <= 2 * n_nodes);
 
-                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                int rl_hit = AABBs_hit(invd, origin, ray.length,
                                        AABB_L, AABB_R, AABB_LR);
 
-                // If any hit right child, push it to the stack.
-                if (__any(lr_hit >= 2))
+                if (__any(rl_hit >= 2))
                 {
                     stack_ptr++;
                     *stack_ptr = node.y;
                 }
-                // If any hit left child, push it to the stack.
-                if (__any(lr_hit & 1u))
+                if (__any(rl_hit & 1u))
                 {
                     stack_ptr++;
                     *stack_ptr = node.x;
                 }
 
-                GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1));
-
+                GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1) && "trace stack overflowed");
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
             {
                 // Pop stack.
                 int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
-                GRACE_ASSERT(((*stack_ptr)-n_nodes) < n_nodes+1);
                 stack_ptr--;
+
+                GRACE_ASSERT(((*stack_ptr) - n_nodes) < n_nodes + 1);
                 GRACE_ASSERT(node.x >= 0);
                 GRACE_ASSERT(node.y > 0);
-                GRACE_ASSERT(node.x+node.y-1 < n_spheres);
+                GRACE_ASSERT(node.x + node.y - 1 < n_primitives);
 
-                // Cache spheres in the leaf to shared memory. Coalesced.
-                // For max_per_leaf == WARP_SIZE, it is quicker to read more
-                // spheres than are in this leaf (which are not processed in the
-                // following loop) than to have an if (tid < 32).
-                // This additionally requires n_spheres be a multiple of 32.
-                // sm_spheres[32*wid+tid] = FETCH_SPHERE(spheres, node.x+tid);
-                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
+                for (int i = lane; i < node.y; i += grace::WARP_SIZE)
                 {
-                    sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
-                                                                  node.x+i);
+                    sm_prims[max_per_leaf * wid + i]
+                        = FETCH_PRIMITIVE(prims, node.x + i);
                 }
-                // WARP-SYNCHRONOUS FIX:
-                // __syncthreads();
 
-                // Loop through spheres.
-                for (int i=0; i<node.y; i++)
+                for (int i = 0; i < node.y; ++i)
                 {
-                    // Unused.
-                    float b2, dist;
-                    if (sphere_hit(ray, sm_spheres[max_per_leaf*wid+i],
-                                   b2, dist))
+                    TPrimitive prim = sm_prims[max_per_leaf * wid + i];
+                    if (intersect(ray, prim, ray_data, sm_ptr_usr))
                     {
-                        ray_hit_count++;
-                    }
-                }
-            }
-
-        }
-        hit_counts[ray_index] = ray_hit_count;
-        ray_index += blockDim.x * gridDim.x;
-    }
-}
-
-template <typename Tout, typename Float4, typename Tin, typename Float>
-__global__ void trace_property_kernel(
-    const Ray* rays,
-    const size_t n_rays,
-    Tout* out_data,
-    const float4* nodes,
-    const size_t n_nodes,
-    const int4* leaves,
-    const int* root_index,
-    const Float4* spheres,
-    const int max_per_leaf,
-    const Tin* p_data,
-    const Float* g_b_integrals)
-{
-    int tid = threadIdx.x % grace::WARP_SIZE;
-    int wid = threadIdx.x / grace::WARP_SIZE;
-    int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-
-    int root = *root_index;
-
-    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
-    const size_t spheres_size = max_per_leaf * N_warps;
-
-    extern __shared__ int smem[];
-    // Offsets into the kernel's shared memory allocation must ensure correct
-    // allignment!
-    float4* sm_spheres = reinterpret_cast<float4*>(smem);
-    Float* b_integrals = reinterpret_cast<Float*>(&sm_spheres[spheres_size]);
-    int* sm_stacks = reinterpret_cast<int*>(&b_integrals[grace::N_table]);
-    int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
-
-    for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
-    {
-        b_integrals[i] = g_b_integrals[i];
-    }
-    __syncthreads();
-
-    *stack_ptr = -1;
-
-    while (ray_index < n_rays)
-    {
-        // Property to trace and accumulate.
-        Tout out = 0;
-
-        Ray ray = rays[ray_index];
-
-        float3 invd, origin;
-        invd.x = 1.f / ray.dx;
-        invd.y = 1.f / ray.dy;
-        invd.z = 1.f / ray.dz;
-        origin.x = ray.ox;
-        origin.y = ray.oy;
-        origin.z = ray.oz;
-
-        stack_ptr++;
-        *stack_ptr = root;
-
-        while (*stack_ptr >= 0)
-        {
-            while (*stack_ptr < n_nodes && *stack_ptr >= 0)
-            {
-                float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
-                int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
-                stack_ptr--;
-
-                int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                       AABB_L, AABB_R, AABB_LR);
-
-                if (__any(lr_hit >= 2))
-                {
-                    stack_ptr++;
-                    *stack_ptr = node.y;
-                }
-                if (__any(lr_hit & 1u))
-                {
-                    stack_ptr++;
-                    *stack_ptr = node.x;
-                }
-            }
-
-            while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
-            {
-                int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
-                stack_ptr--;
-
-                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
-                {
-                    sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
-                                                                  node.x+i);
-                }
-                // WARP-SYNCHRONOUS FIX:
-                // __syncthreads();
-
-                for (int i=0; i<node.y; i++)
-                {
-                    int b_index;
-                    float b, dist;
-                    float4 sphere = sm_spheres[max_per_leaf*wid+i];
-                    if (sphere_hit(ray, sphere, b, dist))
-                    {
-                        float ir = 1.f / sphere.w;
-                        // sphere_hit returns |b*b|;
-                        b = sqrtf(b);
-                        // Normalize impact parameter to size of lookup table and
-                        // interpolate.
-                        b = (N_table-1) * (b * ir);
-                        b_index = (int) b; // == floor(b)
-                        if (b_index >= (N_table-1)) {
-                            b = N_table-1;
-                            b_index = N_table-2;
-                        }
-                        Float kernel_fac =
-                            (b_integrals[b_index+1] - b_integrals[b_index])
-                            * (b - b_index)
-                            + b_integrals[b_index];
-                        // Re-scale integral (since we used a normalized b).
-                        kernel_fac *= (ir*ir);
-                        GRACE_ASSERT(kernel_fac >= 0);
-                        out += (Tout) (kernel_fac * p_data[node.x+i]);
+                        on_hit(ray_index, ray, ray_data, node.x + i, prim,
+                               sm_ptr_usr, output);
                     }
                 }
             }
         }
-        out_data[ray_index] = out;
-        ray_index += blockDim.x * gridDim.x;
-    }
-}
-
-template <typename Tout, typename Float, typename Float4, typename Tin>
-__global__ void trace_kernel(
-    const Ray* rays,
-    const size_t n_rays,
-    Tout* out_data,
-    unsigned int* hit_indices,
-    Float* hit_distances,
-    const int* ray_offsets,
-    const float4* nodes,
-    const size_t n_nodes,
-    const int4* leaves,
-    const int* root_index,
-    const Float4* spheres,
-    const int max_per_leaf,
-    const Tin* p_data,
-    const Float* g_b_integrals)
-{
-    int tid = threadIdx.x % grace::WARP_SIZE;
-    int wid = threadIdx.x / grace::WARP_SIZE;
-    int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
-
-    int root = *root_index;
-
-    const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
-    const size_t spheres_size = max_per_leaf * N_warps;
-
-    extern __shared__ int smem[];
-    // Offsets into the kernel's shared memory allocation must ensure correct
-    // allignment!
-    float4* sm_spheres = reinterpret_cast<float4*>(smem);
-    Float* b_integrals = reinterpret_cast<Float*>(&sm_spheres[spheres_size]);
-    int* sm_stacks = reinterpret_cast<int*>(&b_integrals[grace::N_table]);
-    int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
-
-    for (int i=threadIdx.x; i<N_table; i+=grace::TRACE_THREADS_PER_BLOCK)
-    {
-        b_integrals[i] = g_b_integrals[i];
-    }
-    __syncthreads();
-
-    *stack_ptr = -1;
-
-    while (ray_index < n_rays)
-    {
-        int out_index = ray_offsets[ray_index];
-
-        Ray ray = rays[ray_index];
-
-        float3 invd, origin;
-        invd.x = 1.f / ray.dx;
-        invd.y = 1.f / ray.dy;
-        invd.z = 1.f / ray.dz;
-        origin.x = ray.ox;
-        origin.y = ray.oy;
-        origin.z = ray.oz;
-
-        stack_ptr++;
-        *stack_ptr = root;
-
-        while (*stack_ptr >= 0)
-        {
-            while (*stack_ptr < n_nodes && *stack_ptr >= 0)
-            {
-                float4 tmp = FETCH_NODE(nodes, 4*(*stack_ptr) + 0);
-                int4 node = *reinterpret_cast<int4*>(&tmp);
-                float4 AABB_L =  FETCH_NODE(nodes, 4*(*stack_ptr) + 1);
-                float4 AABB_R =  FETCH_NODE(nodes, 4*(*stack_ptr) + 2);
-                float4 AABB_LR = FETCH_NODE(nodes, 4*(*stack_ptr) + 3);
-                stack_ptr--;
-
-                int lr_hit = AABBs_hit(invd, origin, ray.length,
-                                       AABB_L, AABB_R, AABB_LR);
-
-                if (__any(lr_hit >= 2))
-                {
-                    stack_ptr++;
-                    *stack_ptr = node.y;
-                }
-                if (__any(lr_hit & 1u))
-                {
-                    stack_ptr++;
-                    *stack_ptr = node.x;
-                }
-            }
-
-            while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
-            {
-                int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
-                stack_ptr--;
-
-                for (int i=tid; i<node.y; i+=grace::WARP_SIZE)
-                {
-                    sm_spheres[max_per_leaf*wid+i] = FETCH_SPHERE(spheres,
-                                                                  node.x+i);
-                }
-                // WARP-SYNCHRONOUS FIX:
-                // __syncthreads();
-
-                for (int i=0; i<node.y; i++)
-                {
-                    int b_index;
-                    float b, dist;
-                    float4 sphere = sm_spheres[max_per_leaf*wid+i];
-                    if (sphere_hit(ray, sphere, b, dist))
-                    {
-                        float ir = 1.f / sphere.w;
-                        b = sqrtf(b);
-                        b = (N_table-1) * (b * ir);
-                        b_index = (int) b;
-                        if (b_index >= (N_table-1)) {
-                            b = N_table-1;
-                            b_index = N_table-2;
-                        }
-                        Float kernel_fac =
-                            (b_integrals[b_index+1] - b_integrals[b_index])
-                            * (b - b_index)
-                            + b_integrals[b_index];
-                        kernel_fac *= (ir*ir);
-                        GRACE_ASSERT(kernel_fac >= 0);
-                        GRACE_ASSERT(dist >= 0);
-                        out_data[out_index] =
-                            (Tout) (kernel_fac * p_data[node.x+i]);
-                        hit_indices[out_index] = node.x+i;
-                        hit_distances[out_index] = dist;
-                        out_index++;
-                    }
-                }
-            }
-        }
+        ray_exit(ray_index, ray_data, output);
         ray_index += blockDim.x * gridDim.x;
     }
 }
@@ -572,7 +317,7 @@ __global__ void trace_kernel(
 } // namespace gpu
 
 //-----------------------------------------------------------------------------
-// C-like wrappers for tracing kernels
+// C-like convenience wrappers for common forms of the tracing kernel.
 //-----------------------------------------------------------------------------
 
 template <typename Float4>
@@ -594,11 +339,7 @@ GRACE_HOST void trace_hitcounts(
         throw std::invalid_argument(msg);
     }
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                             / grace::TRACE_THREADS_PER_BLOCK));
-
-#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+#if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
 #endif
 
@@ -622,14 +363,18 @@ GRACE_HOST void trace_hitcounts(
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
-
+    int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                         / grace::TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS, blocks);             
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
                            + sizeof(int) * grace::STACK_SIZE * N_warps;
-    gpu::trace_hitcounts_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
+    typedef RayData_simple<int> RayData;
+    gpu::trace_kernel<RayData>
+        <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
+    (
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
-        thrust::raw_pointer_cast(d_hit_counts.data()),
         reinterpret_cast<const float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
@@ -637,7 +382,14 @@ GRACE_HOST void trace_hitcounts(
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size(),
-        d_tree.max_per_leaf);
+        d_tree.max_per_leaf,
+        0,
+        Init_null(),
+        Intersect_sphere_bool<RayData>(),
+        OnHit_increment<RayData>(),
+        RayEntry_simple<RayData>(),
+        RayExit_simple<RayData>(thrust::raw_pointer_cast(d_hit_counts.data()))
+    );
     GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
@@ -649,6 +401,7 @@ GRACE_HOST void trace_hitcounts(
 #endif
 }
 
+// FIXME: Can derive Float type using Real4ToRealMapper.
 template <typename Float, typename Tout, typename Float4, typename Tin>
 GRACE_HOST void trace_property(
     const thrust::device_vector<Ray>& d_rays,
@@ -673,13 +426,9 @@ GRACE_HOST void trace_property(
     // and copying it on each call to trace_property and trace.
     // Or make it static and initalize it in e.g. a grace_init function, that
     // could also determine kernel launch parameters.
-    const KernelIntegrals<Float> lookup;
-    const Float* p_table = &(lookup.table[0]);
-    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
-
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                             / grace::TRACE_THREADS_PER_BLOCK));
+    const KernelIntegrals<double> lookup;
+    const double* p_table = &(lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
 #if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
     cudaError_t cuerr;
@@ -705,25 +454,36 @@ GRACE_HOST void trace_property(
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
-
+    int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                         / grace::TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS, blocks);             
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_table_size = sizeof(double) * grace::N_table;
     const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
-                           + sizeof(Float) * grace::N_table
-                           + sizeof(int) * grace::STACK_SIZE * N_warps;
-    gpu::trace_property_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
+                           + sizeof(int) * grace::STACK_SIZE * N_warps
+                           + sm_table_size;
+    typedef RayData_sphere<Float, Float> RayData;
+    // FIXME: Does not use d_in_data.
+    gpu::trace_kernel<RayData>
+        <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
+    (
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
-        thrust::raw_pointer_cast(d_out_data.data()),
         reinterpret_cast<const float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size(),
         d_tree.max_per_leaf,
-        thrust::raw_pointer_cast(d_in_data.data()),
-        thrust::raw_pointer_cast(d_lookup.data()));
-    GRACE_KERNEL_CHECK();
+        sm_table_size,
+        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
+        Intersect_sphere_b2dist<RayData>(),
+        OnHit_sphere_cumulative<RayData>(grace::N_table),
+        RayEntry_simple<RayData>(),
+        RayExit_simple<RayData>(thrust::raw_pointer_cast(d_out_data.data()))
+    );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
@@ -736,6 +496,7 @@ GRACE_HOST void trace_property(
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
 //       arrays to this function, handling any memory issues therein themselves.
+// FIXME: Can derive Float type using Real4ToRealMapper.
 template <typename Float, typename Tout, typename Float4, typename Tin>
 GRACE_HOST void trace(
     const thrust::device_vector<Ray>& d_rays,
@@ -786,10 +547,6 @@ GRACE_HOST void trace(
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                             / grace::TRACE_THREADS_PER_BLOCK));
-
 #if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
     cudaError_t cuerr;
 #endif
@@ -815,27 +572,39 @@ GRACE_HOST void trace(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
+    int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                         / grace::TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS, blocks);             
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_table_size = sizeof(double) * grace::N_table;
     const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
-                           + sizeof(Float) * grace::N_table
-                           + sizeof(int) * grace::STACK_SIZE * N_warps;
-    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
+                           + sizeof(int) * grace::STACK_SIZE * N_warps
+                           + sm_table_size;
+    typedef RayData_sphere<int, Float> RayData;
+    // FIXME: Does not use d_in_data.
+    gpu::trace_kernel<RayData>
+        <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
+    (
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
-        thrust::raw_pointer_cast(d_out_data.data()),
-        thrust::raw_pointer_cast(d_hit_indices.data()),
-        thrust::raw_pointer_cast(d_hit_distances.data()),
-        thrust::raw_pointer_cast(d_ray_offsets.data()),
         reinterpret_cast<const float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size(),
         d_tree.max_per_leaf,
-        thrust::raw_pointer_cast(d_in_data.data()),
-        thrust::raw_pointer_cast(d_lookup.data()));
-    GRACE_KERNEL_CHECK();
+        sm_table_size,
+        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
+        Intersect_sphere_b2dist<RayData>(),
+        OnHit_sphere_individual(thrust::raw_pointer_cast(d_hit_indices.data()),
+                                thrust::raw_pointer_cast(d_out_data.data()),
+                                thrust::raw_pointer_cast(d_hit_distances.data()),
+                                grace::N_table),
+        RayEntry_individual<RayData>(thrust::raw_pointer_cast(d_ray_offsets.data())),
+        RayExit_null()
+    );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
@@ -847,6 +616,7 @@ GRACE_HOST void trace(
 }
 
 // TODO: Break this and trace() into multiple functions.
+// FIXME: Can derive Float type using Real4ToRealMapper.
 template <typename Float, typename Tout, typename Float4, typename Tin>
 GRACE_HOST void trace_with_sentinels(
     const thrust::device_vector<Ray>& d_rays,
@@ -915,10 +685,6 @@ GRACE_HOST void trace_with_sentinels(
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                             / grace::TRACE_THREADS_PER_BLOCK));
-
 #if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
     cudaError_t cuerr;
 #endif
@@ -944,27 +710,39 @@ GRACE_HOST void trace_with_sentinels(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
+    int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
+                         / grace::TRACE_THREADS_PER_BLOCK));
+    int blocks = min(grace::MAX_BLOCKS, blocks);             
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
+    const size_t sm_table_size = sizeof(double) * grace::N_table;
     const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
-                           + sizeof(Float) * grace::N_table
-                           + sizeof(int) * grace::STACK_SIZE * N_warps;
-    gpu::trace_kernel<<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>(
+                           + sizeof(int) * grace::STACK_SIZE * N_warps
+                           + sm_table_size;
+    typedef RayData_sphere<int, Float> RayData;
+    // FIXME: Does not use d_in_data.
+    gpu::trace_kernel<RayData>
+        <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
+    (
         thrust::raw_pointer_cast(d_rays.data()),
         n_rays,
-        thrust::raw_pointer_cast(d_out_data.data()),
-        thrust::raw_pointer_cast(d_hit_indices.data()),
-        thrust::raw_pointer_cast(d_hit_distances.data()),
-        thrust::raw_pointer_cast(d_ray_offsets.data()),
         reinterpret_cast<const float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size(),
         d_tree.max_per_leaf,
-        thrust::raw_pointer_cast(d_in_data.data()),
-        thrust::raw_pointer_cast(d_lookup.data()));
-    GRACE_KERNEL_CHECK();
+        sm_table_size,
+        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
+        Intersect_sphere_b2dist<RayData>(),
+        OnHit_sphere_individual(thrust::raw_pointer_cast(d_hit_indices.data()),
+                                thrust::raw_pointer_cast(d_out_data.data()),
+                                thrust::raw_pointer_cast(d_hit_distances.data()),
+                                grace::N_table),
+        RayEntry_individual<RayData>(thrust::raw_pointer_cast(d_ray_offsets.data())),
+        RayExit_null()
+    );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
