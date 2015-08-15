@@ -47,6 +47,7 @@
 
 #pragma once
 
+#include "../error.h"
 #include "../types.h"
 
 // moderngpu/include must be in the INC path
@@ -587,6 +588,7 @@ MGPU_HOST void SegScanSpine(
     KernelSegScanSpine1<NT><<<numBlocks2, NT, 0, context.Stream()>>>(
         limits_global, numBlocks, carryIn_global, identity, op,
         carryOutDevice->get());
+    GRACE_CUDA_CHECK(cudaPeekAtLastError());
     MGPU_SYNC_CHECK("KernelSegScanSpine1");
 
     // Fix-up the carry-ins between the tiles of KernelSegScanSpine1.
@@ -595,12 +597,14 @@ MGPU_HOST void SegScanSpine(
         KernelSegScanSpine2a<NT><<<1, NT, 0, context.Stream()>>>(
             limits_global, numBlocks2, numBlocks, NT, carryOutDevice->get(),
             identity, op);
+        GRACE_CUDA_CHECK(cudaPeekAtLastError());
         MGPU_SYNC_CHECK("KernelSegScanSpine2");
 
         // Update all carry-ins for the original tiles.
         KernelSegScanSpine2b<NT><<<numBlocks2, NT, 0, context.Stream()>>>(
             limits_global, numBlocks, carryOutDevice->get(), carryIn_global,
             identity, op);
+        GRACE_CUDA_CHECK(cudaPeekAtLastError());
         MGPU_SYNC_CHECK("KernelSegScanSpine2b");
     }
 
@@ -610,6 +614,7 @@ MGPU_HOST void SegScanSpine(
         <<<numLaunchBlocks, launch.x, 0, context.Stream()>>>(
             threadCodes_global, limits_global, count, numBlocks,
             carryIn_global, dest_global, identity, op);
+    GRACE_CUDA_CHECK(cudaPeekAtLastError());
     MGPU_SYNC_CHECK("KernelSegScanSpineApply");
 }
 
@@ -700,6 +705,7 @@ MGPU_HOST MGPU_MEM(int) BuildCsrPlus(
         <<<numLaunchBlocks, launch.x, 0, context.Stream()>>>(
             count, numBlocks, csr_global, limits_global,
             threadCodesDevice->get());
+    GRACE_CUDA_CHECK(cudaPeekAtLastError());
     MGPU_SYNC_CHECK("KernelBuildCsrPlus");
 
     return threadCodesDevice;
@@ -815,7 +821,7 @@ MGPU_HOST void SegScanApply(
             preprocess.threadCodesDevice->get(), preprocess.count,
             preprocess.numBlocks, preprocess.limitsDevice->get(), data_global,
             identity, op, dest_global, carryOutDevice->get());
-    // TODO: Replace this with own version.
+    GRACE_CUDA_CHECK(cudaPeekAtLastError());
     MGPU_SYNC_CHECK("KernelSegScanApply");
 
     // Scan the per-block block carry-ins to propagate all carry-ins

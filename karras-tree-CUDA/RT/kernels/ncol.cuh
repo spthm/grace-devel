@@ -1,6 +1,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 
+#include "../error.h"
 #include "../../types.h"
 #include "../../particle.h"
 
@@ -48,6 +49,7 @@ GRACE_HOST void cum_weighted_sum(
         thrust::raw_pointer_cast(d_weight_map.data()),
         d_weighted.size(),
         thrust::raw_pointer_cast(d_weighted.data()));
+    GRACE_KERNEL_CHECK();
 
     // Segmented, cumulative sum such that d_sum[i] = cumulative sum *up to*
     // (not including, i.e. an exclusive sum) the ith weighted value.

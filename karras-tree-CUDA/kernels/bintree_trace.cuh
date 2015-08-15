@@ -13,6 +13,7 @@
 #include <thrust/transform.h>
 
 #include "../device/intrinsics.cuh"
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
@@ -620,9 +621,7 @@ GRACE_HOST void trace_hitcounts(
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size(),
         d_tree.max_per_leaf);
-
-    CUDA_HANDLE_ERR(cudaPeekAtLastError());
-    CUDA_HANDLE_ERR(cudaDeviceSynchronize());
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
@@ -687,6 +686,7 @@ GRACE_HOST void trace_property(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
@@ -778,6 +778,7 @@ GRACE_HOST void trace(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);
@@ -886,6 +887,7 @@ GRACE_HOST void trace_with_sentinels(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
     cudaUnbindTexture(nodes_tex);

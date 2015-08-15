@@ -7,6 +7,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
+#include "../error.h"
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
@@ -887,8 +888,7 @@ int main(int argc, char* argv[]) {
         N_AABBs,
         thrust::raw_pointer_cast(d_ray_hits.data()));
     cudaEventRecord(stop);
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    GRACE_KERNEL_CHECK();
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&elapsed, start, stop);
@@ -912,8 +912,7 @@ int main(int argc, char* argv[]) {
         N_AABBs,
         thrust::raw_pointer_cast(d_ray_hits.data()));
     cudaEventRecord(stop);
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    GRACE_KERNEL_CHECK();
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&elapsed, start, stop);
@@ -937,8 +936,7 @@ int main(int argc, char* argv[]) {
         N_AABBs,
         thrust::raw_pointer_cast(d_ray_hits.data()));
     cudaEventRecord(stop);
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    GRACE_KERNEL_CHECK();
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&elapsed, start, stop);
@@ -962,8 +960,7 @@ int main(int argc, char* argv[]) {
         N_AABBs,
         thrust::raw_pointer_cast(d_ray_hits.data()));
     cudaEventRecord(stop);
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    GRACE_KERNEL_CHECK();
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&elapsed, start, stop);
@@ -1010,8 +1007,7 @@ int main(int argc, char* argv[]) {
         N_AABBs,
         thrust::raw_pointer_cast(d_ray_hits.data()));
     cudaEventRecord(stop);
-    CUDA_HANDLE_ERR( cudaPeekAtLastError() );
-    CUDA_HANDLE_ERR( cudaDeviceSynchronize() );
+    GRACE_KERNEL_CHECK();
     cudaEventSynchronize(stop);
     cudaEventElapsedTime(&elapsed, start, stop);
     thrust::host_vector<unsigned int> h_plucker_ray_hits = d_ray_hits;

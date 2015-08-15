@@ -10,26 +10,8 @@
 #include <thrust/extrema.h>
 #include <thrust/pair.h>
 
-// Wrap around all calls to CUDA functions to handle errors.
-#define CUDA_HANDLE_ERR(code) {grace::cudaErrorCheck((code), __FILE__, __LINE__); }
-
 namespace grace
 {
-
-GRACE_HOST void cudaErrorCheck(
-    cudaError_t code,
-    const char* file,
-    int line,
-    bool abort=true)
-{
-    if (code != cudaSuccess) {
-        fprintf(stderr,"CUDA Error!\nMsg:  %s\nFile: %s @ line %d\n",
-                cudaGetErrorString(code), file, line);
-
-    if (abort)
-        exit(code);
-    }
-}
 
 //-----------------------------------------------------------------------------
 // Utilities for generating random floats

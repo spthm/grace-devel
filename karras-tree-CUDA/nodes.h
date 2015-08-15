@@ -54,12 +54,12 @@ public:
         nodes(4*(N_leaves-1)), leaves(N_leaves), heights(N_leaves-1),
         max_per_leaf(max_per_leaf)
     {
-       cudaMalloc(&root_index_ptr, sizeof(int));
+       GRACE_CUDA_CHECK( cudaMalloc(&root_index_ptr, sizeof(int)) );
     }
 
     ~Tree()
     {
-        cudaFree(root_index_ptr);
+        GRACE_CUDA_CHECK( cudaFree(root_index_ptr) );
     }
 };
 

@@ -7,6 +7,7 @@
 
 #include "morton.cuh"
 #include "sort.cuh"
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../ray.h"
 #include "../types.h"
@@ -112,6 +113,7 @@ GRACE_HOST void uniform_random_rays(
     // Initialize the Q-RNG states.
     gpu::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
                                                            seed);
+    GRACE_KERNEL_CHECK();
 
     thrust::device_vector<unsigned int> d_keys(N_rays);
     gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
@@ -120,6 +122,7 @@ GRACE_HOST void uniform_random_rays(
         thrust::raw_pointer_cast(d_rays.data()),
         thrust::raw_pointer_cast(d_keys.data()),
         N_rays);
+    GRACE_KERNEL_CHECK();
 
     cudaFree(d_prng_states);
 

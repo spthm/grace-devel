@@ -2,6 +2,7 @@
 
 #include <thrust/device_vector.h>
 
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../types.h"
 #include "../utils.cuh"
@@ -111,6 +112,7 @@ GRACE_HOST void morton_keys(
         thrust::raw_pointer_cast(d_points.data()),
         n_keys,
         scale);
+    GRACE_KERNEL_CHECK();
 }
 
 template <typename UInteger, typename Float4>
