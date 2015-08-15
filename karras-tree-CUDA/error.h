@@ -2,7 +2,7 @@
 
 #include "types.h"
 
-#include <cstdio>
+#include <iostream>
 
 // Wrap around all calls to CUDA functions to handle errors.
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
@@ -17,8 +17,10 @@ GRACE_HOST void cuda_error_check(
     bool terminate=true)
 {
     if (code != cudaSuccess) {
-        fprintf(stderr,"CUDA Error:\nMsg:  %s\nFile: %s @ line %d\n",
-                cudaGetErrorString(code), file, line);
+        std::cerr << "**** GRACE CUDA Error ****" << std::endl
+                  << "File:  " << file << std::endl
+                  << "Line:  " << line << std::endl
+                  << "Error: " << cudaGetErrorString(code) << std::endl;
 
         if (terminate)
             exit(code);
