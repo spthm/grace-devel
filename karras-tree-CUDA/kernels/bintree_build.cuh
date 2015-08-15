@@ -17,6 +17,7 @@
 #include <thrust/sequence.h>
 #include <thrust/swap.h>
 
+#include "../error.h"
 #include "../device/loadstore.cuh"
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -853,6 +854,7 @@ GRACE_HOST void compute_deltas(
         thrust::raw_pointer_cast(d_keys.data()),
         d_keys.size(),
         thrust::raw_pointer_cast(d_deltas.data()));
+    GRACE_KERNEL_CHECK();
 }
 
 template<typename KeyType, typename DeltaType>
@@ -870,6 +872,7 @@ GRACE_HOST void compute_leaf_deltas(
         thrust::raw_pointer_cast(d_keys.data()),
         d_keys.size(),
         thrust::raw_pointer_cast(d_deltas.data()));
+    GRACE_KERNEL_CHECK();
 }
 
 template <typename DeltaType>
@@ -893,6 +896,7 @@ GRACE_HOST void build_leaves(
         n_nodes,
         thrust::raw_pointer_cast(d_deltas.data()),
         max_per_leaf);
+    GRACE_KERNEL_CHECK();
 
     blocks = min(grace::MAX_BLOCKS,
                  (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -903,6 +907,7 @@ GRACE_HOST void build_leaves(
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
         max_per_leaf);
+    GRACE_KERNEL_CHECK();
 }
 
 GRACE_HOST void remove_empty_leaves(Tree& d_tree)
@@ -980,6 +985,7 @@ GRACE_HOST void build_nodes(
             thrust::raw_pointer_cast(d_deltas.data()),
             d_tree.max_per_leaf, // This can actually be anything.
             d_out_ptr);
+        GRACE_KERNEL_CHECK();
 
         blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -989,12 +995,14 @@ GRACE_HOST void build_nodes(
             n_nodes,
             d_tree.max_per_leaf,
             d_out_ptr);
+        GRACE_KERNEL_CHECK();
 
         gpu::fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             thrust::raw_pointer_cast(d_tree.leaves.data()),
             d_in_ptr);
+        GRACE_KERNEL_CHECK();
 
         QIter end = thrust::remove(out_q_begin, out_q_end, -1);
         out_q_end = end;

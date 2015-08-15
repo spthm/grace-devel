@@ -1,7 +1,7 @@
 #pragma once
 
+#include "../error.h"
 #include "../types.h"
-#include "../utils.cuh"
 
 // moderngpu/include must be in the INC path
 #include "kernels/segmentedsort.cuh"
@@ -216,7 +216,7 @@ MGPU_HOST void SegSortPairsFromIndices(
             (1 & numPasses) ? valsDest : valsSource,
             support.ranges_global,
             comp);
-    CUDA_HANDLE_ERR(cudaPeekAtLastError());
+    GRACE_CUDA_CHECK(cudaPeekAtLastError());
     MGPU_SYNC_CHECK("KernelSegBlocksortIndices");
 
     if(1 & numPasses) {
@@ -239,7 +239,7 @@ GRACE_HOST void sort_by_distance(
 {
     // MGPU calls require a context.
     int device_ID = 0;
-    cudaGetDevice(&device_ID);
+    GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
     mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
 
     // d_sort_map will be used to reorder the input vectors.

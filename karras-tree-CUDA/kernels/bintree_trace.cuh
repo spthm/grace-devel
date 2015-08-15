@@ -13,6 +13,7 @@
 #include <thrust/transform.h>
 
 #include "../device/intrinsics.cuh"
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
@@ -591,18 +592,29 @@ GRACE_HOST void trace_hitcounts(
                      (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
                              / grace::TRACE_THREADS_PER_BLOCK));
 
-#ifdef GRACE_NODES_TEX
-    cudaBindTexture(0, nodes_tex,
-                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
-                    d_tree.nodes.size()*sizeof(float4));
-    cudaBindTexture(0, leaves_tex,
-                    thrust::raw_pointer_cast(d_tree.leaves.data()),
-                    d_tree.leaves.size()*sizeof(int4));
+#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+    cudaError_t cuerr;
 #endif
+
+#ifdef GRACE_NODES_TEX
+    cuerr = cudaBindTexture(
+        0, nodes_tex,
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        d_tree.nodes.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
+
+    cuerr = cudaBindTexture(
+        0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.leaves.size()*sizeof(int4));
+    GRACE_CUDA_CHECK(cuerr);
+#endif
+
 #ifdef GRACE_SPHERES_TEX
-    cudaBindTexture(0, spheres_tex,
-                    thrust::raw_pointer_cast(d_spheres.data()),
-                    d_spheres.size()*sizeof(float4));
+    cuerr = cudaBindTexture(
+        0, spheres_tex,
+        thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
 #endif
 
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
@@ -620,16 +632,14 @@ GRACE_HOST void trace_hitcounts(
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size(),
         d_tree.max_per_leaf);
-
-    CUDA_HANDLE_ERR(cudaPeekAtLastError());
-    CUDA_HANDLE_ERR(cudaDeviceSynchronize());
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
-    cudaUnbindTexture(nodes_tex);
-    cudaUnbindTexture(leaves_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
 #ifdef GRACE_SPHERES_TEX
-    cudaUnbindTexture(spheres_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
 #endif
 }
 
@@ -656,18 +666,29 @@ GRACE_HOST void trace_property(
                      (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
                              / grace::TRACE_THREADS_PER_BLOCK));
 
-#ifdef GRACE_NODES_TEX
-    cudaBindTexture(0, nodes_tex,
-                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
-                    d_tree.nodes.size()*sizeof(float4));
-    cudaBindTexture(0, leaves_tex,
-                    thrust::raw_pointer_cast(d_tree.leaves.data()),
-                    d_tree.leaves.size()*sizeof(int4));
+#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+    cudaError_t cuerr;
 #endif
+
+#ifdef GRACE_NODES_TEX
+    cuerr = cudaBindTexture(
+        0, nodes_tex,
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        d_tree.nodes.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
+
+    cuerr = cudaBindTexture(
+        0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.leaves.size()*sizeof(int4));
+    GRACE_CUDA_CHECK(cuerr);
+#endif
+
 #ifdef GRACE_SPHERES_TEX
-    cudaBindTexture(0, spheres_tex,
-                    thrust::raw_pointer_cast(d_spheres.data()),
-                    d_spheres.size()*sizeof(float4));
+    cuerr = cudaBindTexture(
+        0, spheres_tex,
+        thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
 #endif
 
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
@@ -687,13 +708,14 @@ GRACE_HOST void trace_property(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
-    cudaUnbindTexture(nodes_tex);
-    cudaUnbindTexture(leaves_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
 #ifdef GRACE_SPHERES_TEX
-    cudaUnbindTexture(spheres_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
 #endif
 }
 
@@ -744,18 +766,29 @@ GRACE_HOST void trace(
                      (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
                              / grace::TRACE_THREADS_PER_BLOCK));
 
-#ifdef GRACE_NODES_TEX
-    cudaBindTexture(0, nodes_tex,
-                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
-                    d_tree.nodes.size()*sizeof(float4));
-    cudaBindTexture(0, leaves_tex,
-                    thrust::raw_pointer_cast(d_tree.leaves.data()),
-                    d_tree.leaves.size()*sizeof(int4));
+#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+    cudaError_t cuerr;
 #endif
+
+#ifdef GRACE_NODES_TEX
+    cuerr = cudaBindTexture(
+        0, nodes_tex,
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        d_tree.nodes.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
+
+    cuerr = cudaBindTexture(
+        0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.leaves.size()*sizeof(int4));
+    GRACE_CUDA_CHECK(cuerr);
+#endif
+
 #ifdef GRACE_SPHERES_TEX
-    cudaBindTexture(0, spheres_tex,
-                    thrust::raw_pointer_cast(d_spheres.data()),
-                    d_spheres.size()*sizeof(float4));
+    cuerr = cudaBindTexture(
+        0, spheres_tex,
+        thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
 #endif
 
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
@@ -778,13 +811,14 @@ GRACE_HOST void trace(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
-    cudaUnbindTexture(nodes_tex);
-    cudaUnbindTexture(leaves_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
 #ifdef GRACE_SPHERES_TEX
-    cudaUnbindTexture(spheres_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
 #endif
 }
 
@@ -852,18 +886,29 @@ GRACE_HOST void trace_with_sentinels(
                      (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
                              / grace::TRACE_THREADS_PER_BLOCK));
 
-#ifdef GRACE_NODES_TEX
-    cudaBindTexture(0, nodes_tex,
-                    reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
-                    d_tree.nodes.size()*sizeof(float4));
-    cudaBindTexture(0, leaves_tex,
-                    thrust::raw_pointer_cast(d_tree.leaves.data()),
-                    d_tree.leaves.size()*sizeof(int4));
+#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+    cudaError_t cuerr;
 #endif
+
+#ifdef GRACE_NODES_TEX
+    cuerr = cudaBindTexture(
+        0, nodes_tex,
+        reinterpret_cast<const float4*>(thrust::raw_pointer_cast(d_tree.nodes.data())),
+        d_tree.nodes.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
+
+    cuerr = cudaBindTexture(
+        0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
+        d_tree.leaves.size()*sizeof(int4));
+    GRACE_CUDA_CHECK(cuerr);
+#endif
+
 #ifdef GRACE_SPHERES_TEX
-    cudaBindTexture(0, spheres_tex,
-                    thrust::raw_pointer_cast(d_spheres.data()),
-                    d_spheres.size()*sizeof(float4));
+    cuerr = cudaBindTexture(
+        0, spheres_tex,
+        thrust::raw_pointer_cast(d_spheres.data()),
+        d_spheres.size()*sizeof(float4));
+    GRACE_CUDA_CHECK(cuerr);
 #endif
 
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
@@ -886,13 +931,14 @@ GRACE_HOST void trace_with_sentinels(
         d_tree.max_per_leaf,
         thrust::raw_pointer_cast(d_in_data.data()),
         thrust::raw_pointer_cast(d_lookup.data()));
+    GRACE_KERNEL_CHECK();
 
 #ifdef GRACE_NODES_TEX
-    cudaUnbindTexture(nodes_tex);
-    cudaUnbindTexture(leaves_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
 #ifdef GRACE_SPHERES_TEX
-    cudaUnbindTexture(spheres_tex);
+    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
 #endif
 }
 

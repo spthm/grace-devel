@@ -7,6 +7,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
+#include "../error.h"
 #include "../kernels/gen_rays.cuh"
 #include "../ray.h"
 
@@ -111,6 +112,7 @@ int main(int argc, char* argv[]) {
         thrust::raw_pointer_cast(d_Y.data()),
         thrust::raw_pointer_cast(d_Z.data()),
         N_rays);
+    GRACE_KERNEL_CHECK();
 
     Real X_sum = thrust::reduce(d_X.begin(), d_X.end(), 0.);
     Real Y_sum = thrust::reduce(d_Y.begin(), d_Y.end(), 0.);
@@ -152,6 +154,7 @@ int main(int argc, char* argv[]) {
             j_start,
             N_pairs,
             write_offset);
+        GRACE_KERNEL_CHECK();
 
         write_offset += N_pairs;
     }
