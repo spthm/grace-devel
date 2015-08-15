@@ -1,3 +1,9 @@
+#pragma once
+
+#include "types.h"
+
+#include <cstdio>
+
 // Wrap around all calls to CUDA functions to handle errors.
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
 #define GRACE_KERNEL_CHECK() { grace::cuda_kernel_check(__FILE__, __LINE__); }

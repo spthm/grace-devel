@@ -87,6 +87,8 @@ GRACE_HOST void uniform_random_rays(
     const Float length,
     const unsigned long long seed = 1234)
 {
+    cudaError_t cuerr;
+
     size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, oz, length);
 
@@ -97,8 +99,8 @@ GRACE_HOST void uniform_random_rays(
     // (significant) correlation effects.
     int device_ID, N_SMs;
     cudaDeviceProp prop;
-    cudaGetDevice(&device_ID);
-    cudaGetDeviceProperties(&prop, device_ID);
+    GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
+    GRACE_CUDA_CHECK(cudaGetDeviceProperties(&prop, device_ID));
     N_SMs = prop.multiProcessorCount;
 
     int num_blocks =
@@ -107,8 +109,10 @@ GRACE_HOST void uniform_random_rays(
 
     // Allocate space for Q-RNG states and the three direction vectors.
     curandState *d_prng_states;
-    cudaMalloc((void**)&d_prng_states,
-               num_blocks * RAYS_THREADS_PER_BLOCK * sizeof(curandState));
+    cuerr = cudaMalloc(
+        (void**)&d_prng_states,
+        num_blocks * RAYS_THREADS_PER_BLOCK * sizeof(curandState));
+    GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the Q-RNG states.
     gpu::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
@@ -124,7 +128,7 @@ GRACE_HOST void uniform_random_rays(
         N_rays);
     GRACE_KERNEL_CHECK();
 
-    cudaFree(d_prng_states);
+    GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
 }

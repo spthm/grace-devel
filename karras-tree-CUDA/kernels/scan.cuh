@@ -811,9 +811,9 @@ MGPU_HOST void SegScanApply(
     // Also save the current state so it can be reset later.
     // On a GTX 670, this seems to give slightly worse results for T = double.
     // cudaSharedMemConfig pConfig;
-    // cudaDeviceGetSharedMemConfig(&pConfig);
+    // GRACE_CUDA_CHECK(cudaDeviceGetSharedMemConfig(&pConfig));
     // if (sizeof(T) > sizeof(int))
-    //     cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte);
+    //     GRACE_CUDA_CHECK(cudaDeviceSetSharedMemConfig(cudaSharedMemBankSizeEightByte));
 
     MGPU_MEM(T) carryOutDevice = context.Malloc<T>(preprocess.numBlocks);
     KernelSegScanApply<Tuning>
@@ -835,7 +835,7 @@ MGPU_HOST void SegScanApply(
                  carryOutDevice->get(), identity, op, context);
 
     // Reset the bank-size to its original state.
-    // cudaDeviceSetSharedMemConfig(pConfig);
+    // GRACE_CUDA_CHECK(cudaDeviceSetSharedMemConfig(pConfig));
 }
 
 template <typename Real>
@@ -846,7 +846,7 @@ GRACE_HOST void exclusive_segmented_scan(
 {
     // MGPU calls require a context.
     int device_ID = 0;
-    cudaGetDevice(&device_ID);
+    GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
     mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
 
     std::auto_ptr<grace::SegScanPreprocessData> pp_data_ptr;

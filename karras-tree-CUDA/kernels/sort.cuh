@@ -239,7 +239,7 @@ GRACE_HOST void sort_by_distance(
 {
     // MGPU calls require a context.
     int device_ID = 0;
-    cudaGetDevice(&device_ID);
+    GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
     mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
 
     // d_sort_map will be used to reorder the input vectors.

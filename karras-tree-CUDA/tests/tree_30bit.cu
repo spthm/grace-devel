@@ -9,6 +9,7 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
+#include "../error.h"
 #include "../nodes.h"
 #include "../utils.cuh"
 #include "../kernels/morton.cuh"
@@ -169,8 +170,9 @@ int main(int argc, char* argv[]) {
     h_tree.nodes = d_tree.nodes;
     h_tree.heights = d_tree.heights;
     h_tree.leaves = d_tree.leaves;
-    cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
-               sizeof(int), cudaMemcpyDeviceToHost);
+    cudaError_t cuerr = cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
+                                   sizeof(int), cudaMemcpyDeviceToHost);
+    GRACE_CUDA_CHECK(cuerr);
 
     // Copy AABBs into a more output-friendly format.
     // AABB[2*i+0] = (bx, by, bz) of the ith node.
