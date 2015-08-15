@@ -27,8 +27,6 @@ DEPS= Makefile $(wildcard ../kernels/*.cuh) $(wildcard ../*.cuh) $(wildcard ../*
 
 UNIT_TEST_BIN= bit_prefix_32bit.out \
 	bit_prefix_64bit.out \
-	common_prefix_32bit.out \
-	common_prefix_64bit.out \
 	morton_30bit.out \
 	morton_63bit.out \
 	morton_kernel_30bit.out \
@@ -39,7 +37,6 @@ TEST_BIN= benchmarksegscan.out \
 	sort_by_distance.out \
 	trace_gadget_hproj.out \
 	trace_hproj.out \
-	tree_trace.out \
 	uniform_rays_ripleyk.out \
 	uniform_rays_stats.out
 TEST_BIN:= $(addprefix $(OUT_DIR)/,$(TEST_BIN))
@@ -84,7 +81,6 @@ $(OUT_DIR):
 .PHONY: clean
 
 clean:
-	-rm -r $(OUT_DIR)/*.out
 	-rm *.o
 
 distclean: clean
