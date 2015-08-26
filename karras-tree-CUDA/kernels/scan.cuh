@@ -60,8 +60,6 @@
 #include "device/loadstore.cuh"
 #include "kernels/segreducecsr.cuh"
 
-#include <assert.h>
-
 namespace grace {
 
 template<int NT_, int VT_, int OCC_, bool HalfCapacity_, bool LdgTranspose_>
@@ -97,7 +95,7 @@ MGPU_DEVICE void DeviceThreadToGlobalHalfCapacity(
     bool sync)
 {
     // The below assumes that Capacity = NV/2 is a multiple of VT!
-    assert(NT*VT % 2 == 0);
+    GRACE_ASSERT(NT*VT % 2 == 0);
 
     // Write the first half of the block's NV/2 values.
     if ((tid + 1) * VT <= Capacity) {

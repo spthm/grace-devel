@@ -2,6 +2,10 @@
 
 #include <stdint.h>
 
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+#error: GRACE does not support devices of compute capability < 2.0.
+#endif
+
 #ifdef __CUDACC__
     #define GRACE_HOST __host__ inline
     #define GRACE_DEVICE __device__ inline

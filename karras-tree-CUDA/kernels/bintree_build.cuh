@@ -1,12 +1,5 @@
 #pragma once
 
-#include <assert.h>
-// assert() is only supported for devices of compute capability 2.0 and higher.
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
-#undef assert
-#define assert(arg)
-#endif
-
 // CUDA math constants.
 #include <math_constants.h>
 
@@ -119,8 +112,8 @@ GRACE_DEVICE float node_delta(
 
 //     float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
 
-//     assert(SA < CUDART_INF_F);
-//     assert(SA > 0);
+//     GRACE_ASSERT(SA < CUDART_INF_F);
+//     GRACE_ASSERT(SA > 0);
 
 //     return SA;
 // }
@@ -246,10 +239,10 @@ __global__ void build_leaves_kernel(
             // Travel up the tree.  The second thread to reach a node writes its
             // left or right end to its parent.  The first exits the loop.
             __threadfence_block();
-            assert(parent_index - low >= 0);
-            assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
+            GRACE_ASSERT(parent_index - low >= 0);
+            GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
             unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-            assert(flag < 2);
+            GRACE_ASSERT(flag < 2);
             bool first_arrival = (flag == 0);
 
             while (!first_arrival)
@@ -265,10 +258,10 @@ __global__ void build_leaves_kernel(
 
                 // Only the left-most leaf can have an index of 0, and only the
                 // right-most leaf can have an index of n_leaves - 1.
-                assert(left >= 0);
-                assert(left < n_leaves - 1);
-                assert(right > 0);
-                assert(right < n_leaves);
+                GRACE_ASSERT(left >= 0);
+                GRACE_ASSERT(left < n_leaves - 1);
+                GRACE_ASSERT(right > 0);
+                GRACE_ASSERT(right < n_leaves);
 
                 int size = right - left + 1;
                 if (size > max_per_leaf) {
@@ -310,10 +303,10 @@ __global__ void build_leaves_kernel(
                 store_s32(addr, end);
 
                 __threadfence_block();
-                assert(parent_index - low >= 0);
-                assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
+                GRACE_ASSERT(parent_index - low >= 0);
+                GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
                 unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-                assert(flag < 2);
+                GRACE_ASSERT(flag < 2);
                 first_arrival = (flag == 0);
             } // while (!first_arrival)
         } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
@@ -453,7 +446,7 @@ __global__ void build_nodes_slice_kernel(
             int g_parent_index;
 
             // Node index can be >= n_nodes if a leaf.
-            assert(g_cur_index < n_nodes + n_leaves);
+            GRACE_ASSERT(g_cur_index < n_nodes + n_leaves);
 
             int4 node;
             if (g_cur_index < n_nodes)
@@ -501,9 +494,9 @@ __global__ void build_nodes_slice_kernel(
             }
 
             // Note, they should never be equal.
-            assert(x_min < x_max);
-            assert(y_min < y_max);
-            assert(z_min < z_max);
+            GRACE_ASSERT(x_min < x_max);
+            GRACE_ASSERT(y_min < y_max);
+            GRACE_ASSERT(z_min < z_max);
 
             // Recall that leaf left/right limits are equal to the leaf index,
             // minus the leaf-identifying offset.
@@ -515,16 +508,16 @@ __global__ void build_nodes_slice_kernel(
             // Only the left-most leaf can have an index of 0, and only the
             // right-most leaf can have an index of n_leaves - 1.
             if (g_cur_index < n_nodes) {
-                assert(g_left >= 0);
-                assert(g_left < n_leaves - 1);
-                assert(g_right > 0);
-                assert(g_right < n_leaves);
+                GRACE_ASSERT(g_left >= 0);
+                GRACE_ASSERT(g_left < n_leaves - 1);
+                GRACE_ASSERT(g_right > 0);
+                GRACE_ASSERT(g_right < n_leaves);
             }
             else {
-                assert(g_left >= 0);
-                assert(g_left < n_leaves);
-                assert(g_right >= 0);
-                assert(g_right < n_leaves);
+                GRACE_ASSERT(g_left >= 0);
+                GRACE_ASSERT(g_left < n_leaves);
+                GRACE_ASSERT(g_right >= 0);
+                GRACE_ASSERT(g_right < n_leaves);
             }
 
             int left = cur_index;
@@ -588,8 +581,8 @@ __global__ void build_nodes_slice_kernel(
 
             // Parent index must be at a valid location for writing to sm_nodes
             // and the SMEM flags.
-            assert(parent_index - low >= 0);
-            assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
+            GRACE_ASSERT(parent_index - low >= 0);
+            GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
 
             // Normal stores.  Other threads in this block can read from L1 if
             // they get a cache hit, i.e. there is no requirement for global
@@ -605,7 +598,7 @@ __global__ void build_nodes_slice_kernel(
             // exits the loop.
             __threadfence_block();
             unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-            assert(flag < 2);
+            GRACE_ASSERT(flag < 2);
             bool first_arrival = (flag == 0);
 
             while (!first_arrival)
@@ -613,8 +606,8 @@ __global__ void build_nodes_slice_kernel(
                 cur_index = parent_index;
                 g_cur_index = g_parent_index;
 
-                assert(cur_index < n_base_nodes);
-                assert(g_cur_index < n_nodes);
+                GRACE_ASSERT(cur_index < n_base_nodes);
+                GRACE_ASSERT(g_cur_index < n_nodes);
 
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
@@ -627,10 +620,10 @@ __global__ void build_nodes_slice_kernel(
                 // int g_right = left_right.y;
                 int g_left = sm_nodes[cur_index - low].x;
                 int g_right = sm_nodes[cur_index - low].y;
-                assert(g_left >= 0);
-                assert(g_left < n_leaves - 1);
-                assert(g_right > 0);
-                assert(g_right < n_leaves);
+                GRACE_ASSERT(g_left >= 0);
+                GRACE_ASSERT(g_left < n_leaves - 1);
+                GRACE_ASSERT(g_right > 0);
+                GRACE_ASSERT(g_right < n_leaves);
 
                 // Undo the -ve sign encoding.
                 int left = -1 * node.z - 1;
@@ -638,10 +631,10 @@ __global__ void build_nodes_slice_kernel(
                 // We are the second thread in this block to reach this node.
                 // Both of its logical/compressed end-indices must also be in
                 // this block.
-                assert(left >= low);
-                assert(left < high - 1);
-                assert(right > low);
-                assert(right < high);
+                GRACE_ASSERT(left >= low);
+                GRACE_ASSERT(left < high - 1);
+                GRACE_ASSERT(right > low);
+                GRACE_ASSERT(right < high);
 
                 // Even if this is true, the following compacted/logical size
                 // test can be false.
@@ -668,9 +661,9 @@ __global__ void build_nodes_slice_kernel(
                 float z_min = min(AABB_LR.x, AABB_LR.z);
                 float z_max = max(AABB_LR.y, AABB_LR.w);
 
-                assert(x_min < x_max);
-                assert(y_min < y_max);
-                assert(z_min < z_max);
+                GRACE_ASSERT(x_min < x_max);
+                GRACE_ASSERT(y_min < y_max);
+                GRACE_ASSERT(z_min < z_max);
 
                 DeltaType delta_L = deltas[g_left - 1];
                 DeltaType delta_R = deltas[g_right];
@@ -731,10 +724,10 @@ __global__ void build_nodes_slice_kernel(
                 *sm_addr = sm_end;
 
                 __threadfence_block();
-                assert(parent_index - low >= 0);
-                assert(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
+                GRACE_ASSERT(parent_index - low >= 0);
+                GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
                 unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-                assert(flag < 2);
+                GRACE_ASSERT(flag < 2);
                 first_arrival = (flag == 0);
             } // while (!first_arrival)
         } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_node)
@@ -770,7 +763,7 @@ __global__ void fill_output_queue(
             // Only one child was written; it must be placed in the output queue
             // at a *unique* location.
             int index = left_written ? left : right;
-            assert(new_base_indices[index] == -1);
+            GRACE_ASSERT(new_base_indices[index] == -1);
             new_base_indices[index] = left_written ? node.x : node.y;
         }
         else if (left_written) {
@@ -781,7 +774,7 @@ __global__ void fill_output_queue(
             // Again, the location we write to must be unique.
             int size = right - left + 1;
             if (size > max_per_node) {
-                assert(new_base_indices[left] == -1);
+                GRACE_ASSERT(new_base_indices[left] == -1);
                 new_base_indices[left] = tid;
             }
         }
@@ -821,11 +814,11 @@ __global__ void fix_node_ranges(
             right = index < n_nodes ? nodes[4 * index + 0].w : index - n_nodes;
 
             // Only the left-most leaf can have index 0.
-            assert(left >= 0);
-            assert(left < n_nodes);
-            assert(right > 0);
+            GRACE_ASSERT(left >= 0);
+            GRACE_ASSERT(left < n_nodes);
+            GRACE_ASSERT(right > 0);
             // Only the right-most leaf can have index n_leaves - 1 == n_nodes.
-            assert(right <= n_nodes);
+            GRACE_ASSERT(right <= n_nodes);
 
             node.z = left;
             node.w = right;
@@ -847,7 +840,7 @@ GRACE_HOST void compute_deltas(
     const thrust::device_vector<KeyType>& d_keys,
     thrust::device_vector<DeltaType>& d_deltas)
 {
-    assert(d_keys.size() + 1 == d_deltas.size());
+    GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
 
     int blocks = min(grace::MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
     gpu::compute_deltas_kernel<<<blocks, 512>>>(
@@ -863,7 +856,7 @@ GRACE_HOST void compute_leaf_deltas(
     const thrust::device_vector<KeyType>& d_keys,
     thrust::device_vector<DeltaType>& d_deltas)
 {
-    assert(d_leaves.size() + 1 == d_deltas.size());
+    GRACE_ASSERT(d_leaves.size() + 1 == d_deltas.size());
 
     int blocks = min(grace::MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
     gpu::compute_leaf_deltas_kernel<<<blocks, 512>>>(
@@ -1028,7 +1021,7 @@ GRACE_HOST void build_tree(
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
 
     // In case this ever changes.
-    assert(sizeof(int4) == sizeof(float4));
+    GRACE_ASSERT(sizeof(int4) == sizeof(float4));
 
     if (wipe) {
         int4 empty = make_int4(0, 0, 0, 0);
