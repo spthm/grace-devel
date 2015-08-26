@@ -1,12 +1,5 @@
 #pragma once
 
-#include <assert.h>
-// assert() is only supported for devices of compute capability 2.0 and higher.
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
-#undef assert
-#define assert(arg)
-#endif
-
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -224,7 +217,7 @@ __global__ void trace_hitcounts_kernel(
             // signed >= 0. This is also our stack-empty check.
             while (*stack_ptr < n_nodes && *stack_ptr >= 0)
             {
-                assert(4*(*stack_ptr) + 3 < 4*n_nodes);
+                GRACE_ASSERT(4*(*stack_ptr) + 3 < 4*n_nodes);
 
                 // Pop stack.
                 // If we immediately do a reinterpret_cast, the compiler states:
@@ -238,12 +231,12 @@ __global__ void trace_hitcounts_kernel(
 
                 // A left child can be nodes[0].
                 // A right child cannot be nodes[0].
-                assert(node.x >= 0);
-                assert(node.y > 0);
+                GRACE_ASSERT(node.x >= 0);
+                GRACE_ASSERT(node.y > 0);
                 // Similarly for the last nodes, noting leaf indices are offset
                 // by += n_nodes.
-                assert(node.x < 2 * n_nodes);
-                assert(node.y <= 2 * n_nodes);
+                GRACE_ASSERT(node.x < 2 * n_nodes);
+                GRACE_ASSERT(node.y <= 2 * n_nodes);
 
                 int lr_hit = AABBs_hit(invd, origin, ray.length,
                                        AABB_L, AABB_R, AABB_LR);
@@ -261,7 +254,7 @@ __global__ void trace_hitcounts_kernel(
                     *stack_ptr = node.x;
                 }
 
-                assert(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1));
+                GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1));
 
             }
 
@@ -269,11 +262,11 @@ __global__ void trace_hitcounts_kernel(
             {
                 // Pop stack.
                 int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
-                assert(((*stack_ptr)-n_nodes) < n_nodes+1);
+                GRACE_ASSERT(((*stack_ptr)-n_nodes) < n_nodes+1);
                 stack_ptr--;
-                assert(node.x >= 0);
-                assert(node.y > 0);
-                assert(node.x+node.y-1 < n_spheres);
+                GRACE_ASSERT(node.x >= 0);
+                GRACE_ASSERT(node.y > 0);
+                GRACE_ASSERT(node.x+node.y-1 < n_spheres);
 
                 // Cache spheres in the leaf to shared memory. Coalesced.
                 // For max_per_leaf == WARP_SIZE, it is quicker to read more
@@ -428,7 +421,7 @@ __global__ void trace_property_kernel(
                             + b_integrals[b_index];
                         // Re-scale integral (since we used a normalized b).
                         kernel_fac *= (ir*ir);
-                        assert(kernel_fac >= 0);
+                        GRACE_ASSERT(kernel_fac >= 0);
                         out += (Tout) (kernel_fac * p_data[node.x+i]);
                     }
                 }
@@ -557,8 +550,8 @@ __global__ void trace_kernel(
                             * (b - b_index)
                             + b_integrals[b_index];
                         kernel_fac *= (ir*ir);
-                        assert(kernel_fac >= 0);
-                        assert(dist >= 0);
+                        GRACE_ASSERT(kernel_fac >= 0);
+                        GRACE_ASSERT(dist >= 0);
                         out_data[out_index] =
                             (Tout) (kernel_fac * p_data[node.x+i]);
                         hit_indices[out_index] = node.x+i;

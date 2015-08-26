@@ -2,11 +2,18 @@
 
 #include "types.h"
 
+#include <cassert>
 #include <iostream>
 
 // Wrap around all calls to CUDA functions to handle errors.
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
 #define GRACE_KERNEL_CHECK() { grace::cuda_kernel_check(__FILE__, __LINE__); }
+
+#ifdef GRACE_DEBUG
+#define GRACE_ASSERT(predicate) { assert(predicate); }
+#else
+#define GRACE_ASSERT(ignore)
+#endif
 
 namespace grace {
 
