@@ -1,5 +1,9 @@
 #pragma once
 
+#include <sstream>
+#include <stdexcept>
+#include <string>
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -581,6 +585,15 @@ GRACE_HOST void trace_hitcounts(
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
 
+    if (n_rays % grace::WARP_SIZE != 0) {
+        std::stringstream msg_stream;
+        msg_stream << "Number of rays must be a multiple of the warp size ("
+                   << grace::WARP_SIZE << ").";
+        const std::string msg = msg_stream.str();
+
+        throw std::invalid_argument(msg);
+    }
+
     int blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
                              / grace::TRACE_THREADS_PER_BLOCK));
@@ -646,6 +659,15 @@ GRACE_HOST void trace_property(
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
+
+    if (n_rays % grace::WARP_SIZE != 0) {
+        std::stringstream msg_stream;
+        msg_stream << "Number of rays must be a multiple of the warp size ("
+                   << grace::WARP_SIZE << ").";
+        const std::string msg = msg_stream.str();
+
+        throw std::invalid_argument(msg);
+    }
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
@@ -727,6 +749,15 @@ GRACE_HOST void trace(
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
+
+    if (n_rays % grace::WARP_SIZE != 0) {
+        std::stringstream msg_stream;
+        msg_stream << "Number of rays must be a multiple of the warp size ("
+                   << grace::WARP_SIZE << ").";
+        const std::string msg = msg_stream.str();
+
+        throw std::invalid_argument(msg);
+    }
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
     trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
@@ -832,6 +863,15 @@ GRACE_HOST void trace_with_sentinels(
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
+
+    if (n_rays % grace::WARP_SIZE != 0) {
+        std::stringstream msg_stream;
+        msg_stream << "Number of rays must be a multiple of the warp size ("
+                   << grace::WARP_SIZE << ").";
+        const std::string msg = msg_stream.str();
+
+        throw std::invalid_argument(msg);
+    }
 
     // Here, d_ray_offsets is actually per-ray *hit counts*.
     trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);

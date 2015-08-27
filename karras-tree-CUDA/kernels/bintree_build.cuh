@@ -3,6 +3,9 @@
 // CUDA math constants.
 #include <math_constants.h>
 
+#include <stdexcept>
+#include <string>
+
 #include <thrust/fill.h>
 #include <thrust/functional.h>
 #include <thrust/device_vector.h>
@@ -878,6 +881,11 @@ GRACE_HOST void build_leaves(
     const size_t n_leaves = d_tmp_leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
+    if (n_leaves <= max_per_leaf) {
+        const std::string msg
+            = "max_per_leaf must be less than the total number of spheres.";
+        throw std::invalid_argument(msg);
+    }
 
     int blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
