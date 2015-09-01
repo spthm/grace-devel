@@ -241,7 +241,6 @@ int main(int argc, char* argv[]) {
 
             unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);
-            unused_bytes += d_tree.heights.size() * sizeof(unsigned int);
             // Ray keys, used when generating rays.
             unused_bytes += d_rays.size() * sizeof(unsigned int);
 

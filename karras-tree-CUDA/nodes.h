@@ -7,21 +7,13 @@
 
 namespace grace {
 
-/* -----------------------------------------------------------------------------
- * Nodes + Leaves -> Tree, then hierarchy + AABB -> nodes and indices -> leaves.
- * Then everything exept the unit tests, uniform_rays.cu, AABB_speed.cu and
- * zip_sort.cu needs fixing.
- * -----------------------------------------------------------------------------
- */
 class Tree
 {
 public:
-    // A 32-bit int allows for up to indices up to +2,147,483,647 > 1024^3.
+    // A 32-bit int allows for indices up to 2,147,483,647 > 1024^3.
     // Since we likely can't fit more than 1024^3 particles on the GPU, int ---
     // which is 32-bit on relevant platforms --- should be sufficient for the
-    // indices.
-    // We could use uint and set the root node to 1.  Then common_prefix_length
-    // may return 0 for out-of-range results, rather than -1.
+    // indices. In ALBVH there is no reason not to use uint, though.
     //
     // nodes[4*node_ID + 0].x: left child index
     //                     .y: right child index
@@ -40,9 +32,6 @@ public:
     //                     .z = right_bz
     //                     .w = right_tz
     thrust::device_vector<int4> nodes;
-    // Equal to the common prefix of the keys which this node spans.
-    // Currently used only when verifying correct construction.
-    thrust::device_vector<unsigned int> heights;
     // leaves[leaf_ID].x = index of first sphere in this leaf
     //                .y = number of spheres in this leaf
     //                .z = padding
@@ -69,7 +58,6 @@ class H_Tree
 {
 public:
     thrust::host_vector<int4> nodes;
-    thrust::host_vector<unsigned int> heights;
     thrust::host_vector<int4> leaves;
     int root_index;
     int max_per_leaf;

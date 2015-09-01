@@ -168,7 +168,6 @@ int main(int argc, char* argv[]) {
     grace::H_Tree h_tree(N_leaves);
 
     h_tree.nodes = d_tree.nodes;
-    h_tree.heights = d_tree.heights;
     h_tree.leaves = d_tree.leaves;
     cudaError_t cuerr = cudaMemcpy(&h_tree.root_index, d_tree.root_index_ptr,
                                    sizeof(int), cudaMemcpyDeviceToHost);
@@ -245,7 +244,6 @@ int main(int argc, char* argv[]) {
         outfile << std::endl;
         for (unsigned int i=0; i<N_leaves-1; i++) {
             outfile << "i:               " << i << std::endl;
-            outfile << "height           " << h_tree.heights[i] << std::endl;
             int4 node = h_tree.nodes[4*i];
             // Output the actual index into the leaf array for comparison
             // to the Python code.

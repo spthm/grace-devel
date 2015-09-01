@@ -221,7 +221,6 @@ int main(int argc, char* argv[]) {
 
             unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);
-            unused_bytes += d_tree.heights.size() * sizeof(unsigned int);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 
             std::cout << "Total memory for property trace kernel:    "
