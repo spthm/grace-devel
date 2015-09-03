@@ -4,8 +4,6 @@
 #include <stdexcept>
 #include <string>
 
-#include <cstddef>
-
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
 #include <thrust/sequence.h>
@@ -21,15 +19,15 @@
 #include "../types.h"
 
 #ifdef GRACE_NODES_TEX
-#define FETCH_NODE(nodes, i) tex1Dfetch(nodes##_tex, i)
+#define FETCH_NODE(array, i) tex1Dfetch(array##_tex, i)
 #else
-#define FETCH_NODE(nodes, i) nodes[i]
+#define FETCH_NODE(array, i) array[i]
 #endif
 
 #ifdef GRACE_PRIMITIVES_TEX
-#define FETCH_PRIMITIVE(primitives, i) tex1Dfetch(primitives##_tex, i)
+#define FETCH_PRIMITIVE(array, i) tex1Dfetch(array##_tex, i)
 #else
-#define FETCH_PRIMITIVE(primitives, i) primitives[i]
+#define FETCH_PRIMITIVE(array, i) array[i]
 #endif
 
 
@@ -84,32 +82,39 @@ template <typename Float>
     0.000000000000000E+000
     };
 
-template <typename Float4, typename Float>
-GRACE_HOST_DEVICE bool sphere_hit(
+
+namespace gpu {
+
+// Computations all happen with the precision of the type Real.
+template <typename Real4, typename Real>
+GRACE_DEVICE bool sphere_hit(
     const Ray& ray,
-    const Float4& sphere,
-    Float& b2,
-    Float& dot_p)
+    const Real4& sphere,
+    Real& b2,
+    Real& dot_p)
 {
-    float px = sphere.x - ray.ox;
-    float py = sphere.y - ray.oy;
-    float pz = sphere.z - ray.oz;
+    Real px = sphere.x - ray.ox;
+    Real py = sphere.y - ray.oy;
+    Real pz = sphere.z - ray.oz;
 
     // Already normalized.
-    float rx = ray.dx;
-    float ry = ray.dy;
-    float rz = ray.dz;
+    Real rx = ray.dx;
+    Real ry = ray.dy;
+    Real rz = ray.dz;
 
     // Distance to intersection.
-    dot_p = px*rx + py*ry + pz*rz;
+    dot_p = px * rx + py * ry + pz * rz;
+    // dot_p = fma(px, rx, fma(py, ry, pz * rz));
 
     // Impact parameter.
-    float bx = px - dot_p*rx;
-    float by = py - dot_p*ry;
-    float bz = pz - dot_p*rz;
-    b2 = bx*bx + by*by + bz*bz;
+    // negations mean -fma(a, b, -c) is not a clear win. Let the compiler decide.
+    Real bx = px - dot_p * rx;
+    Real by = py - dot_p * ry;
+    Real bz = pz - dot_p * rz;
+    b2 = bx * bx + by * by + bz * bz;
+    // b2 = fma(bx, bx, fma(by, by, bz * bz));
 
-    if (b2 >= sphere.w*sphere.w)
+    if (b2 >= sphere.w * sphere.w)
         return false;
 
     // If dot_p < 0, the ray origin must be inside the sphere for an
@@ -128,8 +133,6 @@ GRACE_HOST_DEVICE bool sphere_hit(
     //    ii) Ray ends inside sphere, beyond point of closest approach.
     return true;
 }
-
-namespace gpu {
 
 GRACE_DEVICE int AABBs_hit(
     const float3 invd, const float3 origin, const float len,
@@ -160,7 +163,7 @@ GRACE_DEVICE int AABBs_hit(
     float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
                                minf_vmaxf(bz_R, tz_R, len) );
 
-    return (int)(tmax_L >= tmin_L) + 2*((int)(tmax_R >= tmin_R));
+    return (int)(tmax_R >= tmin_R) + 2*((int)(tmax_L >= tmin_L));
 }
 
 //-----------------------------------------------------------------------------
@@ -168,7 +171,7 @@ GRACE_DEVICE int AABBs_hit(
 //-----------------------------------------------------------------------------
 
 template <typename RayData,
-          typename TPrimitives,
+          typename TPrimitive,
           typename Init,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
@@ -179,7 +182,7 @@ __global__ void trace_kernel(
     const size_t n_nodes,
     const int4* leaves,
     const int* root_index,
-    const TPrimitive* prims, // Pointer to primitive spatial-data wrapper type
+    const TPrimitive* primitives, // Pointer to primitive spatial-data wrapper type
     const size_t n_primitives,
     const int max_per_leaf,
     const size_t user_smem_bytes, // User's SMEM allocation, in bytes.
@@ -200,18 +203,18 @@ __global__ void trace_kernel(
     const size_t prims_smem_count = max_per_leaf * N_warps;
 
     extern __shared__ char smem_trace[];
-    const UserSmemPtr sm_ptr_usr(smem, user_smem_bytes);
+    const UserSmemPtr<char> sm_ptr_usr(smem_trace, user_smem_bytes);
     init(sm_ptr_usr);
     __syncthreads();
 
     // Shared memory accesses must ensure correct alignment relative to the
     // access size.
-    char* sm_ptr = smem + user_smem_bytes;
-    int rem = sm_ptr % sizeof(TPrimitives);
+    char* sm_ptr = smem_trace + user_smem_bytes;
+    int rem = (uintptr_t)sm_ptr % sizeof(TPrimitive);
     if (rem != 0) {
-        sm_ptr += sizeof(TPrimitives) - rem;
+        sm_ptr += sizeof(TPrimitive) - rem;
     }
-    TPrimitives* sm_prims = reinterpret_cast<TPrimitives*>(sm_ptr);
+    TPrimitive* sm_prims = reinterpret_cast<TPrimitive*>(sm_ptr);
     int* sm_stacks = reinterpret_cast<int*>(&sm_prims[prims_smem_count]);
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
 
@@ -224,8 +227,8 @@ __global__ void trace_kernel(
     {
         // Ray must not be modified by user.
         const Ray ray = rays[ray_index];
-        RayAux ray_data;
-        ray_entry(ray_index, ray, ray_data);
+        RayData ray_data;
+        ray_entry(ray_index, ray, ray_data, sm_ptr_usr);
 
         float3 invd, origin;
         invd.x = 1.f / ray.dx;
@@ -260,24 +263,26 @@ __global__ void trace_kernel(
 
                 GRACE_ASSERT(node.x >= 0);
                 GRACE_ASSERT(node.y > 0);
-                // Recall that lead indices are offset by += n_nodes.
+                // Recall that leaf indices are offset by += n_nodes.
                 GRACE_ASSERT(node.x < 2 * n_nodes);
                 GRACE_ASSERT(node.y <= 2 * n_nodes);
 
-                int rl_hit = AABBs_hit(invd, origin, ray.length,
+                int lr_hit = AABBs_hit(invd, origin, ray.length,
                                        AABB_L, AABB_R, AABB_LR);
 
-                if (__any(rl_hit >= 2))
+                if (__any(lr_hit & 1u))
                 {
                     stack_ptr++;
                     *stack_ptr = node.y;
                 }
-                if (__any(rl_hit & 1u))
+                if (__any(lr_hit >= 2))
                 {
                     stack_ptr++;
                     *stack_ptr = node.x;
                 }
 
+                // FIXME: Produces compile-time warning.
+                // See http://stackoverflow.com/questions/1712713/
                 GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1) && "trace stack overflowed");
             }
 
@@ -285,9 +290,9 @@ __global__ void trace_kernel(
             {
                 // Pop stack.
                 int4 node = FETCH_NODE(leaves, (*stack_ptr)-n_nodes);
+                GRACE_ASSERT(((*stack_ptr) - n_nodes) < n_nodes + 1);
                 stack_ptr--;
 
-                GRACE_ASSERT(((*stack_ptr) - n_nodes) < n_nodes + 1);
                 GRACE_ASSERT(node.x >= 0);
                 GRACE_ASSERT(node.y > 0);
                 GRACE_ASSERT(node.x + node.y - 1 < n_primitives);
@@ -295,7 +300,7 @@ __global__ void trace_kernel(
                 for (int i = lane; i < node.y; i += grace::WARP_SIZE)
                 {
                     sm_prims[max_per_leaf * wid + i]
-                        = FETCH_PRIMITIVE(prims, node.x + i);
+                        = FETCH_PRIMITIVE(primitives, node.x + i);
                 }
 
                 for (int i = 0; i < node.y; ++i)
@@ -304,12 +309,12 @@ __global__ void trace_kernel(
                     if (intersect(ray, prim, ray_data, sm_ptr_usr))
                     {
                         on_hit(ray_index, ray, ray_data, node.x + i, prim,
-                               sm_ptr_usr, output);
+                               sm_ptr_usr);
                     }
                 }
             }
         }
-        ray_exit(ray_index, ray_data, output);
+        ray_exit(ray_index, ray, ray_data, sm_ptr_usr);
         ray_index += blockDim.x * gridDim.x;
     }
 }
@@ -356,20 +361,20 @@ GRACE_HOST void trace_hitcounts(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
-#ifdef GRACE_SPHERES_TEX
+#ifdef GRACE_PRIMITIVES_TEX
     cuerr = cudaBindTexture(
-        0, spheres_tex,
+        0, primitives_tex,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
     int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                         / grace::TRACE_THREADS_PER_BLOCK));
-    int blocks = min(grace::MAX_BLOCKS, blocks);             
+                         / grace::TRACE_THREADS_PER_BLOCK);
+    blocks = min(grace::MAX_BLOCKS, blocks);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
-    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+    const size_t sm_size = sizeof(Float4) * d_tree.max_per_leaf * N_warps
                            + sizeof(int) * grace::STACK_SIZE * N_warps;
-    typedef RayData_simple<int> RayData;
+    typedef RayData_datum<int> RayData;
     gpu::trace_kernel<RayData>
         <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
     (
@@ -384,11 +389,11 @@ GRACE_HOST void trace_hitcounts(
         d_spheres.size(),
         d_tree.max_per_leaf,
         0,
-        Init_null(),
-        Intersect_sphere_bool<RayData>(),
-        OnHit_increment<RayData>(),
-        RayEntry_simple<RayData>(),
-        RayExit_simple<RayData>(thrust::raw_pointer_cast(d_hit_counts.data()))
+        gpu::Init_null(),
+        gpu::Intersect_sphere_bool(),
+        gpu::OnHit_increment(),
+        gpu::RayEntry_zero(),
+        gpu::RayExit_to_array<int>(thrust::raw_pointer_cast(d_hit_counts.data()))
     );
     GRACE_KERNEL_CHECK();
 
@@ -396,12 +401,12 @@ GRACE_HOST void trace_hitcounts(
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
-#ifdef GRACE_SPHERES_TEX
-    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
+#ifdef GRACE_PRIMITIVES_TEX
+    GRACE_CUDA_CHECK(cudaUnbindTexture(primitives_tex));
 #endif
 }
 
-// FIXME: Can derive Float type using Real4ToRealMapper.
+// FIXME: Float no longer used. And can be derived using Real4ToRealMapper.
 template <typename Float, typename Tout, typename Float4, typename Tin>
 GRACE_HOST void trace_property(
     const thrust::device_vector<Ray>& d_rays,
@@ -430,7 +435,7 @@ GRACE_HOST void trace_property(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+#if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
 #endif
 
@@ -447,22 +452,23 @@ GRACE_HOST void trace_property(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
-#ifdef GRACE_SPHERES_TEX
+#ifdef GRACE_PRIMITIVES_TEX
     cuerr = cudaBindTexture(
-        0, spheres_tex,
+        0, primitives_tex,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
     int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                         / grace::TRACE_THREADS_PER_BLOCK));
-    int blocks = min(grace::MAX_BLOCKS, blocks);             
+                         / grace::TRACE_THREADS_PER_BLOCK);
+    blocks = min(grace::MAX_BLOCKS, blocks);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t sm_table_size = sizeof(double) * grace::N_table;
-    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+    const size_t sm_size = sizeof(Float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float4) - 1 // For alignment corrections.
                            + sizeof(int) * grace::STACK_SIZE * N_warps
                            + sm_table_size;
-    typedef RayData_sphere<Float, Float> RayData;
+    typedef RayData_sphere<Tout, Tout> RayData;
     // FIXME: Does not use d_in_data.
     gpu::trace_kernel<RayData>
         <<<blocks, grace::TRACE_THREADS_PER_BLOCK, sm_size>>>
@@ -478,19 +484,21 @@ GRACE_HOST void trace_property(
         d_spheres.size(),
         d_tree.max_per_leaf,
         sm_table_size,
-        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
-        Intersect_sphere_b2dist<RayData>(),
-        OnHit_sphere_cumulative<RayData>(grace::N_table),
-        RayEntry_simple<RayData>(),
-        RayExit_simple<RayData>(thrust::raw_pointer_cast(d_out_data.data()))
+        gpu::InitGlobalToSmem<double>(
+            thrust::raw_pointer_cast(d_lookup.data()),
+            grace::N_table),
+        gpu::Intersect_sphere_b2dist(),
+        gpu::OnHit_sphere_cumulative(grace::N_table),
+        gpu::RayEntry_zero(),
+        gpu::RayExit_to_array<Tout>(thrust::raw_pointer_cast(d_out_data.data()))
     );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
-#ifdef GRACE_SPHERES_TEX
-    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
+#ifdef GRACE_PRIMITIVES_TEX
+    GRACE_CUDA_CHECK(cudaUnbindTexture(primitives_tex));
 #endif
 }
 
@@ -547,7 +555,7 @@ GRACE_HOST void trace(
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+#if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
 #endif
 
@@ -564,20 +572,21 @@ GRACE_HOST void trace(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
-#ifdef GRACE_SPHERES_TEX
+#ifdef GRACE_PRIMITIVES_TEX
     cuerr = cudaBindTexture(
-        0, spheres_tex,
+        0, primitives_tex,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
     int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                         / grace::TRACE_THREADS_PER_BLOCK));
-    int blocks = min(grace::MAX_BLOCKS, blocks);             
+                         / grace::TRACE_THREADS_PER_BLOCK);
+    blocks = min(grace::MAX_BLOCKS, blocks);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t sm_table_size = sizeof(double) * grace::N_table;
-    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+    const size_t sm_size = sizeof(Float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float4) - 1 // For alignment corrections.
                            + sizeof(int) * grace::STACK_SIZE * N_warps
                            + sm_table_size;
     typedef RayData_sphere<int, Float> RayData;
@@ -596,22 +605,25 @@ GRACE_HOST void trace(
         d_spheres.size(),
         d_tree.max_per_leaf,
         sm_table_size,
-        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
-        Intersect_sphere_b2dist<RayData>(),
-        OnHit_sphere_individual(thrust::raw_pointer_cast(d_hit_indices.data()),
-                                thrust::raw_pointer_cast(d_out_data.data()),
-                                thrust::raw_pointer_cast(d_hit_distances.data()),
-                                grace::N_table),
-        RayEntry_individual<RayData>(thrust::raw_pointer_cast(d_ray_offsets.data())),
-        RayExit_null()
+        gpu::InitGlobalToSmem<double>(
+            thrust::raw_pointer_cast(d_lookup.data()),
+            grace::N_table),
+        gpu::Intersect_sphere_b2dist(),
+        gpu::OnHit_sphere_individual<unsigned int, Float>(
+            thrust::raw_pointer_cast(d_hit_indices.data()),
+            thrust::raw_pointer_cast(d_out_data.data()),
+            thrust::raw_pointer_cast(d_hit_distances.data()),
+            grace::N_table),
+        gpu::RayEntry_from_array<int>(thrust::raw_pointer_cast(d_ray_offsets.data())),
+        gpu::RayExit_null()
     );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
-#ifdef GRACE_SPHERES_TEX
-    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
+#ifdef GRACE_PRIMITIVES_TEX
+    GRACE_CUDA_CHECK(cudaUnbindTexture(primitives_tex));
 #endif
 }
 
@@ -685,7 +697,7 @@ GRACE_HOST void trace_with_sentinels(
     const Float* p_table = &(lookup.table[0]);
     thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
 
-#if defined(GRACE_NODES_TEX) || defined(GRACE_SPHERES_TEX)
+#if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
 #endif
 
@@ -702,20 +714,21 @@ GRACE_HOST void trace_with_sentinels(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
-#ifdef GRACE_SPHERES_TEX
+#ifdef GRACE_PRIMITIVES_TEX
     cuerr = cudaBindTexture(
-        0, spheres_tex,
+        0, primitives_tex,
         thrust::raw_pointer_cast(d_spheres.data()),
         d_spheres.size()*sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
     int blocks = (int) ((n_rays + grace::TRACE_THREADS_PER_BLOCK - 1)
-                         / grace::TRACE_THREADS_PER_BLOCK));
-    int blocks = min(grace::MAX_BLOCKS, blocks);             
+                         / grace::TRACE_THREADS_PER_BLOCK);
+    blocks = min(grace::MAX_BLOCKS, blocks);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t sm_table_size = sizeof(double) * grace::N_table;
-    const size_t sm_size = sizeof(float4) * d_tree.max_per_leaf * N_warps
+    const size_t sm_size = sizeof(Float4) * d_tree.max_per_leaf * N_warps
+                           + sizeof(Float4) - 1 // For alignment corrections.
                            + sizeof(int) * grace::STACK_SIZE * N_warps
                            + sm_table_size;
     typedef RayData_sphere<int, Float> RayData;
@@ -734,22 +747,25 @@ GRACE_HOST void trace_with_sentinels(
         d_spheres.size(),
         d_tree.max_per_leaf,
         sm_table_size,
-        InitGlobalToSmem(thrust::raw_pointer_cast(d_lookup.data())),
-        Intersect_sphere_b2dist<RayData>(),
-        OnHit_sphere_individual(thrust::raw_pointer_cast(d_hit_indices.data()),
-                                thrust::raw_pointer_cast(d_out_data.data()),
-                                thrust::raw_pointer_cast(d_hit_distances.data()),
-                                grace::N_table),
-        RayEntry_individual<RayData>(thrust::raw_pointer_cast(d_ray_offsets.data())),
-        RayExit_null()
+        gpu::InitGlobalToSmem<double>(
+            thrust::raw_pointer_cast(d_lookup.data()),
+            grace::N_table),
+        gpu::Intersect_sphere_b2dist(),
+        gpu::OnHit_sphere_individual<unsigned int, Float>(
+            thrust::raw_pointer_cast(d_hit_indices.data()),
+            thrust::raw_pointer_cast(d_out_data.data()),
+            thrust::raw_pointer_cast(d_hit_distances.data()),
+            grace::N_table),
+        gpu::RayEntry_from_array<int>(thrust::raw_pointer_cast(d_ray_offsets.data())),
+        gpu::RayExit_null()
     );
 
 #ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
-#ifdef GRACE_SPHERES_TEX
-    GRACE_CUDA_CHECK(cudaUnbindTexture(spheres_tex));
+#ifdef GRACE_PRIMITIVES_TEX
+    GRACE_CUDA_CHECK(cudaUnbindTexture(primitives_tex));
 #endif
 }
 

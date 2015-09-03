@@ -1,6 +1,7 @@
+#pragma once
+
 #include "../error.h"
 #include "../types.h"
-#include "util.cuh"
 
 namespace grace
 {
@@ -8,7 +9,7 @@ namespace grace
 // RayData structs.
 
 template<typename T>
-struct RayData_simple
+struct RayData_datum
 {
     T data;
 };
@@ -20,6 +21,8 @@ struct RayData_sphere
     Real b2, dist;
 };
 
+
+namespace gpu {
 
 // 'Null' functors, when functionality is not required.
 // Only makes sense for Init(), RayEntry() and RayExit().
@@ -44,15 +47,15 @@ class RayEntry_null
     }
 };
 
-typedef typename RayEntry_null RayExit_null;
+typedef RayEntry_null RayExit_null;
 
 
 // RayEntry functors.
 
-template <typename RayData>
-class RayEntry_simple
+class RayEntry_zero
 {
 public:
+    template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
                                  RayData& ray_data,
                                  const UserSmemPtr<char>& unused)
@@ -61,42 +64,42 @@ public:
     }
 };
 
-template <RayData_sphere<int, typename Real>>
-class RayEntry_individual
+template <typename T>
+class RayEntry_from_array
 {
 private:
-    // MGPU's segmented routines force ray offsets to be ints.
-    const int* const offsets;
+    const T* const inits;
 
 public:
-    RayEntry_sphere(const int* const ray_offsets) : offsets(ray_offsets) {}
+    RayEntry_from_array(const T* const ray_data_inits) : inits(ray_data_inits) {}
 
+    template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData_sphere<int, Real>& ray_data,
+                                 RayData& ray_data,
                                  const UserSmemPtr<char>& unused)
     {
-        ray_data.data = offsets[ray_idx];
+        ray_data.data = inits[ray_idx];
     }
 };
 
 
 // RayExit functors.
 
-// T can be deduced.
-template <typename RayData, typename T>
-class RayExit_simple
+template <typename T>
+class RayExit_to_array
 {
 private:
-    T* const output;
+    T* const store;
 
 public:
-    RayExit_simple(T* const output) : output(output) {}
+    RayExit_to_array(T* const ray_data_store) : store(ray_data_store) {}
 
+    template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
                                  const RayData& ray_data,
                                  const UserSmemPtr<char>& unused)
     {
-        output[ray_idx] = ray_data.data;
+        store[ray_idx] = ray_data.data;
     }
 };
 
@@ -104,17 +107,16 @@ public:
 // Init functors.
 
 // Copying a contiguous set of data to SMEM.
-// T can be deduced.
 template <typename T>
 class InitGlobalToSmem
 {
 private:
-    const T* const global_ptr;
+    const T* const data_global;
     const int count;
 
 public:
-    InitGlobalToSmem(const T* const addr, const int count) :
-        global_ptr(addr), count(count) {}
+    InitGlobalToSmem(const T* const global_addr, const int count) :
+        data_global(global_addr), count(count) {}
 
     GRACE_DEVICE void operator()(const UserSmemPtr<char>& sm_ptr)
     {
@@ -124,7 +126,7 @@ public:
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
         {
-            T_ptr[i] = global_ptr[i];
+            T_ptr[i] = data_global[i];
         }
 
         // __syncthreads() is called by the trace kernel.
@@ -135,7 +137,6 @@ public:
 // Intersection functors.
 
 // Discards impact parameter squared and distance to intersection.
-template <typename RayData>
 class Intersect_sphere_bool
 {
 public:
@@ -147,35 +148,33 @@ public:
         typedef typename Real4ToRealMapper<Real4>::type Real;
 
         Real dummy_b2, dummy_dist;
-        return sphere_hit(ray, sphere, &dummy_b2, &dummy_dist)
+        return sphere_hit(ray, sphere, dummy_b2, dummy_dist);
     }
 };
 
 // Stores impact parameter squared and distance to intersection.
-template <RayData_sphere<typename T, typename Real> >
 class Intersect_sphere_b2dist
 {
 public:
-    template <typename Real4>
+    template <typename Real4, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
-                                 RayData_sphere<T, Real>& ray_data,
+                                 RayData& ray_data,
                                  const UserSmemPtr<char>& unused)
     {
-        return sphere_hit(ray, sphere, &ray_data.b2, &ray_data.dist);
+        return sphere_hit(ray, sphere, ray_data.b2, ray_data.dist);
     }
 };
 
 
 // OnHit functors.
 
-template <typename RayData>
 class OnHit_increment
 {
 public:
-    template <typename T>
+    template <typename RayData, typename TPrim>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
                                  RayData& ray_data,
-                                 const prim_idx, const T& primitive,
+                                 const int prim_idx, const TPrim& primitive,
                                  const UserSmemPtr<char>& sm_ptr)
     {
         ++ray_data.data;
@@ -183,7 +182,6 @@ public:
 };
 
 // Accumulating per-ray kernel integrals.
-template <RayData_sphere<typename Real, typename Real> >
 class OnHit_sphere_cumulative
 {
 private:
@@ -192,13 +190,13 @@ private:
 public:
     OnHit_sphere_cumulative(const int N_table) : N_table(N_table) {}
 
-    template <typename Real4>
+    template <typename RayData, typename Real4>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData_sphere<Real, Real>& ray_data,
-                                 const prim_idx, const Real4& sphere,
+                                 RayData& ray_data,
+                                 const int sphere_idx, const Real4& sphere,
                                  const UserSmemPtr<char>& sm_ptr)
     {
-        GRACE_ASSERT(sizeof(sphere.x) == sizeof(Real));
+        typedef typename Real4ToRealMapper<Real4>::type Real;
 
         // For simplicity, we do not template the type of the kernel integral
         // lookup table; it is always required to be double.
@@ -217,8 +215,7 @@ public:
 };
 
 // Storing per-ray kernel integrals, sphere indices and ray-particle distances.
-// IntegerIdx can be deduced.
-template <RayData_sphere<typename T, typename Real>, typename IntegerIdx>
+template <typename IntegerIdx, typename Real>
 class OnHit_sphere_individual
 {
 private:
@@ -233,13 +230,13 @@ public:
         indices(indices), integrals(integrals), distances(distances),
         N_table(N_table) {}
 
-    template <typename Real4>
+    template <typename RayData, typename Real4>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData_sphere<T, Real>& ray_data,
-                                 const sphere_idx, const Real4& sphere,
+                                 RayData& ray_data,
+                                 const int sphere_idx, const Real4& sphere,
                                  const UserSmemPtr<char>& sm_ptr)
     {
-        GRACE_ASSERT(sizeof(sphere.x) == sizeof(Real));
+        GRACE_ASSERT(are_types_equal<Real>(sphere.x));
 
         // For simplicity, we do not template the type of the kernel integral
         // lookup table; it is always required to be double.
@@ -250,7 +247,7 @@ public:
         Real integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
-        indices[ray_data.data] = node.x + i;
+        indices[ray_data.data] = sphere_idx;
         integrals[ray_data.data] = integral;
         distances[ray_data.data] = ray_data.dist;
 
@@ -260,5 +257,7 @@ public:
         ++ray_data.data;
     }
 };
+
+} // namespace gpu
 
 } // namespace grace

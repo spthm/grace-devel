@@ -1,3 +1,5 @@
+#pragma once
+
 #include "../error.h"
 #include "../types.h"
 
@@ -8,37 +10,46 @@ namespace grace {
 // Usage:  typedef typename Real4ToRealMapper<Real4>::type Real
 // Result: Real4 == float4  -> Real == float
 //         Real4 == double4 -> Real == double
-template<typename>
+template <typename>
 struct Real4ToRealMapper;
 
-template<>
+template <>
 struct Real4ToRealMapper<float4> {
     typedef float type;
 };
 
-template<>
+template <>
 struct Real4ToRealMapper<double4> {
     typedef double type;
 };
 
-// Requires x in [0, N_table)
-template <typename Real, typename TableIter>
-GRACE_DEVICE lerp(Real x, TableIter table, int N_table)
-{
-    typedef std::iterator_traits<TableIter>::value_type TableReal;
 
-    int x_idx = static_cast<int>(x);
-    if (x_idx >= N_table - 1) {
-        x = static_cast<TableReal>(N_table - 1);
-        x_idx = N_table - 2;
-    }
-    Real integral = fma(table[x_idx + 1] - table[x_idx],
-                        static_cast<TableReal>(x - x_idx),
-                        table[x_idx]);
-    return integral;
+template <typename T, typename U>
+struct are_same
+{
+    static const bool value = false;
+};
+
+template <typename T>
+struct are_same<T, T>
+{
+    static const bool value = true;
+};
+
+template <typename T, typename U>
+bool are_types_equal() {
+    return are_same<T, U>::value;
 }
 
-template <typename T = char>
+template <typename T, typename U>
+bool are_types_equal(T value) {
+    return are_same<T, U>::value;
+}
+
+
+namespace gpu {
+
+template <typename T>
 class UserSmemPtr
 {
 private:
@@ -51,11 +62,11 @@ private:
     T* T_start;
     T* T_end;
 
-    T* _alignTo(char* const unaligned, const size_t size)
+    GRACE_DEVICE T* _alignTo(char* const unaligned, const size_t size)
     {
         char* aligned = unaligned;
 
-        int rem = aligned % size;
+        int rem = (uintptr_t)aligned % size;
         if (rem != 0) {
             aligned -= rem;
         }
@@ -63,17 +74,20 @@ private:
         return reinterpret_cast<T*>(aligned);
     }
 
+    // So copy/assignment constructors can accept UserSmemPtrs of a different
+    // type from T.
     template <typename U>
     friend class UserSmemPtr;
 
 public:
-    typedef typename iterator_category random_access_iterator;
-    typedef typename T value_type;
-    typedef typename ptrdiff_t difference_type;
-    typedef typename T* pointer;
-    typedef typename T& reference
+    typedef std::random_access_iterator_tag iterator_category;
+    typedef T value_type;
+    typedef ptrdiff_t difference_type;
+    typedef T* pointer;
+    typedef T& reference;
 
-    UserSmemPtr(const char* smem_begin, const size_t user_smem_bytes)
+    GRACE_DEVICE UserSmemPtr(char* const smem_begin,
+                             const size_t user_smem_bytes)
     {
         alloc_end = smem_begin + user_smem_bytes;
 
@@ -83,7 +97,7 @@ public:
     }
 
     template <typename U>
-    UserSmemPtr(const UserSmemPtr<U>& other)
+    GRACE_DEVICE UserSmemPtr(const UserSmemPtr<U>& other)
     {
         alloc_end = other.alloc_end;
 
@@ -93,7 +107,7 @@ public:
     }
 
     template <typename U>
-    UserSmemPtr<T>& operator=(const UserSmemPtr<U>& other)
+    GRACE_DEVICE UserSmemPtr<T>& operator=(const UserSmemPtr<U>& other)
     {
         if (this != &other)
         {
@@ -107,7 +121,7 @@ public:
         return *this;
     }
 
-    T& operator*()
+    GRACE_DEVICE T& operator*()
     {
         GRACE_ASSERT(sm_ptr >= T_start && "user shared memory out of bounds");
         GRACE_ASSERT(sm_ptr < T_end && "user shared memory overflow");
@@ -115,7 +129,7 @@ public:
         return *sm_ptr;
     }
 
-    T& operator[](int i)
+    GRACE_DEVICE T& operator[](int i)
     {
         GRACE_ASSERT(T_start + i >= T_start && "user shared memory out of bounds");
         GRACE_ASSERT(T_start + i < T_end && "user shared memory overflow");
@@ -124,46 +138,46 @@ public:
     }
 
     // Prefix.
-    UserSmemPtr<T>& operator++()
+    GRACE_DEVICE UserSmemPtr<T>& operator++()
     {
         ++sm_ptr;
         return *this;
     }
 
     // Postfix.
-    UserSmemPtr<T> operator++(int)
+    GRACE_DEVICE UserSmemPtr<T> operator++(int)
     {
         UserSmemPtr<T> temp = *this;
         ++(*this);
         return temp;
     }
 
-    UserSmemPtr<T>& operator--()
+    GRACE_DEVICE UserSmemPtr<T>& operator--()
     {
         --sm_ptr;
         return *this;
     }
 
-    UserSmemPtr<T> operator--(int)
+    GRACE_DEVICE UserSmemPtr<T> operator--(int)
     {
        UserSmemPtr<T> temp = *this;
        --(*this);
        return temp;
     }
 
-    UserSmemPtr<T>& operator+=(const int rhs)
+    GRACE_DEVICE UserSmemPtr<T>& operator+=(const int rhs)
     {
         sm_ptr += rhs;
         return *this;
     }
 
-    UserSmemPtr<T>& operator-=(const int rhs)
+    GRACE_DEVICE UserSmemPtr<T>& operator-=(const int rhs)
     {
         sm_ptr -= rhs;
         return *this;
     }
 
-    ptrdiff_t operator-(const UserSmemPtr<T>& other)
+    GRACE_DEVICE ptrdiff_t operator-(const UserSmemPtr<T>& other)
     {
         return sm_ptr - other.sm_ptr;
     }
@@ -174,34 +188,45 @@ public:
     // int operator-(const char* ptr);
     // would allow a user fairly *trivial* access to the value of sm_ptr.
 
-    // TODO: Check these are instantiated only for type T!
-    //       That is, UserSmemPtr<float4> + 2 actually computes
-    //       sm_ptr += 2 * sizeof(float4), not sm_ptr += 2.
-    friend UserSmemPtr<T> operator+(const UserSmemPtr<T> &ptr, const int rhs);
-    friend UserSmemPtr<T> operator+(const int lhs, const UserSmemPtr<T> &ptr);
-    friend UserSmemPtr<T> operator-(const UserSmemPtr &ptr<T>, const int rhs);
+    GRACE_DEVICE friend UserSmemPtr<T> operator+(const UserSmemPtr<T> ptr,
+                                                 const int rhs)
+    {
+        ptr += rhs;
+        return ptr;
+    }
+
+    GRACE_DEVICE friend UserSmemPtr<T> operator+(const int lhs,
+                                                 const UserSmemPtr<T>& ptr)
+    {
+        return ptr + lhs;
+    }
+
+    GRACE_DEVICE friend UserSmemPtr<T> operator-(const UserSmemPtr<T>& ptr,
+                                                 const int rhs)
+    {
+        return ptr + (-rhs);
+    }
     // int - ptr doesn't make sense.
     // ptr + ptr doesn't make sense.
 };
 
-template <typename T>
-UserSmemPtr<T> operator+(const UserSmemPtr<T> &ptr, const int rhs)
+// Requires x in [0, N_table)
+template <typename Real, typename TableIter>
+GRACE_DEVICE Real lerp(Real x, TableIter table, int N_table)
 {
-    UserSmemPtr<T> temp = *this;
-    temp += rhs;
-    return temp;
+    typedef typename std::iterator_traits<TableIter>::value_type TableReal;
+
+    int x_idx = static_cast<int>(x);
+    if (x_idx >= N_table - 1) {
+        x = static_cast<TableReal>(N_table - 1);
+        x_idx = N_table - 2;
+    }
+    Real integral = fma(table[x_idx + 1] - table[x_idx],
+                        static_cast<TableReal>(x - x_idx),
+                        table[x_idx]);
+    return integral;
 }
 
-template <typename T>
-UserSmemPtr<T> operator+(const int lhs, const UserSmemPtr<T> &ptr)
-{
-    return ptr + lhs;
-}
-
-template <typename T>
-UserSmemPtr<T> operator-(const UserSmemPtr<T> &ptr, const int rhs)
-{
-    return ptr + (-rhs);
-}
+} // namespace gpu
 
 } // namespace grace

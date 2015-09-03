@@ -1,4 +1,4 @@
-GRACE_FLAGS= -DGRACE_NODES_TEX -DGRACE_SPHERES_TEX
+GRACE_FLAGS= -DGRACE_NODES_TEX -DGRACE_PRIMITIVES_TEX
 
 MGPU_DIR= $(HOME)/moderngpu/
 
@@ -23,7 +23,7 @@ NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
 
 OUT_DIR= bin
 
-DEPS= Makefile $(wildcard ../kernels/*.cuh) $(wildcard ../*.cuh) $(wildcard ../*.h)
+DEPS= Makefile $(wildcard ../device/*.cuh) $(wildcard ../kernels/*.cuh) $(wildcard ../*.cuh) $(wildcard ../*.h)
 
 UNIT_TEST_BIN= bit_prefix_32bit.out \
 	bit_prefix_64bit.out \
