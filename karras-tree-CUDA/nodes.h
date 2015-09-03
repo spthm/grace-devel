@@ -42,8 +42,7 @@ public:
     int max_per_leaf;
 
     Tree(size_t N_leaves, int max_per_leaf = 1) :
-        nodes(4*(N_leaves-1)), leaves(N_leaves), heights(N_leaves-1),
-        max_per_leaf(max_per_leaf)
+        nodes(4*(N_leaves-1)), leaves(N_leaves), max_per_leaf(max_per_leaf)
     {
        GRACE_CUDA_CHECK(cudaMalloc(&root_index_ptr, sizeof(int)));
     }
@@ -63,8 +62,8 @@ public:
     int max_per_leaf;
 
     H_Tree(size_t N_leaves, int _max_per_leaf = 1) :
-        nodes(4*(N_leaves-1)), leaves(N_leaves), heights(N_leaves-1),
-        root_index(0), max_per_leaf(max_per_leaf) {}
+        nodes(4*(N_leaves-1)), leaves(N_leaves), root_index(0),
+        max_per_leaf(max_per_leaf) {}
 };
 
 } //namespace grace
