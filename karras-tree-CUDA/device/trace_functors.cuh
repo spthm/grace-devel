@@ -3,6 +3,9 @@
 #include "../error.h"
 #include "../types.h"
 
+#include "intersect.cuh"
+#include "util.cuh"
+
 namespace grace
 {
 
