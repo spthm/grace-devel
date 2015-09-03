@@ -774,7 +774,8 @@ MGPU_HOST void SegScanPreprocess(
 
 template<typename T, typename CsrIt>
 MGPU_HOST void SegScanCsrPreprocess(
-    int count, CsrIt csr_global,
+    int count,
+    CsrIt csr_global,
     int numSegments,
     bool supportEmpty,
     std::auto_ptr<SegScanPreprocessData>* ppData,
