@@ -406,14 +406,12 @@ GRACE_HOST void trace_hitcounts(
 #endif
 }
 
-// FIXME: Float no longer used. And can be derived using Real4ToRealMapper.
-template <typename Float, typename Tout, typename Float4, typename Tin>
-GRACE_HOST void trace_property(
+template <typename Tout, typename Float4>
+GRACE_HOST void trace_cumulative(
     const thrust::device_vector<Ray>& d_rays,
     thrust::device_vector<Tout>& d_out_data,
     const Tree& d_tree,
-    const thrust::device_vector<Float4>& d_spheres,
-    const thrust::device_vector<Tin>& d_in_data)
+    const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -504,8 +502,7 @@ GRACE_HOST void trace_property(
 
 // TODO: Allow the user to supply correctly-sized hit-distance and output
 //       arrays to this function, handling any memory issues therein themselves.
-// FIXME: Can derive Float type using Real4ToRealMapper.
-template <typename Float, typename Tout, typename Float4, typename Tin>
+template <typename Float, typename Tout, typename Float4>
 GRACE_HOST void trace(
     const thrust::device_vector<Ray>& d_rays,
     thrust::device_vector<Tout>& d_out_data,
@@ -513,8 +510,7 @@ GRACE_HOST void trace(
     thrust::device_vector<unsigned int>& d_hit_indices,
     thrust::device_vector<Float>& d_hit_distances,
     const Tree& d_tree,
-    const thrust::device_vector<Float4>& d_spheres,
-    const thrust::device_vector<Tin>& d_in_data)
+    const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -549,11 +545,10 @@ GRACE_HOST void trace(
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
-    // Or initialize it as static, above, for both float and double.
-    // Also then copy it into device memory?
-    const KernelIntegrals<Float> lookup;
-    const Float* p_table = &(lookup.table[0]);
-    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
+    // Or initialize it as static, above, then copy it into device memory?
+    const KernelIntegrals<double> lookup;
+    const double* p_table = &(lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
 #if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
@@ -628,8 +623,7 @@ GRACE_HOST void trace(
 }
 
 // TODO: Break this and trace() into multiple functions.
-// FIXME: Can derive Float type using Real4ToRealMapper.
-template <typename Float, typename Tout, typename Float4, typename Tin>
+template <typename Float, typename Tout, typename Float4>
 GRACE_HOST void trace_with_sentinels(
     const thrust::device_vector<Ray>& d_rays,
     thrust::device_vector<Tout>& d_out_data,
@@ -640,8 +634,7 @@ GRACE_HOST void trace_with_sentinels(
     thrust::device_vector<Float>& d_hit_distances,
     const Float distance_sentinel,
     const Tree& d_tree,
-    const thrust::device_vector<Float4>& d_spheres,
-    const thrust::device_vector<Tin>& d_in_data)
+    const thrust::device_vector<Float4>& d_spheres)
 {
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
@@ -691,11 +684,10 @@ GRACE_HOST void trace_with_sentinels(
 
     // TODO: Change it such that this is passed in, rather than instantiating
     // and copying it on each call to trace_property and trace.
-    // Or initialize it as static, above, for both float and double.
-    // Also then copy it into device memory?
-    const KernelIntegrals<Float> lookup;
-    const Float* p_table = &(lookup.table[0]);
-    thrust::device_vector<Float> d_lookup(p_table, p_table + N_table);
+    // Or initialize it as static, above, then copy it into device memory?
+    const KernelIntegrals<double> lookup;
+    const double* p_table = &(lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
 #if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;

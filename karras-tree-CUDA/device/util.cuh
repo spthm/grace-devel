@@ -27,23 +27,24 @@ struct Real4ToRealMapper<double4> {
 template <typename T, typename U>
 struct are_same
 {
-    static const bool value = false;
+    static const bool result = false;
 };
 
 template <typename T>
 struct are_same<T, T>
 {
-    static const bool value = true;
+    static const bool result = true;
 };
 
 template <typename T, typename U>
-bool are_types_equal() {
-    return are_same<T, U>::value;
+GRACE_HOST_DEVICE bool are_types_equal() {
+    return are_same<T, U>::result;
 }
 
+// U may be deduced.
 template <typename T, typename U>
-bool are_types_equal(T value) {
-    return are_same<T, U>::value;
+GRACE_HOST_DEVICE bool are_types_equal(const U value) {
+    return are_same<T, U>::result;
 }
 
 

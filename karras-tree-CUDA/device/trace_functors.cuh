@@ -38,6 +38,7 @@ public:
 
 class RayEntry_null
 {
+public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
                                  const RayData& ray_data,
