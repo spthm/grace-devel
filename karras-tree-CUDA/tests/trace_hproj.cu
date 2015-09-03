@@ -59,7 +59,6 @@ int main(int argc, char* argv[]) {
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<float> d_pmasses = h_pmasses;
 
     float max_x, max_y, max_z, min_x, min_y, min_z;
     max_x = max_y = max_z = 1.f;
@@ -70,7 +69,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<unsigned int> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_pmasses);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
@@ -125,25 +124,26 @@ int main(int argc, char* argv[]) {
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
 
-    thrust::device_vector<float> d_traced_pmass(N_rays);
+    thrust::device_vector<float> d_traced_integrals(N_rays);
 
-    grace::trace_property<float>(d_rays,
-                                 d_traced_pmass,
-                                 d_tree,
-                                 d_spheres_xyzr,
-                                 d_pmasses);
+    grace::trace_cumulative(d_rays,
+                            d_traced_integrals,
+                            d_tree,
+                            d_spheres_xyzr);
 
     // ~ Integrate over x and y.
-    float integrated_total = thrust::reduce(d_traced_pmass.begin(),
-                                            d_traced_pmass.end(),
+    float integrated_total = thrust::reduce(d_traced_integrals.begin(),
+                                            d_traced_integrals.end(),
                                             0.0f,
                                             thrust::plus<float>());
     // Multiply by the pixel area to complete the x-y integration.
     integrated_total *= (spacer_x * spacer_y);
+    // Correct integration implies integrated_total == N_particles.
+    integrated_total /= static_cast<float>(N);
 
-    std::cout << "Number of rays:               " << N_rays << std::endl;
-    std::cout << "Number of particles:          " << N << std::endl;
-    std::cout << "Volume integrated pseudomass: " << integrated_total
+    std::cout << "Number of rays:             " << N_rays << std::endl;
+    std::cout << "Number of particles:        " << N << std::endl;
+    std::cout << "Normalized volume integral: " << integrated_total
               << std::endl;
     std::cout << std::endl;
 } // End device code.

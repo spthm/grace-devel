@@ -65,9 +65,10 @@ int main(int argc, char* argv[]) {
 
     size_t N = h_spheres_xyzr.size();
 
-    // Gadget IDs and masses unused.
+    // Gadget IDs, masses and densitites unused.
     h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
     h_masses.clear(); h_masses.shrink_to_fit();
+    h_rho.clear(); h_rho.shrink_to_fit();
 
 
     /* Output run parameters and device properties to console. */
@@ -95,11 +96,10 @@ int main(int argc, char* argv[]) {
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<float> d_rho = h_rho;
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
@@ -189,14 +189,13 @@ int main(int argc, char* argv[]) {
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
         sort_tot += elapsed;
 
-        thrust::device_vector<float> d_traced_rho(N_rays);
+        thrust::device_vector<float> d_traced_integrals(N_rays);
 
         cudaEventRecord(part_start);
-        grace::trace_property<float>(d_rays,
-                                     d_traced_rho,
-                                     d_tree,
-                                     d_spheres_xyzr,
-                                     d_rho);
+        grace::trace_cumulative(d_rays,
+                                d_traced_integrals,
+                                d_tree,
+                                d_spheres_xyzr);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -212,11 +211,10 @@ int main(int argc, char* argv[]) {
             float trace_bytes = 0.0;
             float unused_bytes = 0.0;
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
-            trace_bytes += d_traced_rho.size() * sizeof(float);
+            trace_bytes += d_traced_integrals.size() * sizeof(float);
             trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
-            trace_bytes += d_rho.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
 
             unused_bytes += d_keys.size() * sizeof(grace::uinteger32);

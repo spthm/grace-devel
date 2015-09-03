@@ -39,13 +39,13 @@ int main(int argc, char* argv[]) {
     // Arrays are resized in read_gadget_gas().
     thrust::host_vector<float4> h_spheres_xyzr(1);
     thrust::host_vector<unsigned int> h_gadget_IDs(1);
-    thrust::host_vector<float> h_pmasses(1);
+    thrust::host_vector<float> h_masses(1);
     thrust::host_vector<float> h_rho(1);
 
     file.open(fname.c_str(), std::ios::binary);
     grace::read_gadget_gas(file, h_spheres_xyzr,
                            h_gadget_IDs,
-                           h_pmasses,
+                           h_masses,
                            h_rho);
     file.close();
 
@@ -56,14 +56,10 @@ int main(int argc, char* argv[]) {
               << "per leaf..." << std::endl;
     std::cout << std::endl;
 
-    // Gadget IDs and densities unused.
+    // Gadget IDs, masses and densities unused.
     h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
+    h_masses.clear(); h_masses.shrink_to_fit();
     h_rho.clear(); h_rho.shrink_to_fit();
-
-    // Set all (pseudo)masses equal to 1/N so the total sum is one.
-    for (int i=0; i<N; i++) {
-        h_pmasses[i] = 1.0f/N;
-    }
 
 
 { // Device code.
@@ -72,7 +68,6 @@ int main(int argc, char* argv[]) {
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<float> d_pmasses = h_pmasses;
 
     // Calculate limits here explicity since we need them later (i.e. do not
     // get morton_keys() to do it for us).
@@ -96,7 +91,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<unsigned int> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_pmasses);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
@@ -150,30 +145,31 @@ int main(int argc, char* argv[]) {
     }
 
 
-    /* Trace and accumulate pseudomass through the simulation data. */
+    /* Trace and accumulate through the simulation data. */
 
     thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
 
-    thrust::device_vector<float> d_traced_pmass(N_rays);
+    thrust::device_vector<float> d_traced_integrals(N_rays);
 
-    grace::trace_property<float>(d_rays,
-                                 d_traced_pmass,
-                                 d_tree,
-                                 d_spheres_xyzr,
-                                 d_pmasses);
+    grace::trace_cumulative(d_rays,
+                            d_traced_integrals,
+                            d_tree,
+                            d_spheres_xyzr);
 
     // ~ Integrate over x and y.
-    float integrated_total = thrust::reduce(d_traced_pmass.begin(),
-                                            d_traced_pmass.end(),
+    float integrated_total = thrust::reduce(d_traced_integrals.begin(),
+                                            d_traced_integrals.end(),
                                             0.0f,
                                             thrust::plus<float>());
     // Multiply by the pixel area to complete the x-y integration.
     integrated_total *= (spacer_x * spacer_y);
+    // Correct integration implies integrated_total == N_particles.
+    integrated_total /= static_cast<float>(N);
 
-    std::cout << "Number of rays:               " << N_rays << std::endl;
-    std::cout << "Number of particles:          " << N << std::endl;
-    std::cout << "Volume integrated pseudomass: " << integrated_total
+    std::cout << "Number of rays:             " << N_rays << std::endl;
+    std::cout << "Number of particles:        " << N << std::endl;
+    std::cout << "Normalized volume integral: " << integrated_total
               << std::endl;
     std::cout << std::endl;
 } // End device code.
