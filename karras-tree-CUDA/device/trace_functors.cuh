@@ -33,7 +33,7 @@ namespace gpu {
 class Init_null
 {
 public:
-    GRACE_DEVICE void operator()(const UserSmemPtr<char>& sm_ptr)
+    GRACE_DEVICE void operator()(const UserSmemPtr<char>&)
     {
         return;
     }
@@ -43,9 +43,8 @@ class RayEntry_null
 {
 public:
     template <typename RayData>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 const RayData& ray_data,
-                                 const UserSmemPtr<char>& ptr)
+    GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
+                                 const RayData&, const UserSmemPtr<char>&)
     {
         return;
     }
@@ -60,9 +59,8 @@ class RayEntry_zero
 {
 public:
     template <typename RayData>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData& ray_data,
-                                 const UserSmemPtr<char>& unused)
+    GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
+                                 RayData& ray_data, const UserSmemPtr<char>&)
     {
         ray_data.data = 0;
     }
@@ -78,9 +76,8 @@ public:
     RayEntry_from_array(const T* const ray_data_inits) : inits(ray_data_inits) {}
 
     template <typename RayData>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData& ray_data,
-                                 const UserSmemPtr<char>& unused)
+    GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
+                                 RayData& ray_data, const UserSmemPtr<char>&)
     {
         ray_data.data = inits[ray_idx];
     }
@@ -99,9 +96,9 @@ public:
     RayExit_to_array(T* const ray_data_store) : store(ray_data_store) {}
 
     template <typename RayData>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
+    GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  const RayData& ray_data,
-                                 const UserSmemPtr<char>& unused)
+                                 const UserSmemPtr<char>&)
     {
         store[ray_idx] = ray_data.data;
     }
@@ -146,8 +143,8 @@ class Intersect_sphere_bool
 public:
     template <typename Real4, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
-                                 const RayData& ray_data,
-                                 const UserSmemPtr<char>& unused)
+                                 const RayData&, const int /*lane*/,
+                                 const UserSmemPtr<char>&)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
 
@@ -162,8 +159,8 @@ class Intersect_sphere_b2dist
 public:
     template <typename Real4, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
-                                 RayData& ray_data,
-                                 const UserSmemPtr<char>& unused)
+                                 RayData& ray_data, const int /*lane*/,
+                                 const UserSmemPtr<char>&)
     {
         return sphere_hit(ray, sphere, ray_data.b2, ray_data.dist);
     }
@@ -176,10 +173,10 @@ class OnHit_increment
 {
 public:
     template <typename RayData, typename TPrim>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData& ray_data,
-                                 const int prim_idx, const TPrim& primitive,
-                                 const UserSmemPtr<char>& sm_ptr)
+    GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
+                                 RayData& ray_data, const int /*prim_idx*/,
+                                 const TPrim&,  const int /*lane*/,
+                                 const UserSmemPtr<char>&)
     {
         ++ray_data.data;
     }
@@ -195,9 +192,9 @@ public:
     OnHit_sphere_cumulative(const int N_table) : N_table(N_table) {}
 
     template <typename RayData, typename Real4>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData& ray_data,
-                                 const int sphere_idx, const Real4& sphere,
+    GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
+                                 RayData& ray_data, const int /*sphere_idx*/,
+                                 const Real4& sphere, const int /*lane*/,
                                  const UserSmemPtr<char>& sm_ptr)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
@@ -235,9 +232,9 @@ public:
         N_table(N_table) {}
 
     template <typename RayData, typename Real4>
-    GRACE_DEVICE void operator()(const int ray_idx, const Ray& ray,
-                                 RayData& ray_data,
-                                 const int sphere_idx, const Real4& sphere,
+    GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
+                                 RayData& ray_data, const int sphere_idx,
+                                 const Real4& sphere, const int /*lane*/,
                                  const UserSmemPtr<char>& sm_ptr)
     {
         GRACE_ASSERT(are_types_equal<Real>(sphere.x));

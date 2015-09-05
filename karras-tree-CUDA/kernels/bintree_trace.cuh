@@ -226,9 +226,9 @@ __global__ void trace_kernel(
                 for (int i = 0; i < node.y; ++i)
                 {
                     TPrimitive prim = sm_prims[max_per_leaf * wid + i];
-                    if (intersect(ray, prim, ray_data, sm_ptr_usr))
+                    if (intersect(ray, prim, ray_data, i, sm_ptr_usr))
                     {
-                        on_hit(ray_index, ray, ray_data, node.x + i, prim,
+                        on_hit(ray_index, ray, ray_data, node.x + i, prim, i,
                                sm_ptr_usr);
                     }
                 }
