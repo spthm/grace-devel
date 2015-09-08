@@ -183,13 +183,13 @@ public:
 };
 
 // Accumulating per-ray kernel integrals.
-class OnHit_sphere_cumulative
+class OnHit_sphere_cumulate
 {
 private:
     const int N_table;
 
 public:
-    OnHit_sphere_cumulative(const int N_table) : N_table(N_table) {}
+    OnHit_sphere_cumulate(const int N_table) : N_table(N_table) {}
 
     template <typename RayData, typename Real4>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,

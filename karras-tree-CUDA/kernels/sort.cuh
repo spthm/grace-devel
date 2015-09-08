@@ -40,9 +40,9 @@ GRACE_HOST void offsets_to_segments(
                            d_segments.begin());
 }
 
-template <typename UInteger, typename T>
+template <typename IntegerIdx, typename T>
 GRACE_HOST void order_by_index(
-    const thrust::device_vector<UInteger>& d_indices,
+    const thrust::device_vector<IntegerIdx>& d_indices,
     thrust::device_vector<T>& d_unordered)
 {
     thrust::device_vector<T> d_tmp = d_unordered;
@@ -51,22 +51,22 @@ GRACE_HOST void order_by_index(
                    d_unordered.begin());
 }
 
-template <typename T, typename UInteger>
+template <typename T, typename IntegerIdx>
 GRACE_HOST void sort_and_map(
     thrust::device_vector<T>& d_unsorted,
-    thrust::device_vector<UInteger>& d_map)
+    thrust::device_vector<IntegerIdx>& d_map)
 {
     thrust::sequence(d_map.begin(), d_map.end(), 0u);
     thrust::sort_by_key(d_unsorted.begin(), d_unsorted.end(), d_map.begin());
 }
 
 // Like sort_and_map, but does not touch the original, unsorted vector.
-template <typename T, typename UInteger>
+template <typename T, typename IntegerIdx>
 GRACE_HOST void sort_map(
     thrust::device_vector<T>& d_unsorted,
-    thrust::device_vector<UInteger>& d_map)
+    thrust::device_vector<IntegerIdx>& d_map)
 {
-    thrust::sequence(d_map.begin(), d_map.end(), 0u);
+    thrust::sequence(d_map.begin(), d_map.end(), 0);
     thrust::device_vector<T> d_tmp = d_unsorted;
     thrust::sort_by_key(d_tmp.begin(), d_tmp.end(), d_map.begin());
 }
@@ -234,7 +234,7 @@ template <typename Float, typename T>
 GRACE_HOST void sort_by_distance(
     thrust::device_vector<Float>& d_hit_distances,
     const thrust::device_vector<int>& d_ray_offsets,
-    thrust::device_vector<unsigned int>& d_hit_indices,
+    thrust::device_vector<int>& d_hit_indices,
     thrust::device_vector<T>& d_hit_data)
 {
     // MGPU calls require a context.
@@ -243,8 +243,8 @@ GRACE_HOST void sort_by_distance(
     mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
 
     // d_sort_map will be used to reorder the input vectors.
-    thrust::device_vector<unsigned int> d_sort_map(d_hit_distances.size());
-    thrust::sequence(d_sort_map.begin(), d_sort_map.end(), 0u);
+    thrust::device_vector<int> d_sort_map(d_hit_distances.size());
+    thrust::sequence(d_sort_map.begin(), d_sort_map.end(), 0);
 
     // First, sort the hit distances and the indicies within the segments
     // defined by d_ray_offsets, i.e. sort each ray and its indices by distance.
