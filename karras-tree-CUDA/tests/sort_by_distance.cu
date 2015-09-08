@@ -19,9 +19,9 @@
 #include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/gen_rays.cuh"
 #include "../kernels/sort.cuh"
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -103,16 +103,16 @@ int main(int argc, char* argv[]) {
 
     thrust::device_vector<float> d_traced_integrals;
     thrust::device_vector<int> d_ray_offsets(N_rays);
-    thrust::device_vector<unsigned int> d_hit_indices;
+    thrust::device_vector<int> d_hit_indices;
     thrust::device_vector<float> d_hit_distances;
 
-    grace::trace(d_rays,
-                 d_traced_integrals,
-                 d_ray_offsets,
-                 d_hit_indices,
-                 d_hit_distances,
-                 d_tree,
-                 d_spheres_xyzr);
+    grace::trace_sph(d_rays,
+                     d_spheres_xyzr,
+                     d_tree,
+                     d_ray_offsets,
+                     d_hit_indices,
+                     d_traced_integrals,
+                     d_hit_distances);
 
     grace::sort_by_distance(d_hit_distances,
                             d_ray_offsets,

@@ -11,8 +11,8 @@
 #include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/sort.cuh"
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -144,18 +144,18 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
+
 
     /* Trace and accumulate through the simulation data. */
 
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
-
     thrust::device_vector<float> d_traced_integrals(N_rays);
 
-    grace::trace_cumulative(d_rays,
-                            d_traced_integrals,
-                            d_tree,
-                            d_spheres_xyzr);
+    grace::trace_cumulative_sph(d_rays,
+                                d_spheres_xyzr,
+                                d_tree,
+                                d_traced_integrals);
 
     // ~ Integrate over x and y.
     float integrated_total = thrust::reduce(d_traced_integrals.begin(),
