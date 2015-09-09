@@ -7,8 +7,8 @@
 #include <thrust/device_vector.h>
 
 #include "../device/intersect.cuh"
-#include "../error.h"
 #include "../device/util.cuh"
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../ray.h"
