@@ -1,3 +1,5 @@
+#pragma once
+
 // See http://hpc.oit.uci.edu/nvidia-doc/sdk-cuda-doc/C/doc/ptx_isa_3.0.pdf
 // for details of the scalar vmin/vmax.
 // min(min(a, b), c)

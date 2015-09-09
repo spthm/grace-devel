@@ -1,3 +1,5 @@
+#pragma once
+
 /* Load/store functions to be used when specific memory behaviour is required,
  * e.g. a read/write directly from/to L2 cache, which is globally coherent.
  *
