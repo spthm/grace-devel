@@ -4,7 +4,10 @@
 #include "../types.h"
 
 #include "intersect.cuh"
-#include "util.cuh"
+#include "interpolation.cuh"
+
+#include "../util/bound_iter.cuh"
+#include "../util/meta.h"
 
 namespace grace
 {

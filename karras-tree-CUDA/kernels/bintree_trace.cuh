@@ -7,7 +7,7 @@
 #include <thrust/device_vector.h>
 
 #include "../device/intersect.cuh"
-#include "../device/util.cuh"
+#include "../util/bound_iter.cuh"
 #include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"

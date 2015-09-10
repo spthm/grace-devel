@@ -1,7 +1,6 @@
 #pragma once
 
 #include "intrinsics.cuh"
-#include "util.cuh"
 
 #include "../types.h"
 
