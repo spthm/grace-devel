@@ -23,7 +23,7 @@ NVCCLIBS= -L /opt/cuda/lib64 -lcuda -lcurand
 
 OUT_DIR= bin
 
-DEPS= Makefile $(wildcard ../device/*.cuh) $(wildcard ../kernels/*.cuh) $(wildcard ../*.cuh) $(wildcard ../*.h)
+DEPS= Makefile $(wildcard ../device/*.cuh) $(wildcard ../kernels/*.cuh) $(wildcard ../util/*.*h) $(wildcard ../*.*h)
 
 UNIT_TEST_BIN= bit_prefix_32bit.out \
 	bit_prefix_64bit.out \

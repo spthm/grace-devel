@@ -86,8 +86,8 @@ __global__ void trace_kernel(
     const size_t prims_smem_count = max_per_leaf * N_warps;
 
     extern __shared__ char smem_trace[];
-    const UserSmemPtr<char> sm_ptr_usr(smem_trace, user_smem_bytes);
-    init(sm_ptr_usr);
+    const BoundIter<char> sm_iter_usr(smem_trace, user_smem_bytes);
+    init(sm_iter_usr);
     __syncthreads();
 
     // Shared memory accesses must ensure correct alignment relative to the
@@ -111,7 +111,7 @@ __global__ void trace_kernel(
         // Ray must not be modified by user.
         const Ray ray = rays[ray_index];
         RayData ray_data;
-        ray_entry(ray_index, ray, ray_data, sm_ptr_usr);
+        ray_entry(ray_index, ray, ray_data, sm_iter_usr);
 
         float3 invd, origin;
         invd.x = 1.f / ray.dx;
@@ -189,15 +189,15 @@ __global__ void trace_kernel(
                 for (int i = 0; i < node.y; ++i)
                 {
                     TPrimitive prim = sm_prims[max_per_leaf * wid + i];
-                    if (intersect(ray, prim, ray_data, i, sm_ptr_usr))
+                    if (intersect(ray, prim, ray_data, i, sm_iter_usr))
                     {
                         on_hit(ray_index, ray, ray_data, node.x + i, prim, i,
-                               sm_ptr_usr);
+                               sm_iter_usr);
                     }
                 }
             }
         }
-        ray_exit(ray_index, ray, ray_data, sm_ptr_usr);
+        ray_exit(ray_index, ray, ray_data, sm_iter_usr);
         ray_index += blockDim.x * gridDim.x;
     }
 }

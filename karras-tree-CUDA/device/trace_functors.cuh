@@ -36,7 +36,7 @@ namespace gpu {
 class Init_null
 {
 public:
-    GRACE_DEVICE void operator()(const UserSmemPtr<char>&)
+    GRACE_DEVICE void operator()(const BoundIter<char>& /*smem_iter*/)
     {
         return;
     }
@@ -47,7 +47,8 @@ class RayEntry_null
 public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 const RayData&, const UserSmemPtr<char>&)
+                                 const RayData&,
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         return;
     }
@@ -63,7 +64,8 @@ class RayEntry_zero
 public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 RayData& ray_data, const UserSmemPtr<char>&)
+                                 RayData& ray_data,
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         ray_data.data = 0;
     }
@@ -80,7 +82,8 @@ public:
 
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
-                                 RayData& ray_data, const UserSmemPtr<char>&)
+                                 RayData& ray_data,
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         ray_data.data = inits[ray_idx];
     }
@@ -101,7 +104,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  const RayData& ray_data,
-                                 const UserSmemPtr<char>&)
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         store[ray_idx] = ray_data.data;
     }
@@ -122,15 +125,15 @@ public:
     InitGlobalToSmem(const T* const global_addr, const int count) :
         data_global(global_addr), count(count) {}
 
-    GRACE_DEVICE void operator()(const UserSmemPtr<char>& sm_ptr)
+    GRACE_DEVICE void operator()(const BoundIter<char>& smem_iter)
     {
         // We *must* cast from the default pointer-to-char to the data type we
         // wish to store in shared memory.
-        UserSmemPtr<T> T_ptr = sm_ptr;
+        BoundIter<T> T_iter = smem_iter;
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
         {
-            T_ptr[i] = data_global[i];
+            T_iter[i] = data_global[i];
         }
 
         // __syncthreads() is called by the trace kernel.
@@ -147,7 +150,7 @@ public:
     template <typename Real4, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
                                  const RayData&, const int /*lane*/,
-                                 const UserSmemPtr<char>&)
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
 
@@ -163,7 +166,7 @@ public:
     template <typename Real4, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
                                  RayData& ray_data, const int /*lane*/,
-                                 const UserSmemPtr<char>&)
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         return sphere_hit(ray, sphere, ray_data.b2, ray_data.dist);
     }
@@ -179,7 +182,7 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*prim_idx*/,
                                  const TPrim&,  const int /*lane*/,
-                                 const UserSmemPtr<char>&)
+                                 const BoundIter<char>& /*smem_iter*/)
     {
         ++ray_data.data;
     }
@@ -198,13 +201,13 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*sphere_idx*/,
                                  const Real4& sphere, const int /*lane*/,
-                                 const UserSmemPtr<char>& sm_ptr)
+                                 const BoundIter<char>& smem_iter)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
 
         // For simplicity, we do not template the type of the kernel integral
         // lookup table; it is always required to be double.
-        UserSmemPtr<double> Wk_lookup = sm_ptr;
+        BoundIter<double> Wk_lookup = smem_iter;
 
         Real ir = 1.f / sphere.w;
         Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
@@ -238,13 +241,13 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int sphere_idx,
                                  const Real4& sphere, const int /*lane*/,
-                                 const UserSmemPtr<char>& sm_ptr)
+                                 const BoundIter<char>& smem_iter)
     {
         GRACE_ASSERT(are_types_equal<Real>(sphere.x));
 
         // For simplicity, we do not template the type of the kernel integral
         // lookup table; it is always required to be double.
-        UserSmemPtr<double> Wk_lookup = sm_ptr;
+        BoundIter<double> Wk_lookup = smem_iter;
 
         Real ir = 1.f / sphere.w;
         Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);

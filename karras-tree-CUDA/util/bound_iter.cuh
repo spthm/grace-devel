@@ -5,22 +5,26 @@
 #include "../error.h"
 #include "../types.h"
 
+#include <cstddef>
 #include <iterator>
 
 namespace grace {
 
 namespace gpu {
 
+// An iterator which may only access the underlying array in a specific range.
+// Other than that, no constraints are placed on the type accessed, and user's
+// must therefore take care to ensure correct alignment.
 template <typename T>
-class UserSmemPtr
+class BoundIter
 {
 private:
     // char* because this is the only type for which alloc_end is guaranteed
     // correct alignment.
     char* alloc_end;
 
-    // The user must ensure correct alignment when copying a UserSmemPtr.
-    T* sm_ptr;
+    // The user must ensure correct alignment when copying a BoundIter.
+    T* ptr;
     T* T_start;
     T* T_end;
 
@@ -36,10 +40,10 @@ private:
         return reinterpret_cast<T*>(aligned);
     }
 
-    // So copy/assignment constructors can accept UserSmemPtrs of a different
+    // So copy/assignment constructors can accept BoundIters of a different
     // type from T.
     template <typename U>
-    friend class UserSmemPtr;
+    friend class BoundIter;
 
 public:
     typedef std::random_access_iterator_tag iterator_category;
@@ -48,35 +52,34 @@ public:
     typedef T* pointer;
     typedef T& reference;
 
-    GRACE_DEVICE UserSmemPtr(char* const smem_begin,
-                             const size_t user_smem_bytes)
+    GRACE_DEVICE BoundIter(char* const begin, const size_t bytes)
     {
-        alloc_end = smem_begin + user_smem_bytes;
+        alloc_end = begin + bytes;
 
-        sm_ptr = reinterpret_cast<T*>(smem_begin);
-        T_start = sm_ptr;
+        ptr = reinterpret_cast<T*>(begin);
+        T_start = ptr;
         T_end = _alignTo(alloc_end, sizeof(T));
     }
 
     template <typename U>
-    GRACE_DEVICE UserSmemPtr(const UserSmemPtr<U>& other)
+    GRACE_DEVICE BoundIter(const BoundIter<U>& other)
     {
         alloc_end = other.alloc_end;
 
-        sm_ptr = reinterpret_cast<T*>(other.sm_ptr);
-        T_start = sm_ptr;
+        ptr = reinterpret_cast<T*>(other.ptr);
+        T_start = ptr;
         T_end = _alignTo(alloc_end, sizeof(T));
     }
 
     template <typename U>
-    GRACE_DEVICE UserSmemPtr<T>& operator=(const UserSmemPtr<U>& other)
+    GRACE_DEVICE BoundIter<T>& operator=(const BoundIter<U>& other)
     {
         if (this != &other)
         {
             alloc_end = other.alloc_end;
 
-            sm_ptr = reinterpret_cast<T*>(other.sm_ptr);
-            T_start = sm_ptr;
+            ptr = reinterpret_cast<T*>(other.ptr);
+            T_start = ptr;
             T_end = _alignTo(alloc_end, sizeof(T));
         }
 
@@ -85,91 +88,144 @@ public:
 
     GRACE_DEVICE T& operator*()
     {
-        GRACE_ASSERT(sm_ptr >= T_start && "user shared memory out of bounds");
-        GRACE_ASSERT(sm_ptr < T_end && "user shared memory overflow");
+        GRACE_ASSERT(ptr >= T_start && "user shared memory out of bounds");
+        GRACE_ASSERT(ptr < T_end && "user shared memory overflow");
 
-        return *sm_ptr;
+        return *ptr;
     }
 
-    GRACE_DEVICE T& operator[](int i)
+    GRACE_DEVICE const T& operator*() const
     {
-        GRACE_ASSERT(T_start + i >= T_start && "user shared memory out of bounds");
-        GRACE_ASSERT(T_start + i < T_end && "user shared memory overflow");
+        GRACE_ASSERT(ptr >= T_start && "user shared memory out of bounds");
+        GRACE_ASSERT(ptr < T_end && "user shared memory overflow");
 
-        return *(T_start + i);
+        return *ptr;
+    }
+
+    GRACE_DEVICE T& operator[](difference_type i)
+    {
+        return *((*this) + i);
+    }
+
+    GRACE_DEVICE const T& operator[](difference_type i) const
+    {
+        return *((*this) + i);
+    }
+
+    GRACE_DEVICE T* operator->()
+    {
+        return &(*(*this));
+    }
+
+    GRACE_DEVICE const T* operator->() const
+    {
+        return &(*(*this));
     }
 
     // Prefix.
-    GRACE_DEVICE UserSmemPtr<T>& operator++()
+    GRACE_DEVICE BoundIter<T>& operator++()
     {
-        ++sm_ptr;
+        ++ptr;
         return *this;
     }
 
     // Postfix.
-    GRACE_DEVICE UserSmemPtr<T> operator++(int)
+    GRACE_DEVICE BoundIter<T> operator++(int)
     {
-        UserSmemPtr<T> temp = *this;
+        BoundIter<T> temp = *this;
         ++(*this);
         return temp;
     }
 
-    GRACE_DEVICE UserSmemPtr<T>& operator--()
+    // Prefix.
+    GRACE_DEVICE BoundIter<T>& operator--()
     {
-        --sm_ptr;
+        --ptr;
         return *this;
     }
 
-    GRACE_DEVICE UserSmemPtr<T> operator--(int)
+    // Postfix.
+    GRACE_DEVICE BoundIter<T> operator--(int)
     {
-       UserSmemPtr<T> temp = *this;
+       BoundIter<T> temp = *this;
        --(*this);
        return temp;
     }
 
-    GRACE_DEVICE UserSmemPtr<T>& operator+=(const int rhs)
+    GRACE_DEVICE BoundIter<T>& operator+=(const difference_type n)
     {
-        sm_ptr += rhs;
+        ptr += n;
         return *this;
     }
 
-    GRACE_DEVICE UserSmemPtr<T>& operator-=(const int rhs)
+    GRACE_DEVICE BoundIter<T>& operator-=(const difference_type n)
     {
-        sm_ptr -= rhs;
+        ptr -= n;
         return *this;
     }
 
-    GRACE_DEVICE ptrdiff_t operator-(const UserSmemPtr<T>& other)
+    GRACE_DEVICE friend BoundIter<T> operator+(const BoundIter<T>& lhs,
+                                               const difference_type rhs)
     {
-        return sm_ptr - other.sm_ptr;
+        BoundIter<T> temp = lhs;
+        temp += rhs;
+        return temp;
     }
 
-    // int opterator-(const UserSmemPtr<OtherType>& other);
-    // where T != OtherType, is not a well defined operation.
-
-    // int operator-(const char* ptr);
-    // would allow a user fairly *trivial* access to the value of sm_ptr.
-
-    GRACE_DEVICE friend UserSmemPtr<T> operator+(const UserSmemPtr<T> ptr,
-                                                 const int rhs)
+    GRACE_DEVICE friend BoundIter<T> operator+(const difference_type lhs,
+                                               const BoundIter<T>& rhs)
     {
-        ptr += rhs;
-        return ptr;
+        // Swap sides.
+        return rhs + lhs;
     }
 
-    GRACE_DEVICE friend UserSmemPtr<T> operator+(const int lhs,
-                                                 const UserSmemPtr<T>& ptr)
+    GRACE_DEVICE friend BoundIter<T> operator-(const BoundIter<T>& lhs,
+                                               const difference_type rhs)
     {
-        return ptr + lhs;
+        return lhs + (-rhs);
     }
 
-    GRACE_DEVICE friend UserSmemPtr<T> operator-(const UserSmemPtr<T>& ptr,
-                                                 const int rhs)
+    GRACE_DEVICE difference_type operator-(const BoundIter<T>& other) const
     {
-        return ptr + (-rhs);
+        return ptr - other.ptr;
     }
-    // int - ptr doesn't make sense.
-    // ptr + ptr doesn't make sense.
+
+    GRACE_DEVICE friend bool operator==(const BoundIter<T>& lhs,
+                                        const BoundIter<T>& rhs)
+    {
+        return lhs.ptr == rhs.ptr;
+    }
+
+    GRACE_DEVICE friend bool operator!=(const BoundIter<T>& lhs,
+                                        const BoundIter<T>& rhs)
+    {
+        return !(lhs == rhs);
+    }
+
+    GRACE_DEVICE friend bool operator<(const BoundIter<T>& lhs,
+                                       const BoundIter<T>& rhs)
+    {
+        return (rhs - lhs) > 0;
+    }
+
+    GRACE_DEVICE friend bool operator>(const BoundIter<T>& lhs,
+                                       const BoundIter<T>& rhs)
+    {
+        // Swap sides.
+        return rhs < lhs;
+    }
+
+    GRACE_DEVICE friend bool operator<=(const BoundIter<T>& lhs,
+                                        const BoundIter<T>& rhs)
+    {
+        return !(lhs > rhs);
+    }
+
+    GRACE_DEVICE friend bool operator>=(const BoundIter<T>& lhs,
+                                        const BoundIter<T>& rhs)
+    {
+        return !(lhs < rhs);
+    }
 };
 
 } // namespace gpu
