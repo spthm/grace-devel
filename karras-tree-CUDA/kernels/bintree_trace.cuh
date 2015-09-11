@@ -1,5 +1,6 @@
 #pragma once
 
+#include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
@@ -8,6 +9,7 @@
 
 #include "../device/intersect.cuh"
 #include "../util/bound_iter.cuh"
+#include "../util/texref_iter.cuh"
 #include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"
@@ -18,12 +20,6 @@
 #define FETCH_NODE(array, i) tex1Dfetch(array##_tex, i)
 #else
 #define FETCH_NODE(array, i) array[i]
-#endif
-
-#ifdef GRACE_PRIMITIVES_TEX
-#define FETCH_PRIMITIVE(array, i) tex1Dfetch(array##_tex, i)
-#else
-#define FETCH_PRIMITIVE(array, i) array[i]
 #endif
 
 
@@ -40,12 +36,6 @@ texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
 #endif
 
-// FIXME: this now depends on the templated type of the primitives.
-//        can it be placed within a function?
-#ifdef GRACE_PRIMITIVES_TEX
-texture<float4, cudaTextureType1D, cudaReadModeElementType> primitives_tex;
-#endif
-
 
 namespace gpu {
 
@@ -54,7 +44,7 @@ namespace gpu {
 //-----------------------------------------------------------------------------
 
 template <typename RayData,
-          typename TPrimitive,
+          typename PrimitiveIter,
           typename Init,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
@@ -65,7 +55,7 @@ __global__ void trace_kernel(
     const size_t n_nodes,
     const int4* leaves,
     const int* root_index,
-    const TPrimitive* primitives, // Pointer to primitive spatial-data wrapper type
+    const PrimitiveIter primitives,
     const size_t n_primitives,
     const int max_per_leaf,
     const size_t user_smem_bytes, // User's SMEM allocation, in bytes.
@@ -75,6 +65,8 @@ __global__ void trace_kernel(
     OnRayEntry ray_entry,   // ray-traversal entry functor
     OnRayExit ray_exit)     // ray-traversal exit functor
 {
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid  = threadIdx.x / grace::WARP_SIZE;
     int ray_index = threadIdx.x + blockIdx.x * blockDim.x;
@@ -182,8 +174,7 @@ __global__ void trace_kernel(
 
                 for (int i = lane; i < node.y; i += grace::WARP_SIZE)
                 {
-                    sm_prims[max_per_leaf * wid + i]
-                        = FETCH_PRIMITIVE(primitives, node.x + i);
+                    sm_prims[max_per_leaf * wid + i] = primitives[node.x + i];
                 }
 
                 for (int i = 0; i < node.y; ++i)
@@ -254,12 +245,15 @@ GRACE_HOST void trace(
     GRACE_CUDA_CHECK(cuerr);
 #endif
 
+    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+
 #ifdef GRACE_PRIMITIVES_TEX
-    cuerr = cudaBindTexture(
-        0, primitives_tex,
-        thrust::raw_pointer_cast(d_primitives.data()),
-        d_primitives.size() * sizeof(TPrimitive));
+    TexRefIter<TPrimitive, PRIMITIVE_TEX_UID> prims_iter;
+    cuerr = prims_iter.bind(prims_ptr,
+                            d_primitives.size() * sizeof(TPrimitive));
     GRACE_CUDA_CHECK(cuerr);
+#else
+    const TPrimitive* prims_iter = prims_ptr;
 #endif
 
     const int NT = grace::TRACE_THREADS_PER_BLOCK;
@@ -279,7 +273,7 @@ GRACE_HOST void trace(
         n_nodes,
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
-        thrust::raw_pointer_cast(d_primitives.data()),
+        prims_iter,
         d_primitives.size(),
         d_tree.max_per_leaf,
         user_smem_bytes,
@@ -295,7 +289,7 @@ GRACE_HOST void trace(
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
 #endif
 #ifdef GRACE_PRIMITIVES_TEX
-    GRACE_CUDA_CHECK(cudaUnbindTexture(primitives_tex));
+    GRACE_CUDA_CHECK(prims_iter.unbind());
 #endif
 }
 
