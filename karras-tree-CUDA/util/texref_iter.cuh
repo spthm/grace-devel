@@ -52,6 +52,9 @@
 
 #pragma once
 
+#include "meta.h"
+#include "../types.h"
+
 #include <cstddef>
 #include <iterator>
 
@@ -105,11 +108,106 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
 
 } // unnamed namespace
 
-// This is a const iterator. Texture references are not writable!
-// The iterator may only be dereferenced (*iter, iter[] and iter->) in device
-// code.
-// The iterator's bind() and unbind() methods may only be called in host code.
-// UID should be >= 0 in general. UIDs < 0 are reserved for GRACE internals.
+/* This is a const iterator. Texture references are not writeable!
+ * The iterator may only be dereferenced (*iter, iter[] and iter->) in device
+ * code.
+ * The iterator's bind() and unbind() methods may only be called in host code.
+ * UID should be >= 0. UIDs < 0 are reserved for GRACE internals.
+ *
+ * Calling unbind() is not required. bind() automatically unbinds a texture
+ * reference first, if necessary.
+ *
+ * MULTI-GPU USAGE
+ * ----------------
+ * CUDA generates a separate texture reference for each device at runtime.
+ * Therefore, the texture reference underlying a TexRefIter is different for
+ * each device, even if it has the same <T, UID> pair.
+ * However, this does not apply to the TexRefIter itself - its member variables
+ * are NOT per-device, they are per-instance.
+ * So, in general, each device requires its own TexRefIter instance, but these
+ * instances may have identical <T, UID> values.
+ *
+ * One thread per GPU:
+ *     Each thread should have its own, private TexRefIter instance.
+ *     Each thread's TexRefIter may use the same type and UID pair.
+ *     That is, though it may run correctly, the below is UNSAFE:
+ *
+ *         TexRefIter<float, 0> texref;
+ *         omp_set_num_threads(cudaGetDeviceCount());
+ *         #pragma omp parallel
+ *         {
+ *             int d = omp_get_thread_num();
+ *             cudaSetDevice(d);
+ *
+ *             texref.bind(d_in_ptrs[d], sizeof(float) * N);
+ *
+ *             int blocks = (N + 127) / 128;
+ *             kernel<<<blocks, 128>>>(texref, N, d_out_ptrs[d]);
+ *         }
+ *
+ *     If each thread has a significant workload between texture binding and
+ *     texture use (passing to a kernel), it is likely that threads will
+ *     interfere with one another's textures.
+ *
+ *     The below is SAFE (TexRefIter private to thread):
+ *
+ *         omp_set_num_threads(cudaGetDeviceCount());
+ *         #pragma omp parallel
+ *         {
+ *             int d = omp_get_thread_num();
+ *             cudaSetDevice(d);
+ *
+ *             TexRefIter<float, 0> texref;
+ *             texref.bind(d_in_ptrs[d], sizeof(float) * N);
+ *
+ *             int blocks = (N + 127) / 128;
+ *             kernel<<<blocks, 128>>>(texref, N, d_out_ptrs[d]);
+ *         }
+ *
+ * Single thread:
+ *     Each device should have its own TexRefIter instance. These instances may
+ *     have the same type and UID.
+ *     The texture-binding API call is blocking, but as CUDA generates a
+ *     separate texture reference for each device at runtime, no blocking will
+ *     occur *between* devices.
+ *     That is, the below is SAFE and asynchronous:
+ *
+ *         for (int d = 0; d < cudaGetDeviceCount(); ++d)
+ *         {
+ *             cudaSetDevice(d);
+ *
+ *             TexRefIter<float, 0> texref;
+ *             texref.bind(d_in_ptrs[d], sizeof(float) * N);
+ *
+ *             int blocks = (N + 127) / 128;
+ *             kernel<<<blocks, 128>>>(texref, N, d_out_ptrs[d]);
+ *         }
+ *
+ * STREAM USAGE
+ * -------------
+ * In the specific case that multiple streams will access the same array in
+ * global memory, only one TexRefIter should be instantiated. It should be
+ * bound once and passed to each kernel, regardless of that kernel's stream.
+ *
+ * In the general case, where each stream may access a different array in
+ * global memory:
+ * CUDA does NOT generate a separate texture reference for each stream.
+ * As a result, each stream requires its own TexRefIter with a UNIQUE UID.
+ * This then implies that the number of streams (or at least the maximum
+ * number of streams) be known at compile time, and that a sufficient number of
+ * unique TexRefIters be instantiated.
+ * E.g. with 2 streams, the below will run asynchronously and correctly:
+ *
+ *     cudaStream streams[2];
+ *     // The below TexRefIters refer to DIFFERENT texture references.
+ *     TexRefIter<float, 1> texref_s1; // Instantiate for stream 1.
+ *     TexRefIter<float, 2> texref_s2; // Instantiate for stream 2.
+ *     texref_s1.bind(d_ptr_s1, ... ); // Bind to stream 1's data.
+ *     texref_s2.bind(d_ptr_s2, ... ); // Bind to stream 2's data.
+ *     kernel<<<blocks, threads, 0, streams[0]>>>(texref_st1, ... );
+ *     kernel<<<blocks, threads, 0, streams[1]>>>(texref_st2, ... );
+ */
+
 template <typename T, int UID = 0>
 class TexRefIter
 {
@@ -120,7 +218,8 @@ public:
     typedef T value_type;
     // Constness.
     typedef const T* pointer;
-    typedef const T& reference;
+    // We can't return a reference to data read through the texture cache.
+    typedef const T reference;
 
 private:
     const T* d_ptr;
