@@ -16,11 +16,7 @@
 #include "../ray.h"
 #include "../types.h"
 
-#ifdef GRACE_NODES_TEX
-#define FETCH_NODE(array, i) tex1Dfetch(array##_tex, i)
-#else
-#define FETCH_NODE(array, i) array[i]
-#endif
+#define FETCH_NODE(nodes, i) tex1Dfetch(nodes##_tex, i)
 
 
 namespace grace {
@@ -29,12 +25,10 @@ namespace grace {
 // Textures for tree access within trace kernels.
 //-----------------------------------------------------------------------------
 
-#ifdef GRACE_NODES_TEX
 // float4 since it contains hierarchy (1 x int4) and AABB (3 x float4) data;
 // easier to treat as float and reinterpret as int when necessary.
 texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
-#endif
 
 
 namespace gpu {
@@ -196,17 +190,18 @@ __global__ void trace_kernel(
 } // namespace gpu
 
 //-----------------------------------------------------------------------------
-// C-like wrapper for trace kernel.
+// C-like wrappers for trace kernel.
 //-----------------------------------------------------------------------------
 
 template <typename RayData,
-          typename TPrimitive,
+          typename PrimitiveIter,
           typename Init,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
 GRACE_HOST void trace(
     const thrust::device_vector<Ray>& d_rays,
-    const thrust::device_vector<TPrimitive> d_primitives,
+    const PrimitiveIter prims_iter,
+    const size_t N_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
     Init init,
@@ -215,6 +210,7 @@ GRACE_HOST void trace(
     OnRayEntry ray_entry,
     OnRayExit ray_exit)
 {
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
     size_t n_rays = d_rays.size();
     size_t n_nodes = d_tree.leaves.size() - 1;
 
@@ -227,11 +223,8 @@ GRACE_HOST void trace(
         throw std::invalid_argument(msg);
     }
 
-#if defined(GRACE_NODES_TEX) || defined(GRACE_PRIMITIVES_TEX)
     cudaError_t cuerr;
-#endif
 
-#ifdef GRACE_NODES_TEX
     cuerr = cudaBindTexture(
         0, nodes_tex,
         reinterpret_cast<const float4*>(
@@ -243,18 +236,6 @@ GRACE_HOST void trace(
         0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.leaves.size() * sizeof(int4));
     GRACE_CUDA_CHECK(cuerr);
-#endif
-
-    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
-
-#ifdef GRACE_PRIMITIVES_TEX
-    TexRefIter<TPrimitive, PRIMITIVE_TEX_UID> prims_iter;
-    cuerr = prims_iter.bind(prims_ptr,
-                            d_primitives.size() * sizeof(TPrimitive));
-    GRACE_CUDA_CHECK(cuerr);
-#else
-    const TPrimitive* prims_iter = prims_ptr;
-#endif
 
     const int NT = grace::TRACE_THREADS_PER_BLOCK;
     const int blocks = min(static_cast<int>((n_rays + NT - 1) / NT),
@@ -274,7 +255,7 @@ GRACE_HOST void trace(
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.root_index_ptr,
         prims_iter,
-        d_primitives.size(),
+        N_primitives,
         d_tree.max_per_leaf,
         user_smem_bytes,
         init,
@@ -284,13 +265,39 @@ GRACE_HOST void trace(
         ray_exit);
     GRACE_KERNEL_CHECK();
 
-#ifdef GRACE_NODES_TEX
     GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
-#endif
-#ifdef GRACE_PRIMITIVES_TEX
+}
+
+// Reads the primitives through the texture cache.
+template <typename RayData,
+          typename TPrimitive,
+          typename Init,
+          typename Intersection, typename OnHit,
+          typename OnRayEntry, typename OnRayExit>
+GRACE_HOST void trace_texref(
+    const thrust::device_vector<Ray>& d_rays,
+    const thrust::device_vector<TPrimitive>& d_primitives,
+    const Tree& d_tree,
+    const size_t user_smem_bytes,
+    Init init,
+    Intersection intersect,
+    OnHit on_hit,
+    OnRayEntry ray_entry,
+    OnRayExit ray_exit)
+{
+    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    TexRefIter<TPrimitive, PRIMITIVE_TEX_UID> prims_iter;
+
+    cudaError_t cuerr
+        = prims_iter.bind(prims_ptr, d_primitives.size() * sizeof(TPrimitive));
+    GRACE_CUDA_CHECK(cuerr);
+
+    trace<RayData>(d_rays, prims_iter, d_primitives.size(), d_tree,
+                   user_smem_bytes, init, intersect, on_hit, ray_entry,
+                   ray_exit);
+
     GRACE_CUDA_CHECK(prims_iter.unbind());
-#endif
 }
 
 } // namespace grace
