@@ -36,6 +36,11 @@ struct are_same<T, T>
 };
 
 
+template <typename T, typename U>
+GRACE_HOST_DEVICE bool are_types_equal() {
+    return are_same<T, U>::result;
+}
+
 // U may be deduced.
 template <typename T, typename U>
 GRACE_HOST_DEVICE bool are_types_equal(const U value) {
