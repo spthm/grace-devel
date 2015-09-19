@@ -3,6 +3,7 @@
 #include "../error.h"
 #include "../types.h"
 #include "../device/trace_functors.cuh"
+#include "../device/trace_raydata.cuh"
 #include "../util/meta.h"
 #include "bintree_trace.cuh"
 
@@ -61,7 +62,7 @@ GRACE_HOST void trace_hitcounts_sph(
     thrust::device_vector<int>& d_hit_counts)
 {
     // Defines only RayData.data, of type int.
-    typedef RayData_datum<int> RayData;
+    typedef gpu::RayData_datum<int> RayData;
 
     trace_texref<RayData>(
         d_rays,
@@ -93,7 +94,7 @@ GRACE_HOST void trace_cumulative_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<Real, Real> RayData;
+    typedef gpu::RayData_sphere<Real, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
@@ -152,7 +153,7 @@ GRACE_HOST void trace_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<int, Real> RayData;
+    typedef gpu::RayData_sphere<int, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
@@ -228,7 +229,7 @@ GRACE_HOST void trace_sph_with_sentinels(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<int, Real> RayData;
+    typedef gpu::RayData_sphere<int, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
