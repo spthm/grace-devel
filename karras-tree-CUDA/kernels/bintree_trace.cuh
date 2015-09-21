@@ -37,12 +37,11 @@ texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
 // CUDA tracing kernel.
 //-----------------------------------------------------------------------------
 
-template <typename RayData,
-          typename RayIter,
-          typename PrimitiveIter,
-          typename Init,
-          typename Intersection, typename OnHit,
-          typename OnRayEntry, typename OnRayExit>
+template <
+    typename RayIter,
+    typename PrimitiveIter,
+    typename TraceCore
+    >
 __global__ void trace_kernel(
     const RayIter rays,
     const size_t n_rays,
@@ -54,11 +53,7 @@ __global__ void trace_kernel(
     const size_t n_primitives,
     const int max_per_leaf,
     const size_t user_smem_bytes, // User's SMEM allocation, in bytes.
-    Init init,              // pre-traversal functor
-    Intersection intersect, // ray-primitive intersection test functor
-    OnHit on_hit,           // ray-primitive intersection processing functor
-    OnRayEntry ray_entry,   // ray-traversal entry functor
-    OnRayExit ray_exit)     // ray-traversal exit functor
+    TraceCore core)
 {
     typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
@@ -76,7 +71,7 @@ __global__ void trace_kernel(
 
     extern __shared__ char smem_trace[];
     const BoundIter<char> sm_iter_usr(smem_trace, user_smem_bytes);
-    init(sm_iter_usr);
+    core.init(sm_iter_usr);
     __syncthreads();
 
     // Shared memory accesses must ensure correct alignment relative to the
@@ -99,8 +94,8 @@ __global__ void trace_kernel(
     {
         // Ray must not be modified by user.
         const Ray ray = rays[ray_index];
-        RayData ray_data = {};
-        ray_entry(ray_index, ray, ray_data, sm_iter_usr);
+        typename TraceCore::RayData ray_data = {};
+        core.ray_entry(ray_index, ray, &ray_data, sm_iter_usr);
 
         float3 invd, origin;
         invd.x = 1.f / ray.dx;
@@ -177,15 +172,16 @@ __global__ void trace_kernel(
                 for (int i = 0; i < node.y; ++i)
                 {
                     const TPrimitive prim = sm_prims[max_per_leaf * wid + i];
-                    if (intersect(ray, prim, ray_data, i, sm_iter_usr))
+                    if (core.intersect(ray_index, ray, &ray_data,
+                                       node.x + i, prim, i, sm_iter_usr))
                     {
-                        on_hit(ray_index, ray, ray_data, node.x + i, prim, i,
-                               sm_iter_usr);
+                        core.on_hit(ray_index, ray, &ray_data,
+                                    node.x + i, prim, i, sm_iter_usr);
                     }
                 }
             }
         }
-        ray_exit(ray_index, ray, ray_data, sm_iter_usr);
+        core.ray_exit(ray_index, ray, &ray_data, sm_iter_usr);
         ray_index += blockDim.x * gridDim.x;
     }
 }
@@ -196,12 +192,9 @@ __global__ void trace_kernel(
 // C-like wrappers for trace kernel.
 //-----------------------------------------------------------------------------
 
-template <typename RayData,
-          typename RayIter,
+template <typename RayIter,
           typename PrimitiveIter,
-          typename Init,
-          typename Intersection, typename OnHit,
-          typename OnRayEntry, typename OnRayExit>
+          typename TraceCore>
 GRACE_HOST void trace(
     const RayIter d_rays_iter,
     const size_t N_rays,
@@ -209,11 +202,7 @@ GRACE_HOST void trace(
     const size_t N_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
-    Init init,
-    Intersection intersect,
-    OnHit on_hit,
-    OnRayEntry ray_entry,
-    OnRayExit ray_exit)
+    TraceCore core)
 {
     typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
@@ -253,7 +242,7 @@ GRACE_HOST void trace(
                            + sizeof(int) * grace::STACK_SIZE * N_warps
                            + user_smem_bytes;
 
-    gpu::trace_kernel<RayData><<<blocks, NT, sm_size>>>(
+    gpu::trace_kernel<<<blocks, NT, sm_size>>>(
         d_rays_iter,
         N_rays,
         reinterpret_cast<const float4*>(
@@ -265,48 +254,33 @@ GRACE_HOST void trace(
         N_primitives,
         d_tree.max_per_leaf,
         user_smem_bytes,
-        init,
-        intersect,
-        on_hit,
-        ray_entry,
-        ray_exit);
+        core);
     GRACE_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(cudaUnbindTexture(gpu::nodes_tex));
     GRACE_CUDA_CHECK(cudaUnbindTexture(gpu::leaves_tex));
 }
 
-template <typename RayData,
-          typename TPrimitive,
-          typename Init,
-          typename Intersection, typename OnHit,
-          typename OnRayEntry, typename OnRayExit>
+template <typename TPrimitive,
+          typename TraceCore>
 GRACE_HOST void trace(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<TPrimitive>& d_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
-    Init init,
-    Intersection intersect,
-    OnHit on_hit,
-    OnRayEntry ray_entry,
-    OnRayExit ray_exit)
+    TraceCore core)
 {
     const Ray* d_rays_iter = thrust::raw_pointer_cast(d_rays.data());
     const TPrimitive* d_prims_iter = thrust::raw_pointer_cast(d_primitives.data());
 
-    trace<RayData>(d_rays_iter, d_rays.size(), d_prims_iter,
-                   d_primitives.size(), d_tree, user_smem_bytes, init,
-                   intersect, on_hit, ray_entry, ray_exit);
+    trace(d_rays_iter, d_rays.size(), d_prims_iter, d_primitives.size(),
+          d_tree, user_smem_bytes, core);
 }
 
 // Reads the primitives through the texture cache.
-template <typename RayData,
-          typename RayIter,
+template <typename RayIter,
           typename TPrimitive,
-          typename Init,
-          typename Intersection, typename OnHit,
-          typename OnRayEntry, typename OnRayExit>
+          typename TraceCore>
 GRACE_HOST void trace_texref(
     const RayIter d_rays_iter,
     const size_t N_rays,
@@ -314,11 +288,7 @@ GRACE_HOST void trace_texref(
     const size_t N_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
-    Init init,
-    Intersection intersect,
-    OnHit on_hit,
-    OnRayEntry ray_entry,
-    OnRayExit ray_exit)
+    TraceCore core)
 {
     TexRefIter<TPrimitive, PRIMITIVE_TEX_UID> prims_iter;
 
@@ -326,35 +296,26 @@ GRACE_HOST void trace_texref(
         = prims_iter.bind(d_primitives, N_primitives * sizeof(TPrimitive));
     GRACE_CUDA_CHECK(cuerr);
 
-    trace<RayData>(d_rays_iter, N_rays, prims_iter, N_primitives, d_tree,
-                   user_smem_bytes, init, intersect, on_hit, ray_entry,
-                   ray_exit);
+    trace(d_rays_iter, N_rays, prims_iter, N_primitives, d_tree,
+          user_smem_bytes, core);
 
     GRACE_CUDA_CHECK(prims_iter.unbind());
 }
 
-template <typename RayData,
-          typename TPrimitive,
-          typename Init,
-          typename Intersection, typename OnHit,
-          typename OnRayEntry, typename OnRayExit>
+template <typename TPrimitive,
+          typename TraceCore>
 GRACE_HOST void trace_texref(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<TPrimitive>& d_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
-    Init init,
-    Intersection intersect,
-    OnHit on_hit,
-    OnRayEntry ray_entry,
-    OnRayExit ray_exit)
+    TraceCore core)
 {
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const Ray* rays_ptr = thrust::raw_pointer_cast(d_rays.data());
 
-    trace_texref<RayData>(rays_ptr, d_rays.size(), prims_ptr,
-                          d_primitives.size(), d_tree, user_smem_bytes, init,
-                          intersect, on_hit, ray_entry, ray_exit);
+    trace_texref(rays_ptr, d_rays.size(), prims_ptr, d_primitives.size(),
+                 d_tree, user_smem_bytes, core);
 }
 
 } // namespace grace

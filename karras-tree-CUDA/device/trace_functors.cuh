@@ -30,7 +30,7 @@ class RayEntry_null
 public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 const RayData&,
+                                 const RayData* const,
                                  const BoundIter<char> /*smem_iter*/)
     {
         return;
@@ -46,17 +46,20 @@ template <typename T>
 class RayEntry_from_array
 {
 private:
-    const T* const inits;
+    const T* inits;
 
 public:
-    RayEntry_from_array(const T* const ray_data_inits) : inits(ray_data_inits) {}
+    void setRayEntryArray(const T* const ray_data_inits)
+    {
+        inits = ray_data_inits;
+    }
 
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
-                                 RayData& ray_data,
+                                 RayData* const ray_data,
                                  const BoundIter<char> /*smem_iter*/)
     {
-        ray_data.data = inits[ray_idx];
+        ray_data->data = inits[ray_idx];
     }
 };
 
@@ -67,17 +70,20 @@ template <typename T>
 class RayExit_to_array
 {
 private:
-    T* const store;
+    T* store;
 
 public:
-    RayExit_to_array(T* const ray_data_store) : store(ray_data_store) {}
+    void setRayExitArray(T* const ray_data_store)
+    {
+        store = ray_data_store;
+    }
 
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
-                                 const RayData& ray_data,
+                                 const RayData* const ray_data,
                                  const BoundIter<char> /*smem_iter*/)
     {
-        store[ray_idx] = ray_data.data;
+        store[ray_idx] = ray_data->data;
     }
 };
 
@@ -89,12 +95,16 @@ template <typename T>
 class InitGlobalToSmem
 {
 private:
-    const T* const data_global;
-    const int count;
+    const T* data_global;
+    int count;
 
 public:
-    InitGlobalToSmem(const T* const global_addr, const int count) :
-        data_global(global_addr), count(count) {}
+    // Note that N is a count, not a size in bytes.
+    void setSmemArraySource(const T* const global_addr, const int N)
+    {
+        data_global = global_addr;
+        count = N;
+    }
 
     GRACE_DEVICE void operator()(const BoundIter<char> smem_iter)
     {
@@ -120,8 +130,10 @@ class Intersect_sphere_bool
 {
 public:
     template <typename Real4, typename RayData>
-    GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
-                                 const RayData&, const int /*lane*/,
+    GRACE_DEVICE bool operator()(const int /*ray_idx*/, const Ray& ray,
+                                 const RayData* const,
+                                 const int /*sphere_idx*/, const Real4& sphere,
+                                 const int /*lane*/,
                                  const BoundIter<char> /*smem_iter*/)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
@@ -136,11 +148,13 @@ class Intersect_sphere_b2dist
 {
 public:
     template <typename Real4, typename RayData>
-    GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
-                                 RayData& ray_data, const int /*lane*/,
+    GRACE_DEVICE bool operator()(const int /*ray_idx*/, const Ray& ray,
+                                 RayData* const ray_data,
+                                 const int /*sphere_idx*/, const Real4& sphere,
+                                 const int /*lane*/,
                                  const BoundIter<char> /*smem_iter*/)
     {
-        return sphere_hit(ray, sphere, ray_data.b2, ray_data.dist);
+        return sphere_hit(ray, sphere, ray_data->b2, ray_data->dist);
     }
 };
 
@@ -152,11 +166,12 @@ class OnHit_increment
 public:
     template <typename RayData, typename TPrim>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 RayData& ray_data, const int /*prim_idx*/,
-                                 const TPrim&,  const int /*lane*/,
+                                 RayData* const ray_data,
+                                 const int /*prim_idx*/, const TPrim&,
+                                 const int /*lane*/,
                                  const BoundIter<char> /*smem_iter*/)
     {
-        ++ray_data.data;
+        ++(ray_data->data);
     }
 };
 
@@ -164,15 +179,19 @@ public:
 class OnHit_sphere_cumulate
 {
 private:
-    const int N_table;
+    int N_table;
 
 public:
-    OnHit_sphere_cumulate(const int N_table) : N_table(N_table) {}
+    void setLookupTableSize(const int N)
+    {
+        N_table = N;
+    }
 
     template <typename RayData, typename Real4>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 RayData& ray_data, const int /*sphere_idx*/,
-                                 const Real4& sphere, const int /*lane*/,
+                                 RayData* const ray_data,
+                                 const int /*sphere_idx*/, const Real4& sphere,
+                                 const int /*lane*/,
                                  const BoundIter<char> smem_iter)
     {
         typedef typename Real4ToRealMapper<Real4>::type Real;
@@ -182,14 +201,14 @@ public:
         BoundIter<double> Wk_lookup = smem_iter;
 
         Real ir = 1.f / sphere.w;
-        Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
+        Real b = (N_table - 1) * (sqrt(ray_data->b2) * ir);
         Real integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         GRACE_ASSERT(integral >= 0);
-        GRACE_ASSERT(ray_data.dist >= 0);
+        GRACE_ASSERT(ray_data->dist >= 0);
 
-        ray_data.data += integral;
+        ray_data->data += integral;
     }
 };
 
@@ -198,20 +217,29 @@ template <typename IntegerIdx, typename Real>
 class OnHit_sphere_individual
 {
 private:
-    IntegerIdx* const indices;
-    Real* const integrals;
-    Real* const distances;
-    const int N_table;
+    IntegerIdx* indices;
+    Real* integrals;
+    Real* distances;
+    int N_table;
 
 public:
-    OnHit_sphere_individual(IntegerIdx* const indices, Real* const integrals,
-                            Real* const distances, const int N_table) :
-        indices(indices), integrals(integrals), distances(distances),
-        N_table(N_table) {}
+    void setOutputArrays(IntegerIdx* const indices_addr,
+                         Real* const integrals_addr,
+                         Real* const distances_addr)
+    {
+        indices = indices_addr;
+        integrals = integrals_addr;
+        distances = distances_addr;
+    }
+
+    void setLookupTableSize(const int N)
+    {
+        N_table = N;
+    }
 
     template <typename RayData, typename Real4>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
-                                 RayData& ray_data, const int sphere_idx,
+                                 RayData* const ray_data, const int sphere_idx,
                                  const Real4& sphere, const int /*lane*/,
                                  const BoundIter<char> smem_iter)
     {
@@ -222,18 +250,18 @@ public:
         BoundIter<double> Wk_lookup = smem_iter;
 
         Real ir = 1.f / sphere.w;
-        Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
+        Real b = (N_table - 1) * (sqrt(ray_data->b2) * ir);
         Real integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
-        indices[ray_data.data] = sphere_idx;
-        integrals[ray_data.data] = integral;
-        distances[ray_data.data] = ray_data.dist;
+        indices[ray_data->data] = sphere_idx;
+        integrals[ray_data->data] = integral;
+        distances[ray_data->data] = ray_data->dist;
 
         GRACE_ASSERT(integral >= 0);
-        GRACE_ASSERT(ray_data.dist >= 0);
+        GRACE_ASSERT(ray_data->dist >= 0);
 
-        ++ray_data.data;
+        ++(ray_data->data);
     }
 };
 
