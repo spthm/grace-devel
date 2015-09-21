@@ -72,7 +72,7 @@ GRACE_HOST void trace_hitcounts_sph(
         gpu::Init_null(),
         gpu::Intersect_sphere_bool(),
         gpu::OnHit_increment(),
-        gpu::RayEntry_zero(),
+        gpu::RayEntry_null(),
         gpu::RayExit_to_array<int>(
             thrust::raw_pointer_cast(d_hit_counts.data()))
     );
@@ -105,7 +105,7 @@ GRACE_HOST void trace_cumulative_sph(
             N_table),
         gpu::Intersect_sphere_b2dist(),
         gpu::OnHit_sphere_cumulate(N_table),
-        gpu::RayEntry_zero(),
+        gpu::RayEntry_null(),
         gpu::RayExit_to_array<Real>(
             thrust::raw_pointer_cast(d_cumulated.data()))
     );

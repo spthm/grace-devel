@@ -22,6 +22,8 @@
 
 namespace grace {
 
+namespace gpu {
+
 //-----------------------------------------------------------------------------
 // Textures for tree access within trace kernels.
 //-----------------------------------------------------------------------------
@@ -30,9 +32,6 @@ namespace grace {
 // easier to treat as float and reinterpret as int when necessary.
 texture<float4, cudaTextureType1D, cudaReadModeElementType> nodes_tex;
 texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
-
-
-namespace gpu {
 
 //-----------------------------------------------------------------------------
 // CUDA tracing kernel.
@@ -100,7 +99,7 @@ __global__ void trace_kernel(
     {
         // Ray must not be modified by user.
         const Ray ray = rays[ray_index];
-        RayData ray_data;
+        RayData ray_data = {};
         ray_entry(ray_index, ray, ray_data, sm_iter_usr);
 
         float3 invd, origin;
@@ -177,7 +176,7 @@ __global__ void trace_kernel(
 
                 for (int i = 0; i < node.y; ++i)
                 {
-                    TPrimitive prim = sm_prims[max_per_leaf * wid + i];
+                    const TPrimitive prim = sm_prims[max_per_leaf * wid + i];
                     if (intersect(ray, prim, ray_data, i, sm_iter_usr))
                     {
                         on_hit(ray_index, ray, ray_data, node.x + i, prim, i,
@@ -234,14 +233,14 @@ GRACE_HOST void trace(
     cudaError_t cuerr;
 
     cuerr = cudaBindTexture(
-        0, nodes_tex,
+        0, gpu::nodes_tex,
         reinterpret_cast<const float4*>(
             thrust::raw_pointer_cast(d_tree.nodes.data())),
         d_tree.nodes.size() * sizeof(float4));
     GRACE_CUDA_CHECK(cuerr);
 
     cuerr = cudaBindTexture(
-        0, leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
+        0, gpu::leaves_tex, thrust::raw_pointer_cast(d_tree.leaves.data()),
         d_tree.leaves.size() * sizeof(int4));
     GRACE_CUDA_CHECK(cuerr);
 
@@ -273,8 +272,8 @@ GRACE_HOST void trace(
         ray_exit);
     GRACE_KERNEL_CHECK();
 
-    GRACE_CUDA_CHECK(cudaUnbindTexture(nodes_tex));
-    GRACE_CUDA_CHECK(cudaUnbindTexture(leaves_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(gpu::nodes_tex));
+    GRACE_CUDA_CHECK(cudaUnbindTexture(gpu::leaves_tex));
 }
 
 template <typename RayData,
