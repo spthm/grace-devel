@@ -111,7 +111,8 @@ public:
     GRACE_DEVICE void operator()(const BoundIter<char>& smem_iter)
     {
         // We *must* cast from the default pointer-to-char to the data type we
-        // wish to store in shared memory.
+        // wish to store in shared memory for dereferencing and indexing
+        // operators to work correctly.
         BoundIter<T> T_iter = smem_iter;
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
