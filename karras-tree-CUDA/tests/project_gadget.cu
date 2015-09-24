@@ -10,9 +10,9 @@
 #include "../ray.h"
 #include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/sort.cuh"
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -56,9 +56,10 @@ int main(int argc, char* argv[]) {
               << "per leaf..." << std::endl;
     std::cout << std::endl;
 
-    // Gadget IDs and masses unused.
+    // Gadget IDs, masses and densities unused.
     h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
     h_masses.clear(); h_masses.shrink_to_fit();
+    h_rho.clear(); h_rho.shrink_to_fit();
 
 
 { // Device code.
@@ -67,7 +68,6 @@ int main(int argc, char* argv[]) {
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<float> d_rho = h_rho;
 
     // Calculate limits here explicity since we need them later (i.e. do not
     // get morton_keys() to do it for us).
@@ -89,7 +89,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<unsigned int> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
@@ -142,36 +142,35 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
+
 
     /* Trace and accumulate density through the similation data. */
 
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
     thrust::device_vector<grace::Ray> d_rays = h_rays;
+    thrust::device_vector<float> d_traced_integrals(N_rays);
 
-    thrust::device_vector<float> d_traced_rho(N_rays);
-    grace::KernelIntegrals<float> lookup;
-    thrust::device_vector<float> d_b_integrals(&lookup.table[0],
-                                               &lookup.table[50]);
+    grace::trace_cumulative_sph(d_rays,
+                                d_spheres_xyzr,
+                                d_tree,
+                                d_traced_integrals);
 
-    grace::trace_property<float>(d_rays,
-                                 d_traced_rho,
-                                 d_tree,
-                                 d_spheres_xyzr,
-                                 d_rho);
-
-    float max_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
-                                   0.0f, thrust::maximum<float>());
-    float min_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
-                                   1E20, thrust::minimum<float>());
-    float mean_rho = thrust::reduce(d_traced_rho.begin(), d_traced_rho.end(),
-                                    0.0f, thrust::plus<float>())
-                     / d_traced_rho.size();
+    float max_integral = thrust::reduce(d_traced_integrals.begin(),
+                                        d_traced_integrals.end(),
+                                        0.0f, thrust::maximum<float>());
+    float min_integral = thrust::reduce(d_traced_integrals.begin(),
+                                        d_traced_integrals.end(),
+                                        1E20, thrust::minimum<float>());
+    float mean_integral = thrust::reduce(d_traced_integrals.begin(),
+                                         d_traced_integrals.end(),
+                                         0.0f, thrust::plus<float>());
+    mean_integral /= static_cast<float>(d_traced_integrals.size());
 
     std::cout << "Number of rays:         " << N_rays << std::endl;
     std::cout << "Number of particles:    " << N << std::endl;
-    std::cout << "Mean output             " << mean_rho << std::endl;
-    std::cout << "Max output:             " << max_rho << std::endl;
-    std::cout << "Min output:             " << min_rho << std::endl;
+    std::cout << "Mean output             " << mean_integral << std::endl;
+    std::cout << "Max output:             " << max_integral << std::endl;
+    std::cout << "Min output:             " << min_integral << std::endl;
     std::cout << std::endl;
 
 
@@ -183,17 +182,17 @@ int main(int argc, char* argv[]) {
     for (int i=0; i<N_rays; i++) {
         h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
     }
-    thrust::host_vector<float> h_traced_rho = d_traced_rho;
+    thrust::host_vector<float> h_traced_integrals = d_traced_integrals;
     thrust::host_vector<int> h_indices(N_rays);
 
-    grace::sort_by_key(h_pos_keys, h_traced_rho, h_rays);
+    grace::sort_by_key(h_pos_keys, h_traced_integrals, h_rays);
 
     // Increase the dynamic range.
     for (int i=0; i<N_rays; i++) {
-        h_traced_rho[i] = log10(h_traced_rho[i]);
+        h_traced_integrals[i] = log10(h_traced_integrals[i]);
     }
-    min_rho = log10(min_rho);
-    max_rho = log10(max_rho);
+    min_integral = log10(min_integral);
+    max_integral = log10(max_integral);
 
     // See http://stackoverflow.com/questions/2654480
     FILE *f;
@@ -214,9 +213,9 @@ int main(int argc, char* argv[]) {
         for(int j=0; j<h; j++)
     {
         x = i; y = (h-1) - j;
-        r = (int)( (h_traced_rho[i+w*j] - min_rho) * r_max/(max_rho - min_rho) );
-        g = (int)( (h_traced_rho[i+w*j] - min_rho) * g_max/(max_rho - min_rho) );
-        b = (int)( (h_traced_rho[i+w*j] - min_rho) * b_max/(max_rho - min_rho) );
+        r = (int)( (h_traced_integrals[i+w*j] - min_integral) * r_max/(max_integral - min_integral) );
+        g = (int)( (h_traced_integrals[i+w*j] - min_integral) * g_max/(max_integral - min_integral) );
+        b = (int)( (h_traced_integrals[i+w*j] - min_integral) * b_max/(max_integral - min_integral) );
         if (r > r_max) r = r_max;
         if (g > g_max) g = g_max;
         if (b > b_max) b = b_max;

@@ -19,9 +19,9 @@
 #include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/gen_rays.cuh"
 #include "../kernels/sort.cuh"
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -59,16 +59,11 @@ int main(int argc, char* argv[]) {
      */
 
     thrust::device_vector<float4> d_spheres_xyzr(N);
-    thrust::device_vector<float> d_rho(N);
 
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       d_spheres_xyzr.begin(),
                       grace::random_float4_functor(0.1f) );
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_rho.begin(),
-                      grace::random_float_functor(0.1f));
 
 
     /* Build the tree. */
@@ -79,7 +74,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<grace::uinteger32> d_keys(N);
 
     grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N+1);
@@ -106,28 +101,28 @@ int main(int argc, char* argv[]) {
 
     /* Perform a full trace. */
 
-    thrust::device_vector<float> d_traced_rho;
+    thrust::device_vector<float> d_traced_integrals;
     thrust::device_vector<int> d_ray_offsets(N_rays);
-    thrust::device_vector<unsigned int> d_hit_indices;
+    thrust::device_vector<int> d_hit_indices;
     thrust::device_vector<float> d_hit_distances;
 
-    grace::trace<float>(d_rays,
-                        d_traced_rho,
-                        d_ray_offsets,
-                        d_hit_indices,
-                        d_hit_distances,
-                        d_tree,
-                        d_spheres_xyzr,
-                        d_rho);
+    grace::trace_sph(d_rays,
+                     d_spheres_xyzr,
+                     d_tree,
+                     d_ray_offsets,
+                     d_hit_indices,
+                     d_traced_integrals,
+                     d_hit_distances);
 
     grace::sort_by_distance(d_hit_distances,
                             d_ray_offsets,
                             d_hit_indices,
-                            d_traced_rho);
+                            d_traced_integrals);
 
-    unsigned int total_hits = d_traced_rho.size();
+    unsigned int total_hits = d_traced_integrals.size();
     std::cout << "Total hits:   " << total_hits << std::endl;
-    std::cout << "Mean per ray: " << ((float)total_hits) / N_rays << std::endl;
+    std::cout << "Mean per ray: " << static_cast<float>(total_hits) / N_rays
+              << std::endl;
     std::cout << std::endl;
 
 

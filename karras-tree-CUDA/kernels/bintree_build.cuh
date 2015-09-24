@@ -13,8 +13,8 @@
 #include <thrust/sequence.h>
 #include <thrust/swap.h>
 
-#include "../error.h"
 #include "../device/loadstore.cuh"
+#include "../error.h"
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../types.h"

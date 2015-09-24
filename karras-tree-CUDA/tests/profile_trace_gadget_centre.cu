@@ -17,11 +17,10 @@
 #include "../ray.h"
 #include "../utils.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/gen_rays.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/sort.cuh"
-
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -72,9 +71,10 @@ int main(int argc, char* argv[]) {
 
     size_t N = h_spheres_xyzr.size();
 
-    // Gadget IDs and masses unused.
+    // Gadget IDs, masses and densities unused.
     h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
     h_masses.clear(); h_masses.shrink_to_fit();
+    h_rho.clear(); h_rho.shrink_to_fit();
 
 
     /* Output run parameters and device properties to console. */
@@ -102,12 +102,11 @@ int main(int argc, char* argv[]) {
     /* Build the tree. */
 
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<float> d_rho = h_rho;
     thrust::device_vector<grace::uinteger32> d_keys(N);
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::morton_keys(d_keys, d_spheres_xyzr);
-    grace::sort_by_key(d_keys, d_spheres_xyzr, d_rho);
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
 
     grace::Tree d_tree(N, max_per_leaf);
 
@@ -136,8 +135,8 @@ int main(int argc, char* argv[]) {
     cudaEvent_t part_start, part_stop;
     cudaEvent_t tot_start, tot_stop;
     float elapsed;
-    double gen_ray_tot, sort_rho_dists_tot;
-    double trace_rho_tot, trace_full_tot, trace_hit_tot;
+    double gen_ray_tot, sort_integral_dists_tot;
+    double trace_cum_tot, trace_full_tot, trace_hit_tot;
     double all_tot;
     cudaEventCreate(&part_start);
     cudaEventCreate(&part_stop);
@@ -157,38 +156,36 @@ int main(int argc, char* argv[]) {
         gen_ray_tot += elapsed;
 
         // The cumulated, integrated density for each ray.
-        thrust::device_vector<float> d_traced_rho(N_rays);
+        thrust::device_vector<float> d_traced_integrals(N_rays);
 
         cudaEventRecord(part_start);
-        grace::trace_property<float>(d_rays,
-                                     d_traced_rho,
-                                     d_tree,
-                                     d_spheres_xyzr,
-                                     d_rho);
+        grace::trace_cumulative_sph(d_rays,
+                                    d_spheres_xyzr,
+                                    d_tree,
+                                    d_traced_integrals);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        trace_rho_tot += elapsed;
+        trace_cum_tot += elapsed;
 
 
         /* Full trace. */
 
         // Indices of particles for all ray-particle intersections.
-        thrust::device_vector<unsigned int> d_hit_indices;
+        thrust::device_vector<int> d_hit_indices;
         // Distances, from the ray origin, to all ray-particle intersections.
         thrust::device_vector<float> d_hit_distances;
         // Offsets into the above vector where each ray's data starts.
         thrust::device_vector<int> d_ray_offsets(N_rays);
 
         cudaEventRecord(part_start);
-        grace::trace<float>(d_rays,
-                            d_traced_rho,
-                            d_ray_offsets,
-                            d_hit_indices,
-                            d_hit_distances,
-                            d_tree,
-                            d_spheres_xyzr,
-                            d_rho); // For RT, we'd pass ~number counts.
+        grace::trace_sph(d_rays,
+                         d_spheres_xyzr,
+                         d_tree,
+                         d_ray_offsets,
+                         d_hit_indices,
+                         d_traced_integrals,
+                         d_hit_distances);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -198,21 +195,21 @@ int main(int argc, char* argv[]) {
         grace::sort_by_distance(d_hit_distances,
                                 d_ray_offsets,
                                 d_hit_indices,
-                                d_traced_rho);
+                                d_traced_integrals);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
-        sort_rho_dists_tot += elapsed;
+        sort_integral_dists_tot += elapsed;
 
         /* End of full trace. */
 
         // Also profile the pure hit-count tracing.  Useful for optimizing the
         // pure tracing performance.
         cudaEventRecord(part_start);
-        grace::trace_hitcounts(d_rays,
-                               d_ray_offsets,
-                               d_tree,
-                               d_spheres_xyzr);
+        grace::trace_hitcounts_sph(d_rays,
+                                   d_spheres_xyzr,
+                                   d_tree,
+                                   d_ray_offsets);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&elapsed, part_start, part_stop);
@@ -229,15 +226,14 @@ int main(int argc, char* argv[]) {
             float trace_bytes = 0.0;
             float unused_bytes = 0.0;
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
-            trace_bytes += d_traced_rho.size() * sizeof(float);
-            trace_bytes += d_ray_offsets.size() * sizeof(float);
-            trace_bytes += d_hit_indices.size() * sizeof(unsigned int);
+            trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
             trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
-            trace_bytes += d_spheres_xyzr.size() * sizeof(float4);
-            trace_bytes += d_rho.size() * sizeof(float);
-            trace_bytes += grace::N_table * sizeof(float); // Integral lookup.
+            trace_bytes += d_ray_offsets.size() * sizeof(int);
+            trace_bytes += d_hit_indices.size() * sizeof(int);
+            trace_bytes += d_traced_integrals.size() * sizeof(float);
             trace_bytes += d_hit_distances.size() * sizeof(float);
+            trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
 
             unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);
@@ -273,7 +269,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Time for cumulative density tracing:    ";
     std::cout.width(8);
-    std::cout << trace_rho_tot / N_iter << " ms" << std::endl;
+    std::cout << trace_cum_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for full tracing:                  ";
     std::cout.width(8);
@@ -281,7 +277,7 @@ int main(int argc, char* argv[]) {
 
     std::cout << "Time for sort-by-distance:              ";
     std::cout.width(8);
-    std::cout << sort_rho_dists_tot / N_iter << " ms" << std::endl;
+    std::cout << sort_integral_dists_tot / N_iter << " ms" << std::endl;
 
     std::cout << "Time for total (inc. memory ops):       ";
     std::cout.width(8);

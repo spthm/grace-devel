@@ -16,8 +16,8 @@
 #include "../utils.cuh"
 #include "../kernels/morton.cuh"
 #include "../kernels/bintree_build.cuh"
-#include "../kernels/bintree_trace.cuh"
 #include "../kernels/gen_rays.cuh"
+#include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -100,8 +100,7 @@ int main(int argc, char* argv[]) {
     /* Trace for per-ray hit counts. */
 
     thrust::device_vector<int> d_hit_counts(N_rays);
-    grace::trace_hitcounts(d_rays, d_hit_counts,
-                           d_tree, d_spheres_xyzr);
+    grace::trace_hitcounts_sph(d_rays, d_spheres_xyzr, d_tree, d_hit_counts);
 
 
     /* Output simple hit-count statistics. */
