@@ -5,10 +5,6 @@
 #include <assert.h>
 #include <iostream>
 
-// Wrap around all calls to CUDA functions to handle errors.
-#define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
-#define GRACE_KERNEL_CHECK() { grace::cuda_kernel_check(__FILE__, __LINE__); }
-
 #ifdef GRACE_DEBUG
 // assert(a > b && "Helpful message") generates warnings in nvcc. The below
 // is a more portable, slightly less useful alternative.
@@ -30,6 +26,11 @@
 #else
 #define GRACE_STATIC_ASSERT(ignore, msg)
 #endif
+
+
+// Wrap around all calls to CUDA functions to handle errors.
+#define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
+#define GRACE_KERNEL_CHECK() { grace::cuda_kernel_check(__FILE__, __LINE__); }
 
 namespace grace {
 
