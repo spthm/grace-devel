@@ -62,7 +62,7 @@ __global__ void trace_kernel(
 {
     typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    GRACE_ASSERT( (are_types_equal<TRay, grace::Ray>()), ray_type_must_be_grace_Ray);
+    GRACE_STATIC_ASSERT( (are_types_equal<TRay, grace::Ray>()), "Ray type must be grace::Ray");
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid  = threadIdx.x / grace::WARP_SIZE;
@@ -215,9 +215,7 @@ GRACE_HOST void trace(
     OnRayEntry ray_entry,
     OnRayExit ray_exit)
 {
-    typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    GRACE_ASSERT( (are_types_equal<TRay, grace::Ray>()), ray_type_must_be_grace_Ray);
 
     size_t N_nodes = d_tree.leaves.size() - 1;
 

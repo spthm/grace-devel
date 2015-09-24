@@ -85,9 +85,6 @@ GRACE_HOST void trace_cumulative_sph(
     const Tree& d_tree,
     thrust::device_vector<Real>& d_cumulated)
 {
-    typedef typename Real4ToRealMapper<Real4>::type SphReal;
-    GRACE_ASSERT( (are_same<SphReal, Real>::result), sphere_output_types_mismatch);
-
     // TODO: Change it such that this is passed in, rather than copying it on
     // each call.
     const size_t sm_table_size = sizeof(double) * N_table;
@@ -123,9 +120,6 @@ GRACE_HOST void trace_sph(
     thrust::device_vector<Real>& d_hit_integrals,
     thrust::device_vector<Real>& d_hit_distances)
 {
-    typedef typename Real4ToRealMapper<Real4>::type SphReal;
-    GRACE_ASSERT( (are_same<SphReal, Real>::result), sphere_output_types_mismatch);
-
     const size_t n_rays = d_rays.size();
 
     // Initially, d_ray_offsets is actually per-ray *hit counts*.
@@ -189,9 +183,6 @@ GRACE_HOST void trace_sph_with_sentinels(
     thrust::device_vector<Real>& d_hit_distances,
     const Real distance_sentinel)
 {
-    typedef typename Real4ToRealMapper<Real4>::type SphReal;
-    GRACE_ASSERT( (are_same<SphReal, Real>::result), sphere_output_types_mismatch);
-
     const size_t n_rays = d_rays.size();
 
     // Initially, d_ray_offsets is actually per-ray *hit counts*.

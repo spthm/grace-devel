@@ -215,8 +215,6 @@ public:
                                  const Real4& sphere, const int /*lane*/,
                                  const BoundIter<char> smem_iter)
     {
-        GRACE_ASSERT(are_types_equal<Real>(sphere.x));
-
         // For simplicity, we do not template the type of the kernel integral
         // lookup table; it is always required to be double.
         BoundIter<double> Wk_lookup = smem_iter;
