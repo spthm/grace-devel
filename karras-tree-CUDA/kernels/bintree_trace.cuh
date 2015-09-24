@@ -62,7 +62,7 @@ __global__ void trace_kernel(
 {
     typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    GRACE_ASSERT((are_types_equal<TRay, grace::Ray>() && "Ray type must be grace::Ray"));
+    GRACE_ASSERT( (are_types_equal<TRay, grace::Ray>()), ray_type_must_be_grace_Ray);
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid  = threadIdx.x / grace::WARP_SIZE;
@@ -155,7 +155,7 @@ __global__ void trace_kernel(
 
                 // FIXME: Produces compile-time warning.
                 // See http://stackoverflow.com/questions/1712713/
-                GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1) && "trace stack overflowed");
+                GRACE_ASSERT(stack_ptr < sm_stacks + grace::STACK_SIZE * (wid + 1), trace_stack_overflow);
             }
 
             while (*stack_ptr >= n_nodes && *stack_ptr >= 0)
@@ -217,7 +217,7 @@ GRACE_HOST void trace(
 {
     typedef typename std::iterator_traits<RayIter>::value_type TRay;
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    GRACE_ASSERT((are_types_equal<TRay, grace::Ray>() && "Ray type must be grace::Ray"));
+    GRACE_ASSERT( (are_types_equal<TRay, grace::Ray>()), ray_type_must_be_grace_Ray);
 
     size_t N_nodes = d_tree.leaves.size() - 1;
 

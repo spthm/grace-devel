@@ -9,10 +9,20 @@
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
 #define GRACE_KERNEL_CHECK() { grace::cuda_kernel_check(__FILE__, __LINE__); }
 
+// assert(a > b && "Helpful message") generates warnings in nvcc. The below
+// is a more portable, slightly less useful alternative.
+//
+// Usage:
+// GRACE_ASSERT(a > b);
+// GRACE_ASSERT(a > b, some_unused_variable_name_as_error_message);
+// Where the error 'message' must be a valid variable name!
 #ifdef GRACE_DEBUG
-#define GRACE_ASSERT(predicate) { assert(predicate); }
+#define GRACE_ASSERT_NOMSG(predicate) { assert(predicate); }
+#define GRACE_ASSERT_MSG(predicate, err) { const bool err = true; assert(err && (predicate)); }
+#define GRACE_SELECT_ASSERT(arg1, arg2, ASSERT_MACRO, ...) ASSERT_MACRO
+#define GRACE_ASSERT(...) GRACE_SELECT_ASSERT(__VA_ARGS__, GRACE_ASSERT_MSG, GRACE_ASSERT_NOMSG)(__VA_ARGS__)
 #else
-#define GRACE_ASSERT(ignore)
+#define GRACE_ASSERT(...)
 #endif
 
 namespace grace {

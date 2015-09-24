@@ -88,16 +88,16 @@ public:
 
     GRACE_DEVICE T& operator*()
     {
-        GRACE_ASSERT(ptr >= T_start && "user shared memory out of bounds");
-        GRACE_ASSERT(ptr < T_end && "user shared memory overflow");
+        GRACE_ASSERT(ptr >= T_start, user_shared_memory_underflow);
+        GRACE_ASSERT(ptr < T_end, user_shared_memory_overflow);
 
         return *ptr;
     }
 
     GRACE_DEVICE const T& operator*() const
     {
-        GRACE_ASSERT(ptr >= T_start && "user shared memory out of bounds");
-        GRACE_ASSERT(ptr < T_end && "user shared memory overflow");
+        GRACE_ASSERT(ptr >= T_start, user_shared_memory_underflow);
+        GRACE_ASSERT(ptr < T_end, user_shared_memory_overflow);
 
         return *ptr;
     }
