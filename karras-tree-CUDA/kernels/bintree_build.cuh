@@ -141,25 +141,27 @@ __global__ void compute_deltas_kernel(
     }
 }
 
-template <typename KeyType, typename DeltaType>
-__global__ void compute_leaf_deltas_kernel(
+template <typename DeltaType>
+__global__ void copy_leaf_deltas_kernel(
     const int4* leaves,
     const size_t n_leaves,
-    const KeyType* keys,
-    const size_t n_keys,
-    DeltaType* deltas)
+    const DeltaType* all_deltas,
+    const size_t n_all,
+    DeltaType* leaf_deltas,
+    const size_t n_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     // The range [-1, n_leaves) is valid for querying node_delta.
+    // all_deltas[0] corresponds to the -1 case.
     if (tid == 0)
-        deltas[0] = node_delta(-1, keys, n_keys);
+        leaf_deltas[0] = all_deltas[0];
 
     while (tid < n_leaves)
     {
         int4 leaf = leaves[tid];
         int last_idx = leaf.x + leaf.y - 1;
-        deltas[tid+1] = node_delta(last_idx, keys, n_keys);
+        deltas[tid + 1] = all_deltas[last_idx];
         tid += blockDim.x * gridDim.x;
     }
 }
@@ -853,21 +855,23 @@ GRACE_HOST void compute_deltas(
     GRACE_KERNEL_CHECK();
 }
 
-template<typename KeyType, typename DeltaType>
-GRACE_HOST void compute_leaf_deltas(
+template<typename DeltaType>
+GRACE_HOST void copy_leaf_deltas(
     const thrust::device_vector<int4>& d_leaves,
-    const thrust::device_vector<KeyType>& d_keys,
-    thrust::device_vector<DeltaType>& d_deltas)
+    const thrust::device_vector<DeltaType>& d_all_deltas,
+    thrust::device_vector<DeltaType>& d_leaf_deltas)
 {
-    GRACE_ASSERT(d_leaves.size() + 1 == d_deltas.size());
+    GRACE_ASSERT(d_leaves.size() + 1 == d_leaf_deltas.size());
 
-    int blocks = min(grace::MAX_BLOCKS, (int)( (d_leaves.size() + 511) / 512 ));
-    gpu::compute_leaf_deltas_kernel<<<blocks, 512>>>(
+    const int blocks = min(grace::MAX_BLOCKS,
+                           static_cast<int>((d_leaves.size() + 511) / 512 ));
+    gpu::copy_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
-        thrust::raw_pointer_cast(d_keys.data()),
-        d_keys.size(),
-        thrust::raw_pointer_cast(d_deltas.data()));
+        thrust::raw_pointer_cast(d_all_deltas.data()),
+        d_all_deltas.size(),
+        thrust::raw_pointer_cast(d_leaf_deltas.data()),
+        d_leaf_deltas.size());
     GRACE_KERNEL_CHECK();
 }
 
@@ -1048,7 +1052,7 @@ GRACE_HOST void build_tree(
     const size_t n_new_leaves = d_tree.leaves.size();
 
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
-    compute_leaf_deltas(d_tree.leaves, d_keys, d_new_deltas);
+    copy_leaf_deltas(d_tree.leaves, d_deltas, d_new_deltas);
 
     build_nodes(d_tree, d_new_deltas, d_spheres);
 }
