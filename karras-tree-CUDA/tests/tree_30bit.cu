@@ -159,7 +159,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
 
     /* Save node and leaf data. */
 
