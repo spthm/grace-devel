@@ -79,17 +79,17 @@ GRACE_DEVICE uinteger64 node_delta(
 }
 
 // Euclidian distance metric.
-template <typename Float4>
+template <typename Real4>
 GRACE_DEVICE float node_delta(
     const int i,
-    const Float4* spheres,
+    const Real4* spheres,
     const size_t n_spheres)
 {
     if (i < 0 || i + 1 >= n_spheres)
         return CUDART_INF_F;
 
-    Float4 si = spheres[i];
-    Float4 sj = spheres[i+1];
+    Real4 si = spheres[i];
+    Real4 sj = spheres[i+1];
 
     return (si.x - sj.x) * (si.x - sj.x)
            + (si.y - sj.y) * (si.y - sj.y)
@@ -97,17 +97,17 @@ GRACE_DEVICE float node_delta(
 }
 
 // Surface area 'distance' metric.
-// template <typename Float4>
+// template <typename Real4>
 // GRACE_DEVICE float node_delta(
 //     const int i,
-//     const Float4* spheres,
+//     const Real4* spheres,
 //     const size_t n_spheres)
 // {
 //     if (i < 0 || i + 1 >= n_spheres)
 //         return CUDART_INF_F;
 
-//     Float4 si = spheres[i];
-//     Float4 sj = spheres[i+1];
+//     Real4 si = spheres[i];
+//     Real4 sj = spheres[i+1];
 
 //     float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
 //     float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
@@ -146,22 +146,23 @@ __global__ void copy_leaf_deltas_kernel(
     const int4* leaves,
     const size_t n_leaves,
     const DeltaType* all_deltas,
-    const size_t n_all,
-    DeltaType* leaf_deltas,
-    const size_t n_leaf)
+    DeltaType* leaf_deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     // The range [-1, n_leaves) is valid for querying node_delta.
-    // all_deltas[0] corresponds to the -1 case.
+    // leaf/all_deltas[0] corresponds to the -1 case.
     if (tid == 0)
         leaf_deltas[0] = all_deltas[0];
+    ++all_deltas;
+    ++leaf_deltas;
 
     while (tid < n_leaves)
     {
         int4 leaf = leaves[tid];
         int last_idx = leaf.x + leaf.y - 1;
-        deltas[tid + 1] = all_deltas[last_idx];
+        leaf_deltas[tid] = all_deltas[last_idx];
+
         tid += blockDim.x * gridDim.x;
     }
 }
@@ -178,7 +179,7 @@ __global__ void build_leaves_kernel(
     const size_t n_leaves = n_nodes + 1;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
-    deltas++;
+    ++deltas;
 
     int bid = blockIdx.x;
     int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
@@ -382,14 +383,14 @@ __global__ void write_leaves_kernel(
     }
 }
 
-template <typename DeltaType, typename Float4>
+template <typename DeltaType, typename Real4>
 __global__ void build_nodes_slice_kernel(
     int4* nodes,
     float4* f4_nodes,
     const size_t n_nodes,
     const int4* leaves,
     const size_t n_leaves,
-    const Float4* spheres,
+    const Real4* spheres,
     const int* base_indices,
     const size_t n_base_nodes,
     int* root_index,
@@ -485,7 +486,7 @@ __global__ void build_nodes_slice_kernel(
                 // it contains.
                 #pragma unroll 4
                 for (int i = 0; i < node.y; i++) {
-                    Float4 sphere = spheres[node.x + i];
+                    Real4 sphere = spheres[node.x + i];
 
                     x_min = min(x_min, sphere.x - sphere.w);
                     x_max = max(x_max, sphere.x + sphere.w);
@@ -869,9 +870,7 @@ GRACE_HOST void copy_leaf_deltas(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
         thrust::raw_pointer_cast(d_all_deltas.data()),
-        d_all_deltas.size(),
-        thrust::raw_pointer_cast(d_leaf_deltas.data()),
-        d_leaf_deltas.size());
+        thrust::raw_pointer_cast(d_leaf_deltas.data()));
     GRACE_KERNEL_CHECK();
 }
 
@@ -937,11 +936,11 @@ GRACE_HOST void remove_empty_leaves(Tree& d_tree)
     d_tree.leaves.resize(n_new_leaves);
 }
 
-template <typename DeltaType, typename Float4>
+template <typename DeltaType, typename Real4>
 GRACE_HOST void build_nodes(
     Tree& d_tree,
     const thrust::device_vector<DeltaType>& d_deltas,
-    const thrust::device_vector<Float4>& d_spheres)
+    const thrust::device_vector<Real4>& d_spheres)
 {
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -1022,12 +1021,11 @@ GRACE_HOST void build_nodes(
     }
 }
 
-template <typename KeyType, typename DeltaType, typename Float4>
+template <typename DeltaType, typename Real4>
 GRACE_HOST void build_tree(
     Tree& d_tree,
-    const thrust::device_vector<KeyType>& d_keys,
     const thrust::device_vector<DeltaType>& d_deltas,
-    const thrust::device_vector<Float4>& d_spheres,
+    const thrust::device_vector<Real4>& d_spheres,
     const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
