@@ -140,8 +140,7 @@ int main(int argc, char* argv[]) {
         thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
 
         cudaEventRecord(part_start);
-        grace::compute_leaf_deltas(d_tree.leaves, d_spheres_xyzr,
-                                   d_new_deltas);
+        grace::copy_leaf_deltas(d_tree.leaves, d_deltas, d_new_deltas);
         cudaEventRecord(part_stop);
         cudaEventSynchronize(part_stop);
         cudaEventElapsedTime(&part_elapsed, part_start, part_stop);

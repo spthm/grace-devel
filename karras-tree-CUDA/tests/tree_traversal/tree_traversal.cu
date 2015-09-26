@@ -71,7 +71,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<float> d_deltas(N+1);
 
     grace::compute_deltas(d_spheres, d_deltas);
-    grace::build_tree(d_tree, d_spheres, d_deltas, d_spheres);
+    grace::build_tree(d_tree, d_deltas, d_spheres);
 
     // Keys no longer needed.
     d_keys.clear();

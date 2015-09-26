@@ -111,7 +111,7 @@ int main(int argc, char* argv[]) {
     grace::Tree d_tree(N, max_per_leaf);
 
     grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_spheres_xyzr, d_deltas, d_spheres_xyzr);
+    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
 
 
     /* Compute information needed for ray generation; rays are emitted from the
