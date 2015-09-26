@@ -15,7 +15,7 @@
 // Usage:
 // GRACE_ASSERT(a > b);
 // GRACE_ASSERT(a > b, some_unused_variable_name_as_error_message);
-// Where the error 'message' must be a valid variable name.
+// Where the error 'message' must be a valid, unused variable name.
 #define GRACE_ASSERT(...) GRACE_SELECT_ASSERT(__VA_ARGS__, GRACE_ASSERT_MSG, GRACE_ASSERT_NOMSG)(__VA_ARGS__)
 #else
 #define GRACE_ASSERT(...)
@@ -27,6 +27,7 @@
 #define GRACE_STATIC_ASSERT(ignore, msg)
 #endif
 
+#define GRACE_GOT_TO() std::cerr << "At " << __FILE__ << "@" << __LINE__ << std::endl;
 
 // Wrap around all calls to CUDA functions to handle errors.
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
