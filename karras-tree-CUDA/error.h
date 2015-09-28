@@ -6,7 +6,7 @@
 #include <iostream>
 
 #ifdef GRACE_DEBUG
-// assert(a > b && "Helpful message") generates warnings in nvcc. The below
+// assert(a > b && "Helpful message") generates warnings from nvcc. The below
 // is a more portable, slightly less useful alternative.
 #define GRACE_ASSERT_NOMSG(predicate) { assert(predicate); }
 #define GRACE_ASSERT_MSG(predicate, err) { const bool err = true; assert(err && (predicate)); }
