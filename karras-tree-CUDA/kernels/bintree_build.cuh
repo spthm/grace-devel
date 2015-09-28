@@ -44,91 +44,154 @@ namespace gpu {
 // GPU helper functions for tree build kernels.
 //-----------------------------------------------------------------------------
 
-GRACE_DEVICE uinteger32 node_delta(
-    const int i,
-    const uinteger32* keys,
-    const size_t n_keys)
+struct Delta_XOR
 {
-    // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
-    // invalid ranges but are valid queries during tree construction.
-    if (i < 0 || i + 1 >= n_keys)
-        return uinteger32(-1);
+    GRACE_DEVICE uinteger32 operator()(
+        const int i,
+        const uinteger32* morton_keys,
+        const size_t n_keys) const
+    {
+        // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they
+        // cover invalid ranges but are valid queries during tree construction.
+        if (i < 0 || i + 1 >= n_keys)
+            return uinteger32(-1);
 
-    uinteger32 ki = keys[i];
-    uinteger32 kj = keys[i+1];
+        uinteger32 ki = morton_keys[i];
+        uinteger32 kj = morton_keys[i+1];
 
-    return ki ^ kj;
+        return ki ^ kj;
+    }
 
-}
+    GRACE_DEVICE uinteger64 operator()(
+        const int i,
+        const uinteger64* morton_keys,
+        const size_t n_keys) const
+    {
+        if (i < 0 || i + 1 >= n_keys)
+            return uinteger64(-1);
 
-GRACE_DEVICE uinteger64 node_delta(
-    const int i,
-    const uinteger64* keys,
-    const size_t n_keys)
-{
-    // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they cover
-    // invalid ranges but are valid queries during tree construction.
-    if (i < 0 || i + 1 >= n_keys)
-        return uinteger64(-1);
+        uinteger64 ki = morton_keys[i];
+        uinteger64 kj = morton_keys[i+1];
 
-    uinteger64 ki = keys[i];
-    uinteger64 kj = keys[i+1];
+        return ki ^ kj;
 
-    return ki ^ kj;
-
-}
+    }
+};
 
 // Euclidian distance metric.
-template <typename Real4>
-GRACE_DEVICE float node_delta(
-    const int i,
-    const Real4* spheres,
-    const size_t n_spheres)
+struct Delta_sphere_euclidean
 {
-    if (i < 0 || i + 1 >= n_spheres)
-        return CUDART_INF_F;
+    GRACE_DEVICE float operator()(
+        const int i,
+        const float4* spheres,
+        const size_t n_spheres) const
+    {
+        if (i < 0 || i + 1 >= n_spheres)
+            return CUDART_INF_F;
 
-    Real4 si = spheres[i];
-    Real4 sj = spheres[i+1];
+        float4 si = spheres[i];
+        float4 sj = spheres[i+1];
 
-    return (si.x - sj.x) * (si.x - sj.x)
-           + (si.y - sj.y) * (si.y - sj.y)
-           + (si.z - sj.z) * (si.z - sj.z);
-}
+        return (si.x - sj.x) * (si.x - sj.x)
+               + (si.y - sj.y) * (si.y - sj.y)
+               + (si.z - sj.z) * (si.z - sj.z);
+    }
+
+    GRACE_DEVICE double operator()(
+        const int i,
+        const double4* spheres,
+        const size_t n_spheres) const
+    {
+        if (i < 0 || i + 1 >= n_spheres)
+            return CUDART_INF;
+
+        double4 si = spheres[i];
+        double4 sj = spheres[i+1];
+
+        return (si.x - sj.x) * (si.x - sj.x)
+               + (si.y - sj.y) * (si.y - sj.y)
+               + (si.z - sj.z) * (si.z - sj.z);
+    }
+};
 
 // Surface area 'distance' metric.
-// template <typename Real4>
-// GRACE_DEVICE float node_delta(
-//     const int i,
-//     const Real4* spheres,
-//     const size_t n_spheres)
-// {
-//     if (i < 0 || i + 1 >= n_spheres)
-//         return CUDART_INF_F;
+struct Delta_sphere_SA
+{
+    GRACE_DEVICE float operator()(
+        const int i,
+        const float4* spheres,
+        const size_t n_spheres) const
+    {
+        if (i < 0 || i + 1 >= n_spheres)
+            return CUDART_INF_F;
 
-//     Real4 si = spheres[i];
-//     Real4 sj = spheres[i+1];
+        float4 si = spheres[i];
+        float4 sj = spheres[i+1];
 
-//     float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
-//     float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
-//     float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
+        float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
+        float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
+        float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
 
-//     float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
+        float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
 
-//     GRACE_ASSERT(SA < CUDART_INF_F);
-//     GRACE_ASSERT(SA > 0);
+        GRACE_ASSERT(SA < CUDART_INF_F);
+        GRACE_ASSERT(SA > 0);
 
-//     return SA;
-// }
+        return SA;
+    }
+
+    GRACE_DEVICE float operator()(
+        const int i,
+        const double4* spheres,
+        const size_t n_spheres) const
+    {
+        if (i < 0 || i + 1 >= n_spheres)
+            return CUDART_INF_F;
+
+        double4 si = spheres[i];
+        double4 sj = spheres[i+1];
+
+        double L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
+        double L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
+        double L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
+
+        double SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
+
+        GRACE_ASSERT(SA < CUDART_INF_F);
+        GRACE_ASSERT(SA > 0);
+
+        return SA;
+    }
+};
+
+struct AABB_sphere
+{
+    template <typename Real4>
+    GRACE_DEVICE void operator()(
+        Real4 sphere,
+        float3* bot,
+        float3* top) const
+    {
+        bot->x = sphere.x - sphere.w;
+        top->x = sphere.x + sphere.w;
+
+        bot->y = sphere.y - sphere.w;
+        top->y = sphere.y + sphere.w;
+
+        bot->z = sphere.z - sphere.w;
+        top->z = sphere.z + sphere.w;
+    }
+};
 
 //-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename KeyType, typename DeltaType>
+template <typename KeyType, typename DeltaFunc, typename DeltaType>
 __global__ void compute_deltas_kernel(
     const KeyType* keys,
     const size_t n_keys,
+    const DeltaFunc delta_func,
     DeltaType* deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -136,7 +199,7 @@ __global__ void compute_deltas_kernel(
     while (tid <= n_keys)
     {
         // The range [-1, n_keys) is valid for querying node_delta.
-        deltas[tid] = node_delta(tid - 1, keys, n_keys);
+        deltas[tid] = delta_func(tid - 1, keys, n_keys);
         tid += blockDim.x * gridDim.x;
     }
 }
@@ -167,12 +230,13 @@ __global__ void copy_leaf_deltas_kernel(
     }
 }
 
-template <typename DeltaType>
+template <typename DeltaType, typename DeltaComp>
 __global__ void build_leaves_kernel(
     int2* nodes,
     const size_t n_nodes,
     const DeltaType* deltas,
-    const int max_per_leaf)
+    const int max_per_leaf,
+    const DeltaComp delta_comp)
 {
     extern __shared__ int flags[];
 
@@ -217,7 +281,7 @@ __global__ void build_leaves_kernel(
             DeltaType delta_R = deltas[right];
             int* addr;
             int end;
-            if (delta_L < delta_R)
+            if (delta_comp(delta_L, delta_R))
             {
                 // Leftward node is parent.
                 parent_index = left - 1;
@@ -282,7 +346,7 @@ __global__ void build_leaves_kernel(
                 int end;
                 // Compute the current node's parent index and write associated
                 // data.
-                if (delta_L < delta_R)
+                if (delta_comp(delta_L, delta_R))
                 {
                     // Leftward node is parent.
                     parent_index = left - 1;
@@ -309,11 +373,13 @@ __global__ void build_leaves_kernel(
                 store_s32(addr, end);
 
                 __threadfence_block();
+
+                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
+                first_arrival = (flag == 0);
+
                 GRACE_ASSERT(parent_index - low >= 0);
                 GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
-                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
                 GRACE_ASSERT(flag < 2);
-                first_arrival = (flag == 0);
             } // while (!first_arrival)
         } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
         bid += gridDim.x;
@@ -383,20 +449,27 @@ __global__ void write_leaves_kernel(
     }
 }
 
-template <typename DeltaType, typename Real4>
+template <
+    typename TPrimitive,
+    typename DeltaType,
+    typename DeltaComp,
+    typename AABBFunc
+    >
 __global__ void build_nodes_slice_kernel(
     int4* nodes,
     float4* f4_nodes,
     const size_t n_nodes,
     const int4* leaves,
     const size_t n_leaves,
-    const Real4* spheres,
+    const TPrimitive* primitives,
     const int* base_indices,
     const size_t n_base_nodes,
     int* root_index,
     const DeltaType* deltas,
     const int max_per_node,
-    int* new_base_indices)
+    int* new_base_indices,
+    const DeltaComp delta_comp,
+    const AABBFunc AABB)
 {
     extern __shared__ int SMEM[];
 
@@ -486,16 +559,19 @@ __global__ void build_nodes_slice_kernel(
                 // it contains.
                 #pragma unroll 4
                 for (int i = 0; i < node.y; i++) {
-                    Real4 sphere = spheres[node.x + i];
+                    TPrimitive prim = primitives[node.x + i];
 
-                    x_min = min(x_min, sphere.x - sphere.w);
-                    x_max = max(x_max, sphere.x + sphere.w);
+                    float3 bot, top;
+                    AABB(prim, &bot, &top);
 
-                    y_min = min(y_min, sphere.y - sphere.w);
-                    y_max = max(y_max, sphere.y + sphere.w);
+                    x_min = min(x_min, bot.x);
+                    x_max = max(x_max, top.x);
 
-                    z_min = min(z_min, sphere.z - sphere.w);
-                    z_max = max(z_max, sphere.z + sphere.w);
+                    y_min = min(y_min, bot.y);
+                    y_max = max(y_max, top.y);
+
+                    z_min = min(z_min, bot.z);
+                    z_max = max(z_max, top.z);
                 }
             }
 
@@ -538,7 +614,7 @@ __global__ void build_nodes_slice_kernel(
             float* AABB_f4_addr;
             int end, sm_end;
             // Compute the current node's parent index and write-to locations.
-            if (delta_L < delta_R)
+            if (delta_comp(delta_L, delta_R))
             {
                 // Leftward node is parent.
                 parent_index = left - 1;
@@ -679,7 +755,7 @@ __global__ void build_nodes_slice_kernel(
                 float* AABB_f2_addr;
                 float* AABB_f4_addr;
                 int end, sm_end;
-                if (delta_L < delta_R)
+                if (delta_comp(delta_L, delta_R))
                 {
                     // Leftward node is parent.
                     parent_index = left - 1;
@@ -841,9 +917,10 @@ __global__ void fix_node_ranges(
 // C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
-template<typename KeyType, typename DeltaType>
+template<typename KeyType, typename DeltaFunc, typename DeltaType>
 GRACE_HOST void compute_deltas(
     const thrust::device_vector<KeyType>& d_keys,
+    const DeltaFunc delta_func,
     thrust::device_vector<DeltaType>& d_deltas)
 {
     GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
@@ -852,6 +929,7 @@ GRACE_HOST void compute_deltas(
     gpu::compute_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_keys.data()),
         d_keys.size(),
+        delta_func,
         thrust::raw_pointer_cast(d_deltas.data()));
     GRACE_KERNEL_CHECK();
 }
@@ -874,12 +952,13 @@ GRACE_HOST void copy_leaf_deltas(
     GRACE_KERNEL_CHECK();
 }
 
-template <typename DeltaType>
+template <typename DeltaType, typename DeltaComp>
 GRACE_HOST void build_leaves(
     thrust::device_vector<int2>& d_tmp_nodes,
     thrust::device_vector<int4>& d_tmp_leaves,
     const int max_per_leaf,
-    const thrust::device_vector<DeltaType>& d_deltas)
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const DeltaComp delta_comp)
 {
     const size_t n_leaves = d_tmp_leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -899,7 +978,8 @@ GRACE_HOST void build_leaves(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_deltas.data()),
-        max_per_leaf);
+        max_per_leaf,
+        delta_comp);
     GRACE_KERNEL_CHECK();
 
     blocks = min(grace::MAX_BLOCKS,
@@ -936,11 +1016,18 @@ GRACE_HOST void remove_empty_leaves(Tree& d_tree)
     d_tree.leaves.resize(n_new_leaves);
 }
 
-template <typename DeltaType, typename Real4>
+template <
+    typename Real4,
+    typename DeltaType,
+    typename DeltaComp,
+    typename AABBFunc
+    >
 GRACE_HOST void build_nodes(
     Tree& d_tree,
+    const thrust::device_vector<Real4>& d_spheres,
     const thrust::device_vector<DeltaType>& d_deltas,
-    const thrust::device_vector<Real4>& d_spheres)
+    const DeltaComp delta_comp,
+    const AABBFunc AABB)
 {
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -988,7 +1075,9 @@ GRACE_HOST void build_nodes(
             d_tree.root_index_ptr,
             thrust::raw_pointer_cast(d_deltas.data()),
             d_tree.max_per_leaf, // This can actually be anything.
-            d_out_ptr);
+            d_out_ptr,
+            delta_comp,
+            AABB);
         GRACE_KERNEL_CHECK();
 
         blocks = min(grace::MAX_BLOCKS,
@@ -1021,11 +1110,18 @@ GRACE_HOST void build_nodes(
     }
 }
 
-template <typename DeltaType, typename Real4>
+template <
+    typename Real4,
+    typename DeltaType,
+    typename DeltaComp,
+    typename AABBFunc
+    >
 GRACE_HOST void build_tree(
     Tree& d_tree,
-    const thrust::device_vector<DeltaType>& d_deltas,
     const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const DeltaComp delta_comp,
+    const AABBFunc AABB,
     const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
@@ -1044,7 +1140,8 @@ GRACE_HOST void build_tree(
 
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf, d_deltas);
+    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf, d_deltas,
+                 delta_comp);
     remove_empty_leaves(d_tree);
 
     const size_t n_new_leaves = d_tree.leaves.size();
@@ -1052,7 +1149,20 @@ GRACE_HOST void build_tree(
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
     copy_leaf_deltas(d_tree.leaves, d_deltas, d_new_deltas);
 
-    build_nodes(d_tree, d_new_deltas, d_spheres);
+    build_nodes(d_tree, d_spheres, d_new_deltas, delta_comp, AABB);
+}
+
+// Specialized with DeltaComp = thrust::less<DeltaType>
+template <typename Real4, typename DeltaType, typename AABBFunc>
+GRACE_HOST void build_tree(
+    Tree& d_tree,
+    const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const AABBFunc AABB,
+    const bool wipe = false)
+{
+    typedef typename thrust::less<DeltaType> DeltaComp;
+    build_tree(d_tree, d_spheres, d_deltas, DeltaComp(), AABB, wipe);
 }
 
 } // namespace grace
