@@ -41,158 +41,15 @@ struct is_empty_node : public thrust::unary_function<int4, bool>
 namespace gpu {
 
 //-----------------------------------------------------------------------------
-// GPU helper functions for tree build kernels.
-//-----------------------------------------------------------------------------
-
-struct Delta_XOR
-{
-    GRACE_DEVICE uinteger32 operator()(
-        const int i,
-        const uinteger32* morton_keys,
-        const size_t n_keys) const
-    {
-        // delta(-1) and delta(N-1) must return e.g. UINT_MAX because they
-        // cover invalid ranges but are valid queries during tree construction.
-        if (i < 0 || i + 1 >= n_keys)
-            return uinteger32(-1);
-
-        uinteger32 ki = morton_keys[i];
-        uinteger32 kj = morton_keys[i+1];
-
-        return ki ^ kj;
-    }
-
-    GRACE_DEVICE uinteger64 operator()(
-        const int i,
-        const uinteger64* morton_keys,
-        const size_t n_keys) const
-    {
-        if (i < 0 || i + 1 >= n_keys)
-            return uinteger64(-1);
-
-        uinteger64 ki = morton_keys[i];
-        uinteger64 kj = morton_keys[i+1];
-
-        return ki ^ kj;
-
-    }
-};
-
-// Euclidian distance metric.
-struct Delta_sphere_euclidean
-{
-    GRACE_DEVICE float operator()(
-        const int i,
-        const float4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF_F;
-
-        float4 si = spheres[i];
-        float4 sj = spheres[i+1];
-
-        return (si.x - sj.x) * (si.x - sj.x)
-               + (si.y - sj.y) * (si.y - sj.y)
-               + (si.z - sj.z) * (si.z - sj.z);
-    }
-
-    GRACE_DEVICE double operator()(
-        const int i,
-        const double4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF;
-
-        double4 si = spheres[i];
-        double4 sj = spheres[i+1];
-
-        return (si.x - sj.x) * (si.x - sj.x)
-               + (si.y - sj.y) * (si.y - sj.y)
-               + (si.z - sj.z) * (si.z - sj.z);
-    }
-};
-
-// Surface area 'distance' metric.
-struct Delta_sphere_SA
-{
-    GRACE_DEVICE float operator()(
-        const int i,
-        const float4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF_F;
-
-        float4 si = spheres[i];
-        float4 sj = spheres[i+1];
-
-        float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
-        float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
-        float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
-
-        float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
-
-        GRACE_ASSERT(SA < CUDART_INF_F);
-        GRACE_ASSERT(SA > 0);
-
-        return SA;
-    }
-
-    GRACE_DEVICE float operator()(
-        const int i,
-        const double4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF_F;
-
-        double4 si = spheres[i];
-        double4 sj = spheres[i+1];
-
-        double L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
-        double L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
-        double L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
-
-        double SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
-
-        GRACE_ASSERT(SA < CUDART_INF_F);
-        GRACE_ASSERT(SA > 0);
-
-        return SA;
-    }
-};
-
-struct AABB_sphere
-{
-    template <typename Real4>
-    GRACE_DEVICE void operator()(
-        Real4 sphere,
-        float3* bot,
-        float3* top) const
-    {
-        bot->x = sphere.x - sphere.w;
-        top->x = sphere.x + sphere.w;
-
-        bot->y = sphere.y - sphere.w;
-        top->y = sphere.y + sphere.w;
-
-        bot->z = sphere.z - sphere.w;
-        top->z = sphere.z + sphere.w;
-    }
-};
-
-//-----------------------------------------------------------------------------
 // CUDA kernels for tree building.
 //-----------------------------------------------------------------------------
 
-template <typename KeyType, typename DeltaFunc, typename DeltaType>
+template <typename KeyIter, typename DeltaIter, typename DeltaFunc>
 __global__ void compute_deltas_kernel(
-    const KeyType* keys,
+    KeyIter keys,
     const size_t n_keys,
-    const DeltaFunc delta_func,
-    DeltaType* deltas)
+    DeltaIter deltas,
+    const DeltaFunc delta_func)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -204,12 +61,13 @@ __global__ void compute_deltas_kernel(
     }
 }
 
-template <typename DeltaType>
+// Two template parameters as DeltaIter _may_ be const_iterator or const T*.
+template<typename DeltaIter, typename LeafDeltaIter>
 __global__ void copy_leaf_deltas_kernel(
     const int4* leaves,
     const size_t n_leaves,
-    const DeltaType* all_deltas,
-    DeltaType* leaf_deltas)
+    DeltaIter all_deltas,
+    LeafDeltaIter leaf_deltas)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
@@ -230,14 +88,16 @@ __global__ void copy_leaf_deltas_kernel(
     }
 }
 
-template <typename DeltaType, typename DeltaComp>
+template <typename DeltaIter, typename DeltaComp>
 __global__ void build_leaves_kernel(
     int2* nodes,
     const size_t n_nodes,
-    const DeltaType* deltas,
+    DeltaIter deltas,
     const int max_per_leaf,
     const DeltaComp delta_comp)
 {
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
+
     extern __shared__ int flags[];
 
     const size_t n_leaves = n_nodes + 1;
@@ -450,8 +310,8 @@ __global__ void write_leaves_kernel(
 }
 
 template <
-    typename TPrimitive,
-    typename DeltaType,
+    typename PrimitiveIter,
+    typename DeltaIter,
     typename DeltaComp,
     typename AABBFunc
     >
@@ -461,16 +321,19 @@ __global__ void build_nodes_slice_kernel(
     const size_t n_nodes,
     const int4* leaves,
     const size_t n_leaves,
-    const TPrimitive* primitives,
+    PrimitiveIter primitives,
     const int* base_indices,
     const size_t n_base_nodes,
     int* root_index,
-    const DeltaType* deltas,
+    DeltaIter deltas,
     const int max_per_node,
     int* new_base_indices,
     const DeltaComp delta_comp,
     const AABBFunc AABB)
 {
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
+
     extern __shared__ int SMEM[];
 
     int* flags = SMEM;
@@ -478,7 +341,7 @@ __global__ void build_nodes_slice_kernel(
         = (int2*)&flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
-    deltas++;
+    ++deltas;
 
     int bid = blockIdx.x;
     int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
@@ -917,47 +780,60 @@ __global__ void fix_node_ranges(
 // C-like wrappers for tree building.
 //-----------------------------------------------------------------------------
 
-template<typename KeyType, typename DeltaFunc, typename DeltaType>
+template<typename KeyIter, typename DeltaIter, typename DeltaFunc>
 GRACE_HOST void compute_deltas(
-    const thrust::device_vector<KeyType>& d_keys,
-    const DeltaFunc delta_func,
-    thrust::device_vector<DeltaType>& d_deltas)
+    KeyIter d_keys_iter,
+    const size_t N_keys,
+    DeltaIter d_deltas_iter,
+    const DeltaFunc delta_func)
 {
-    GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
-
-    int blocks = min(grace::MAX_BLOCKS, (int)( (d_deltas.size() + 511) / 512 ));
+    const size_t N_deltas = N_keys + 1;
+    int blocks = min(grace::MAX_BLOCKS, (int)( (N_deltas + 511) / 512 ));
     gpu::compute_deltas_kernel<<<blocks, 512>>>(
-        thrust::raw_pointer_cast(d_keys.data()),
-        d_keys.size(),
-        delta_func,
-        thrust::raw_pointer_cast(d_deltas.data()));
+        d_keys_iter,
+        N_keys,
+        d_deltas_iter,
+        delta_func);
     GRACE_KERNEL_CHECK();
 }
 
-template<typename DeltaType>
+template<typename KeyType, typename DeltaType, typename DeltaFunc>
+GRACE_HOST void compute_deltas(
+    const thrust::device_vector<KeyType>& d_keys,
+    thrust::device_vector<DeltaType>& d_deltas,
+    const DeltaFunc delta_func)
+{
+    GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
+
+    const KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
+    DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
+
+    compute_deltas(keys_ptr, d_keys.size(), deltas_ptr, delta_func);
+}
+
+// Two template parameters as DeltaIter _may_ be const_iterator or const T*.
+template<typename DeltaIter, typename LeafDeltaIter>
 GRACE_HOST void copy_leaf_deltas(
     const thrust::device_vector<int4>& d_leaves,
-    const thrust::device_vector<DeltaType>& d_all_deltas,
-    thrust::device_vector<DeltaType>& d_leaf_deltas)
+    DeltaIter d_all_deltas_iter,
+    LeafDeltaIter d_leaf_deltas_iter)
 {
-    GRACE_ASSERT(d_leaves.size() + 1 == d_leaf_deltas.size());
-
     const int blocks = min(grace::MAX_BLOCKS,
                            static_cast<int>((d_leaves.size() + 511) / 512 ));
     gpu::copy_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
-        thrust::raw_pointer_cast(d_all_deltas.data()),
-        thrust::raw_pointer_cast(d_leaf_deltas.data()));
+        d_all_deltas_iter,
+        d_leaf_deltas_iter);
     GRACE_KERNEL_CHECK();
 }
 
-template <typename DeltaType, typename DeltaComp>
+template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
     thrust::device_vector<int2>& d_tmp_nodes,
     thrust::device_vector<int4>& d_tmp_leaves,
     const int max_per_leaf,
-    const thrust::device_vector<DeltaType>& d_deltas,
+    DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
 {
     const size_t n_leaves = d_tmp_leaves.size();
@@ -965,7 +841,7 @@ GRACE_HOST void build_leaves(
 
     if (n_leaves <= max_per_leaf) {
         const std::string msg
-            = "max_per_leaf must be less than the total number of spheres.";
+            = "max_per_leaf must be less than the total number of primitives.";
         throw std::invalid_argument(msg);
     }
 
@@ -977,7 +853,7 @@ GRACE_HOST void build_leaves(
     gpu::build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
-        thrust::raw_pointer_cast(d_deltas.data()),
+        d_deltas_iter,
         max_per_leaf,
         delta_comp);
     GRACE_KERNEL_CHECK();
@@ -1017,15 +893,15 @@ GRACE_HOST void remove_empty_leaves(Tree& d_tree)
 }
 
 template <
-    typename Real4,
-    typename DeltaType,
+    typename PrimitiveIter,
+    typename DeltaIter,
     typename DeltaComp,
     typename AABBFunc
     >
 GRACE_HOST void build_nodes(
     Tree& d_tree,
-    const thrust::device_vector<Real4>& d_spheres,
-    const thrust::device_vector<DeltaType>& d_deltas,
+    PrimitiveIter d_prims_iter,
+    DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
     const AABBFunc AABB)
 {
@@ -1069,11 +945,11 @@ GRACE_HOST void build_nodes(
             n_nodes,
             thrust::raw_pointer_cast(d_tree.leaves.data()),
             n_leaves,
-            thrust::raw_pointer_cast(d_spheres.data()),
+            d_prims_iter,
             d_in_ptr,
             n_in,
             d_tree.root_index_ptr,
-            thrust::raw_pointer_cast(d_deltas.data()),
+            d_deltas_iter,
             d_tree.max_per_leaf, // This can actually be anything.
             d_out_ptr,
             delta_comp,
@@ -1111,20 +987,22 @@ GRACE_HOST void build_nodes(
 }
 
 template <
-    typename Real4,
-    typename DeltaType,
+    typename PrimitiveIter,
+    typename DeltaIter,
     typename DeltaComp,
     typename AABBFunc
     >
 GRACE_HOST void build_tree(
     Tree& d_tree,
-    const thrust::device_vector<Real4>& d_spheres,
-    const thrust::device_vector<DeltaType>& d_deltas,
+    PrimitiveIter d_prims_iter,
+    DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
     const AABBFunc AABB,
     const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
+
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
 
     // In case this ever changes.
     GRACE_ASSERT(sizeof(int4) == sizeof(float4));
@@ -1140,29 +1018,65 @@ GRACE_HOST void build_tree(
 
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf, d_deltas,
-                 delta_comp);
+    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
+                 d_deltas_iter, delta_comp);
     remove_empty_leaves(d_tree);
 
     const size_t n_new_leaves = d_tree.leaves.size();
 
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
-    copy_leaf_deltas(d_tree.leaves, d_deltas, d_new_deltas);
+    DeltaType* new_deltas_ptr = thrust::raw_pointer_cast(d_new_deltas.data());
+    copy_leaf_deltas(d_tree.leaves, d_deltas_iter, new_deltas_ptr);
 
-    build_nodes(d_tree, d_spheres, d_new_deltas, delta_comp, AABB);
+    build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp, AABB);
+}
+
+template <
+    typename TPrimitive,
+    typename DeltaType,
+    typename DeltaComp,
+    typename AABBFunc
+    >
+GRACE_HOST void build_tree(
+    Tree& d_tree,
+    const thrust::device_vector<TPrimitive>& d_primitives,
+    const thrust::device_vector<DeltaType>& d_deltas,
+    const DeltaComp delta_comp,
+    const AABBFunc AABB,
+    const bool wipe = false)
+{
+    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
+
+    build_tree(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
-template <typename Real4, typename DeltaType, typename AABBFunc>
+template <typename PrimitiveIter, typename DeltaIter, typename AABBFunc>
 GRACE_HOST void build_tree(
     Tree& d_tree,
-    const thrust::device_vector<Real4>& d_spheres,
+    PrimitiveIter d_prims_iter,
+    DeltaIter d_deltas_iter,
+    const AABBFunc AABB,
+    const bool wipe = false)
+{
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
+    typedef typename thrust::less<DeltaType> DeltaComp;
+    build_tree(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB, wipe);
+}
+
+template <typename TPrimitive, typename DeltaType, typename AABBFunc>
+GRACE_HOST void build_tree(
+    Tree& d_tree,
+    const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const AABBFunc AABB,
     const bool wipe = false)
 {
-    typedef typename thrust::less<DeltaType> DeltaComp;
-    build_tree(d_tree, d_spheres, d_deltas, DeltaComp(), AABB, wipe);
+    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
+
+    build_tree(d_tree, prims_ptr, deltas_ptr, AABB, wipe);
 }
 
 } // namespace grace
