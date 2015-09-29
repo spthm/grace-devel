@@ -37,6 +37,8 @@ texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
 // CUDA tracing kernel.
 //-----------------------------------------------------------------------------
 
+// RayIter _may_ be a const Ray* or const_iterator<Ray>.
+// PrimitiveIter _may_ be a const TPrimitive* or const_iterator<TPrimitive>
 template <typename RayData,
           typename RayIter,
           typename PrimitiveIter,
@@ -44,13 +46,13 @@ template <typename RayData,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
 __global__ void trace_kernel(
-    const RayIter rays,
+    RayIter rays,
     const size_t n_rays,
     const float4* nodes,
     const size_t n_nodes,
     const int4* leaves,
     const int* root_index,
-    const PrimitiveIter primitives,
+    PrimitiveIter primitives,
     const size_t n_primitives,
     const int max_per_leaf,
     const size_t user_smem_bytes, // User's SMEM allocation, in bytes.
@@ -196,6 +198,8 @@ __global__ void trace_kernel(
 // C-like wrappers for trace kernel.
 //-----------------------------------------------------------------------------
 
+// RayIter _may_ be a const Ray* or const_iterator<Ray>.
+// PrimitiveIter _may_ be a const TPrimitive* or const_iterator<TPrimitive>
 template <typename RayData,
           typename RayIter,
           typename PrimitiveIter,
@@ -203,9 +207,9 @@ template <typename RayData,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
 GRACE_HOST void trace(
-    const RayIter d_rays_iter,
+    RayIter d_rays_iter,
     const size_t N_rays,
-    const PrimitiveIter d_prims_iter,
+    PrimitiveIter d_prims_iter,
     const size_t N_primitives,
     const Tree& d_tree,
     const size_t user_smem_bytes,
@@ -299,6 +303,7 @@ GRACE_HOST void trace(
 }
 
 // Reads the primitives through the texture cache.
+// RayIter _may_ be a const Ray* or const_iterator<Ray>.
 template <typename RayData,
           typename RayIter,
           typename TPrimitive,
@@ -306,7 +311,7 @@ template <typename RayData,
           typename Intersection, typename OnHit,
           typename OnRayEntry, typename OnRayExit>
 GRACE_HOST void trace_texref(
-    const RayIter d_rays_iter,
+    RayIter d_rays_iter,
     const size_t N_rays,
     const TPrimitive* d_primitives,
     const size_t N_primitives,
