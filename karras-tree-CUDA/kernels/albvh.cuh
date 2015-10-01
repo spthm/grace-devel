@@ -18,30 +18,13 @@
 #include "../kernel_config.h"
 #include "../nodes.h"
 #include "../types.h"
-#include "bits.cuh"
-#include "morton.cuh"
 
 namespace grace {
 
-//-----------------------------------------------------------------------------
-// Helper function for tree build kernels.
-//-----------------------------------------------------------------------------
-
-struct is_empty_node : public thrust::unary_function<int4, bool>
-{
-    GRACE_HOST_DEVICE
-    bool operator()(const int4 node) const
-    {
-        // Note: a node's right child can never be node 0, and a leaf can never
-        // cover zero elements.
-        return (node.y == 0);
-    }
-};
-
-namespace gpu {
+namespace ALBVH {
 
 //-----------------------------------------------------------------------------
-// CUDA kernels for tree building.
+// CUDA ALBVH kernels.
 //-----------------------------------------------------------------------------
 
 template <typename KeyIter, typename DeltaIter, typename DeltaFunc>
@@ -164,7 +147,7 @@ __global__ void build_leaves_kernel(
 
             // Normal store.  Other threads in this block can read from L1 if
             // they get a hit.  No requirement for global coherency.
-            store_s32(addr, end);
+            gpu::store_s32(addr, end);
 
             // Travel up the tree.  The second thread to reach a node writes its
             // left or right end to its parent.  The first exits the loop.
@@ -182,7 +165,7 @@ __global__ void build_leaves_kernel(
                 // We are certain that a thread in this block has already
                 // written the other child of the current node, so we can read
                 // from L1 cache if we get a hit.  Normal vector int2 load.
-                int2 left_right = load_vec2s32(&(nodes[parent_index].x));
+                int2 left_right = gpu::load_vec2s32(&(nodes[parent_index].x));
                 int left = left_right.x;
                 int right = left_right.y;
 
@@ -230,7 +213,7 @@ __global__ void build_leaves_kernel(
                 }
 
                 // Normal store.
-                store_s32(addr, end);
+                gpu::store_s32(addr, end);
 
                 __threadfence_block();
 
@@ -532,10 +515,10 @@ __global__ void build_nodes_slice_kernel(
             // Normal stores.  Other threads in this block can read from L1 if
             // they get a cache hit, i.e. there is no requirement for global
             // coherency.
-            store_s32(child_addr, g_cur_index);
-            store_s32(end_addr, end);
-            store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-            store_vec2f32(AABB_f2_addr, z_min, z_max);
+            gpu::store_s32(child_addr, g_cur_index);
+            gpu::store_s32(end_addr, end);
+            gpu::store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+            gpu::store_vec2f32(AABB_f2_addr, z_min, z_max);
             *sm_addr = sm_end;
 
             // Travel up the tree.  The second thread to reach a node writes its
@@ -557,7 +540,7 @@ __global__ void build_nodes_slice_kernel(
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
-                int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+                int4 node = gpu::load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
 
                 // 'error: class "int2" has no suitable copy constructor'
                 // int2 left_right = sm_nodes[cur_index - low];
@@ -595,9 +578,9 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 // Again, L1 data will be accurate.
-                float4 AABB_L  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
-                float4 AABB_R  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
-                float4 AABB_LR = load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
+                float4 AABB_L  = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
+                float4 AABB_R  = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
+                float4 AABB_LR = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
 
                 float x_min = min(AABB_L.x, AABB_R.x);
                 float x_max = max(AABB_L.y, AABB_R.y);
@@ -662,10 +645,10 @@ __global__ void build_nodes_slice_kernel(
                     break;
                 }
 
-                store_s32(child_addr, g_cur_index);
-                store_s32(end_addr, end);
-                store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-                store_vec2f32(AABB_f2_addr, z_min, z_max);
+                gpu::store_s32(child_addr, g_cur_index);
+                gpu::store_s32(end_addr, end);
+                gpu::store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+                gpu::store_vec2f32(AABB_f2_addr, z_min, z_max);
                 *sm_addr = sm_end;
 
                 __threadfence_block();
@@ -774,42 +757,9 @@ __global__ void fix_node_ranges(
     }
 }
 
-} // namespace gpu
-
 //-----------------------------------------------------------------------------
-// C-like wrappers for tree building.
+// C-like wrappers for ALBVH kernels.
 //-----------------------------------------------------------------------------
-
-template<typename KeyIter, typename DeltaIter, typename DeltaFunc>
-GRACE_HOST void compute_deltas(
-    KeyIter d_keys_iter,
-    const size_t N_keys,
-    DeltaIter d_deltas_iter,
-    const DeltaFunc delta_func)
-{
-    const size_t N_deltas = N_keys + 1;
-    int blocks = min(grace::MAX_BLOCKS, (int)( (N_deltas + 511) / 512 ));
-    gpu::compute_deltas_kernel<<<blocks, 512>>>(
-        d_keys_iter,
-        N_keys,
-        d_deltas_iter,
-        delta_func);
-    GRACE_KERNEL_CHECK();
-}
-
-template<typename KeyType, typename DeltaType, typename DeltaFunc>
-GRACE_HOST void compute_deltas(
-    const thrust::device_vector<KeyType>& d_keys,
-    thrust::device_vector<DeltaType>& d_deltas,
-    const DeltaFunc delta_func)
-{
-    GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
-
-    const KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
-    DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
-
-    compute_deltas(keys_ptr, d_keys.size(), deltas_ptr, delta_func);
-}
 
 // Two template parameters as DeltaIter _may_ be const_iterator or const T*.
 template<typename DeltaIter, typename LeafDeltaIter>
@@ -820,7 +770,7 @@ GRACE_HOST void copy_leaf_deltas(
 {
     const int blocks = min(grace::MAX_BLOCKS,
                            static_cast<int>((d_leaves.size() + 511) / 512 ));
-    gpu::copy_leaf_deltas_kernel<<<blocks, 512>>>(
+    copy_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
         d_all_deltas_iter,
@@ -850,7 +800,7 @@ GRACE_HOST void build_leaves(
                              / grace::BUILD_THREADS_PER_BLOCK));
     int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
-    gpu::build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
+    build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         d_deltas_iter,
@@ -862,7 +812,7 @@ GRACE_HOST void build_leaves(
                  (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
                          / grace::BUILD_THREADS_PER_BLOCK));
 
-    gpu::write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+    write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
@@ -938,7 +888,7 @@ GRACE_HOST void build_nodes(
         // AND int2 nodes.
         int smem_size = (sizeof(int) + sizeof(int2))
                         * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
-        gpu::build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
+        build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             reinterpret_cast<float4*>(
                 thrust::raw_pointer_cast(d_tree.nodes.data())),
@@ -959,14 +909,14 @@ GRACE_HOST void build_nodes(
         blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
                              / grace::BUILD_THREADS_PER_BLOCK));
-        gpu::fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             d_tree.max_per_leaf,
             d_out_ptr);
         GRACE_KERNEL_CHECK();
 
-        gpu::fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             thrust::raw_pointer_cast(d_tree.leaves.data()),
@@ -986,13 +936,51 @@ GRACE_HOST void build_nodes(
     }
 }
 
+} // namespace ALBVH
+
+
+//-----------------------------------------------------------------------------
+// User functions for ALBVH building.
+//-----------------------------------------------------------------------------
+
+template<typename KeyIter, typename DeltaIter, typename DeltaFunc>
+GRACE_HOST void compute_deltas(
+    KeyIter d_keys_iter,
+    const size_t N_keys,
+    DeltaIter d_deltas_iter,
+    const DeltaFunc delta_func)
+{
+    const size_t N_deltas = N_keys + 1;
+    int blocks = min(grace::MAX_BLOCKS, (int)((N_deltas + 512 - 1) / 512));
+    ALBVH::compute_deltas_kernel<<<blocks, 512>>>(
+        d_keys_iter,
+        N_keys,
+        d_deltas_iter,
+        delta_func);
+    GRACE_KERNEL_CHECK();
+}
+
+template<typename KeyType, typename DeltaType, typename DeltaFunc>
+GRACE_HOST void compute_deltas(
+    const thrust::device_vector<KeyType> d_keys,
+    thrust::device_vector<DeltaType> d_deltas,
+    const DeltaFunc delta_func)
+{
+    GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());
+
+    const KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
+    DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
+
+    compute_deltas(keys_ptr, d_keys.size(), deltas_ptr, delta_func);
+}
+
 template <
     typename PrimitiveIter,
     typename DeltaIter,
     typename DeltaComp,
     typename AABBFunc
     >
-GRACE_HOST void build_tree(
+GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
@@ -1015,20 +1003,18 @@ GRACE_HOST void build_tree(
 
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
-
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
-                 d_deltas_iter, delta_comp);
-    remove_empty_leaves(d_tree);
+    ALBVH::build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
+                        d_deltas_iter, delta_comp);
+    ALBVH::remove_empty_leaves(d_tree);
 
     const size_t n_new_leaves = d_tree.leaves.size();
-
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
     DeltaType* new_deltas_ptr = thrust::raw_pointer_cast(d_new_deltas.data());
-    copy_leaf_deltas(d_tree.leaves, d_deltas_iter, new_deltas_ptr);
 
-    build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp, AABB);
+    ALBVH::copy_leaf_deltas(d_tree.leaves, d_deltas_iter, new_deltas_ptr);
+    ALBVH::build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp, AABB);
 }
 
 template <
@@ -1037,7 +1023,7 @@ template <
     typename DeltaComp,
     typename AABBFunc
     >
-GRACE_HOST void build_tree(
+GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
@@ -1048,12 +1034,12 @@ GRACE_HOST void build_tree(
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_tree(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
 template <typename PrimitiveIter, typename DeltaIter, typename AABBFunc>
-GRACE_HOST void build_tree(
+GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
@@ -1062,21 +1048,24 @@ GRACE_HOST void build_tree(
 {
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     typedef typename thrust::less<DeltaType> DeltaComp;
-    build_tree(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB, wipe);
+
+    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB, wipe);
 }
 
+// Specialized with DeltaComp = thrust::less<DeltaType>
 template <typename TPrimitive, typename DeltaType, typename AABBFunc>
-GRACE_HOST void build_tree(
+GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const AABBFunc AABB,
     const bool wipe = false)
 {
+    typedef typename thrust::less<DeltaType> DeltaComp;
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_tree(d_tree, prims_ptr, deltas_ptr, AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), AABB, wipe);
 }
 
 } // namespace grace
