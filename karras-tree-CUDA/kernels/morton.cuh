@@ -2,80 +2,44 @@
 
 #include <thrust/device_vector.h>
 
+#include "aabb.cuh"
 #include "../error.h"
 #include "../kernel_config.h"
 #include "../types.h"
 #include "../utils.cuh"
-#include "bits.cuh"
+#include "../device/bits.cuh"
+#include "../device/morton.cuh"
 
 namespace grace {
 
-//-----------------------------------------------------------------------------
-// Helper functions (host-compatible) for generating morton keys
-//-----------------------------------------------------------------------------
-
-// 30-bit keys.
-GRACE_HOST_DEVICE uinteger32 morton_key(
-    const uinteger32 x,
-    const uinteger32 y,
-    const uinteger32 z)
-{
-    return space_by_two_10bit(z) << 2 | space_by_two_10bit(y) << 1 | space_by_two_10bit(x);
-}
-
-// 63-bit keys.
-GRACE_HOST_DEVICE uinteger64 morton_key(
-    const uinteger64 x,
-    const uinteger64 y,
-    const uinteger64 z)
-{
-    return space_by_two_21bit(z) << 2 | space_by_two_21bit(y) << 1 | space_by_two_21bit(x);
-}
-
-// 30-bit keys from floats.  Assumes floats lie in (0, 1)!
-GRACE_HOST_DEVICE uinteger32 morton_key(
-    const float x,
-    const float y,
-    const float z)
-{
-    unsigned int span = (1u << 10) - 1;
-    return morton_key((uinteger32) (span*x),
-                      (uinteger32) (span*y),
-                      (uinteger32) (span*z));
-
-}
-
-// 63-bit keys from doubles.  Assumes doubles lie in (0, 1)!
-GRACE_HOST_DEVICE uinteger64 morton_key(
-    const double x,
-    const double y,
-    const double z)
-{
-    unsigned int span = (1u << 21) - 1;
-    return morton_key((uinteger64) (span*x),
-                      (uinteger64) (span*y),
-                      (uinteger64) (span*z));
-
-}
-
-namespace gpu {
+namespace morton {
 
 //-----------------------------------------------------------------------------
 // CUDA kernels for generating morton keys
 //-----------------------------------------------------------------------------
 
-template <typename UInteger, typename Float4>
+template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
 __global__ void morton_keys_kernel(
-    UInteger* keys,
-    const Float4* xyzr,
-    const size_t n_points,
-    const float3 scale)
+    PrimitiveIter primitives,
+    const size_t N_primitives,
+    const float3 norm_scale,
+    KeyIter keys,
+    const AABBFunc AABB)
 {
-    uinteger32 tid = threadIdx.x + blockIdx.x * blockDim.x;
-    while (tid < n_points) {
-        UInteger x = (UInteger) (scale.x * xyzr[tid].x);
-        UInteger y = (UInteger) (scale.y * xyzr[tid].y);
-        UInteger z = (UInteger) (scale.z * xyzr[tid].z);
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+    typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
+
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < N_primitives) {
+        TPrimitive prim = primitives[tid];
+        float3 bot, top;
+        AABB(prim, &bot, &top);
+        float3 centre = AABB::AABB_centroid(bot, top);
+
+        KeyType x = static_cast<KeyType>(norm_scale.x * centre.x);
+        KeyType y = static_cast<KeyType>(norm_scale.y * centre.y);
+        KeyType z = static_cast<KeyType>(norm_scale.z * centre.z);
 
         keys[tid] = morton_key(x, y, z);
 
@@ -84,55 +48,113 @@ __global__ void morton_keys_kernel(
     return;
 }
 
-} // namespace gpu
+//-----------------------------------------------------------------------------
+// C-like wrapper for morton key kernel.
+//-----------------------------------------------------------------------------
+
+// This functions signature is unlike the morton_key() functions below, which
+// is why it has been moved into the 'internal', morton:: namespace
+template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+GRACE_HOST void morton_keys(
+    PrimitiveIter d_prims_iter,
+    const size_t N_primitives,
+    const float3 normalizing_scale,
+    KeyIter d_keys_iter,
+    const AABBFunc AABB)
+{
+    int blocks = min(MAX_BLOCKS, (int) ((N_primitives + MORTON_THREADS_PER_BLOCK-1)
+                                        / MORTON_THREADS_PER_BLOCK));
+
+    morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
+        d_prims_iter,
+        N_primitives,
+        normalizing_scale,
+        d_keys_iter,
+        AABB);
+    GRACE_KERNEL_CHECK();
+}
+
+} // namespace morton
+
 
 //-----------------------------------------------------------------------------
 // C-like wrappers for morton key kernels
 //-----------------------------------------------------------------------------
 
-template <typename UInteger, typename Float4>
+// Wrappers to compute morton keys given the AABB containing all primitives.
+// KeyIter's value_type must be an unsigned integer type of at least 32 bits.
+template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
 GRACE_HOST void morton_keys(
-    thrust::device_vector<UInteger>& d_keys,
-    const thrust::device_vector<Float4>& d_points,
+    PrimitiveIter d_prims_iter,
+    const size_t N_primitives,
     const float3 AABB_top,
-    const float3 AABB_bot)
+    const float3 AABB_bot,
+    KeyIter d_keys_iter,
+    const AABBFunc AABB)
 {
-    unsigned int span = CHAR_BIT * sizeof(UInteger) > 32 ?
-                            ((1u << 21) - 1) : ((1u << 10) - 1);
+    typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
+
+    int span = CHAR_BIT * sizeof(KeyType) > 32 ? ((1u << 21) - 1) : ((1u << 10) - 1);
     float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
                                span / (AABB_top.y - AABB_bot.y),
                                span / (AABB_top.z - AABB_bot.z));
-    size_t n_keys = d_keys.size();
 
-    int blocks = min(MAX_BLOCKS, (int) ((n_keys + MORTON_THREADS_PER_BLOCK-1)
-                                        / MORTON_THREADS_PER_BLOCK));
-
-    gpu::morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_keys.data()),
-        thrust::raw_pointer_cast(d_points.data()),
-        n_keys,
-        scale);
-    GRACE_KERNEL_CHECK();
+    morton::morton_keys(d_prims_iter, N_primitives, scale, d_keys_iter, AABB);
 }
 
-template <typename UInteger, typename Float4>
+template <typename KeyType, typename TPrimitive, typename AABBFunc>
 GRACE_HOST void morton_keys(
-    thrust::device_vector<UInteger>& d_keys,
-    const thrust::device_vector<Float4>& d_points)
+    const thrust::device_vector<TPrimitive>& d_primitives,
+    const float3 AABB_top,
+    const float3 AABB_bot,
+    thrust::device_vector<KeyType>& d_keys,
+    const AABBFunc AABB)
+{
+    const size_t N_primitives = d_primitives.size();
+    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
+
+    morton_keys(prims_ptr, d_primitives.size(), AABB_top, AABB_bot, keys_ptr,
+                AABB);
+}
+
+// Wrappers to compute the AABB containing all primitives.
+template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+GRACE_HOST void morton_keys(
+    PrimitiveIter d_prims_iter,
+    const size_t N_primitives,
+    KeyIter d_keys_iter,
+    const AABBFunc AABB)
 {
     float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_points);
-
     float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_points);
-
     float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_points);
 
-    float3 bot = make_float3(min_x, min_y, min_z);
+    thrust::device_vector<float3> d_centroids(N_primitives);
+    float3* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
+
+    AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr, AABB);
+
+    grace::min_max_x(d_prims_iter, N_primitives, &min_x, &max_x);
+    grace::min_max_y(d_prims_iter, N_primitives, &min_y, &max_y);
+    grace::min_max_z(d_prims_iter, N_primitives, &min_z, &max_z);
+
     float3 top = make_float3(max_x, max_y, max_z);
+    float3 bot = make_float3(min_x, min_y, min_z);
 
-    morton_keys(d_keys, d_points, top, bot);
+    morton_keys(d_prims_iter, N_primitives, top, bot, d_keys_iter, AABB);
+}
+
+template <typename TPrimitive, typename KeyType, typename AABBFunc>
+GRACE_HOST void morton_keys(
+    const thrust::device_vector<TPrimitive>& d_primitives,
+    thrust::device_vector<KeyType>& d_keys,
+    const AABBFunc AABB)
+{
+    const TPrimitive* d_prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    KeyType* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
+
+    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, AABB);
 }
 
 } // namespace grace

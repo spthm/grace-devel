@@ -322,96 +322,145 @@ public:
 // Utilities for comparing x, y, z or w components of float4-like types
 //-----------------------------------------------------------------------------
 
-struct float4_compare_x
+struct real4_compare_x
 {
-      template<typename Float4>
-      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
+      template<typename Real4>
+      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
       {
           return a.x < b.x;
       }
 };
 
-struct float4_compare_y
+struct real4_compare_y
 {
-      template<typename Float4>
-      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
+      template<typename Real4>
+      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
       {
           return a.y < b.y;
       }
 };
 
-struct float4_compare_z
+struct real4_compare_z
 {
-      template<typename Float4>
-      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
+      template<typename Real4>
+      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
       {
           return a.z < b.z;
       }
 };
 
-struct float4_compare_w
+struct real4_compare_w
 {
-      template<typename Float4>
-      GRACE_HOST_DEVICE bool operator()(const Float4 a, const Float4 b)
+      template<typename Real4>
+      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
       {
           return a.w < b.w;
       }
 };
 
-template <typename Float4, typename Float>
+
+template <typename Real4Iter, typename Real>
 GRACE_HOST void min_max_x(
-    Float* min_x,
-    Float* max_x,
-    const thrust::device_vector<Float4>& d_data)
+    Real4Iter d_data_iter,
+    const size_t N,
+    Real* min_x,
+    Real* max_x)
 {
-    typedef typename thrust::device_vector<Float4>::const_iterator iter;
+    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
+    typedef typename thrust::device_vector<Real4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_x());
-    *min_x = ((Float4) *min_max.first).x;
-    *max_x = ((Float4) *min_max.second).x;
+    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
+                                     real4_compare_x());
+    *min_x = ((Real4) *min_max.first).x;
+    *max_x = ((Real4) *min_max.second).x;
 }
 
-template <typename Float4, typename Float>
+template <typename Real4, typename Real>
+GRACE_HOST void min_max_x(
+    const thrust::device_vector<Real4>& d_data,
+    Real* min_x,
+    Real* max_x)
+{
+    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
+    min_max_x(data_ptr, min_x, max_x);
+}
+
+template <typename Real4Iter, typename Real>
 GRACE_HOST void min_max_y(
-    Float* min_y,
-    Float* max_y,
-    const thrust::device_vector<Float4>& d_data)
+    Real4Iter d_data_iter,
+    const size_t N,
+    Real* min_y,
+    Real* max_y)
 {
-    typedef typename thrust::device_vector<Float4>::const_iterator iter;
+    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
+    typedef typename thrust::device_vector<Real4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_y());
-    *min_y = ((Float4) *min_max.first).y;
-    *max_y = ((Float4) *min_max.second).y;
+    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
+                                     real4_compare_y());
+    *min_y = ((Real4) *min_max.first).y;
+    *max_y = ((Real4) *min_max.second).y;
 }
 
-template <typename Float4, typename Float>
+template <typename Real4, typename Real>
+GRACE_HOST void min_max_y(
+    const thrust::device_vector<Real4>& d_data,
+    Real* min_y,
+    Real* max_y)
+{
+    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
+    min_max_y(data_ptr, min_y, max_y);
+}
+
+template <typename Real4Iter, typename Real>
 GRACE_HOST void min_max_z(
-    Float* min_z,
-    Float* max_z,
-    const thrust::device_vector<Float4>& d_data)
+    Real4Iter d_data_iter,
+    const size_t N,
+    Real* min_z,
+    Real* max_z)
 {
-    typedef typename thrust::device_vector<Float4>::const_iterator iter;
+    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
+    typedef typename thrust::device_vector<Real4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_z());
-    *min_z = ((Float4) *min_max.first).z;
-    *max_z = ((Float4) *min_max.second).z;
+    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
+                                     real4_compare_z());
+    *min_z = ((Real4) *min_max.first).z;
+    *max_z = ((Real4) *min_max.second).z;
 }
 
-template <typename Float4, typename Float>
-GRACE_HOST void min_max_w(
-    Float* min_w,
-    Float* max_w,
-    const thrust::device_vector<Float4>& d_data)
+template <typename Real4, typename Real>
+GRACE_HOST void min_max_z(
+    const thrust::device_vector<Real4>& d_data,
+    Real* min_z,
+    Real* max_z)
 {
-    typedef typename thrust::device_vector<Float4>::const_iterator iter;
+    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
+    min_max_z(data_ptr, min_z, max_z);
+}
+
+template <typename Real4Iter, typename Real>
+GRACE_HOST void min_max_w(
+    Real4Iter d_data_iter,
+    const size_t N,
+    Real* min_w,
+    Real* max_w)
+{
+    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
+    typedef typename thrust::device_vector<Real4>::const_iterator iter;
     thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data.begin(), d_data.end(),
-                                     float4_compare_w());
-    *min_w = ((Float4) *min_max.first).w;
-    *max_w = ((Float4) *min_max.second).w;
+    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
+                                     real4_compare_w());
+    *min_w = ((Real4) *min_max.first).w;
+    *max_w = ((Real4) *min_max.second).w;
+}
+
+template <typename Real4, typename Real>
+GRACE_HOST void min_max_w(
+    const thrust::device_vector<Real4>& d_data,
+    Real* min_w,
+    Real* max_w)
+{
+    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
+    min_max_w(data_ptr, min_w, max_w);
 }
 
 //-----------------------------------------------------------------------------
