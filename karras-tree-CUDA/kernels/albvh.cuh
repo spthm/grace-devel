@@ -962,8 +962,8 @@ GRACE_HOST void compute_deltas(
 
 template<typename KeyType, typename DeltaType, typename DeltaFunc>
 GRACE_HOST void compute_deltas(
-    const thrust::device_vector<KeyType> d_keys,
-    thrust::device_vector<DeltaType> d_deltas,
+    const thrust::device_vector<KeyType>& d_keys,
+    thrust::device_vector<DeltaType>& d_deltas,
     const DeltaFunc delta_func)
 {
     GRACE_ASSERT(d_keys.size() + 1 == d_deltas.size());

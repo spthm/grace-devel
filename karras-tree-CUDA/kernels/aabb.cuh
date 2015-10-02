@@ -28,6 +28,8 @@ __global__ void compute_centroids_kernel(
         float3 bot, top;
         AABB(prim, &bot, &top);
         centroids[tid] = AABB_centroid(bot, top);
+
+        tid += blockDim.x * gridDim.x;
     }
 }
 
@@ -39,7 +41,12 @@ GRACE_HOST void compute_centroids(
     const AABBFunc AABB)
 {
     int blocks = min(MAX_BLOCKS, (int) ((N_primitives + 256 - 1) / 256));
-    compute_centroids_kernel(d_prims_iter, N_primitives, d_centroid_iter, AABB);
+    compute_centroids_kernel<<<blocks, 256>>>(
+        d_prims_iter,
+        N_primitives,
+        d_centroid_iter,
+        AABB);
+    GRACE_KERNEL_CHECK();
 }
 
 } // namespace AABB
