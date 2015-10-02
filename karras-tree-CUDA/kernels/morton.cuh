@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iterator>
+
 #include <thrust/device_vector.h>
 
 #include "aabb.cuh"
@@ -7,6 +9,7 @@
 #include "../kernel_config.h"
 #include "../types.h"
 #include "../utils.cuh"
+#include "../device/aabb.cuh"
 #include "../device/bits.cuh"
 #include "../device/morton.cuh"
 
@@ -32,10 +35,7 @@ __global__ void morton_keys_kernel(
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_primitives) {
-        TPrimitive prim = primitives[tid];
-        float3 bot, top;
-        AABB(prim, &bot, &top);
-        float3 centre = AABB::AABB_centroid(bot, top);
+        float3 centre = AABB::primitive_centroid(primitives[tid], AABB);
 
         KeyType x = static_cast<KeyType>(norm_scale.x * centre.x);
         KeyType y = static_cast<KeyType>(norm_scale.y * centre.y);
@@ -119,6 +119,7 @@ GRACE_HOST void morton_keys(
 }
 
 // Wrappers to compute the AABB containing all primitives.
+// Requires O(N_primitives) temporary storage.
 template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
@@ -126,18 +127,34 @@ GRACE_HOST void morton_keys(
     KeyIter d_keys_iter,
     const AABBFunc AABB)
 {
-    float min_x, max_x;
-    float min_y, max_y;
-    float min_z, max_z;
+    // The below is not possible, as grace::min_max will attempt to dereference
+    // centroid_iter on the _host_, leading to a segfault for any device-side
+    // iterators - but device-side iterators are exactly what we might expect
+    // PrimitiveIter to be, e.g. a SoA to AoS conversion.
+    //
+    // typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+    // typedef typename AABB::CentroidFunc<TPrimitive, AABBFunc> centroid_func;
+    // typedef thrust::transform_iterator<centroid_func, PrimitiveIter> CentroidIter;
+    // CentroidIter centroid_iter(d_prims_iter, centroid_func());
+
+    // float min_x, max_x;
+    // float min_y, max_y;
+    // float min_z, max_z;
+    // grace::min_max_x(centroid_iter, N_primitives, &min_x, &max_x);
+    // grace::min_max_y(centroid_iter, N_primitives, &min_y, &max_y);
+    // grace::min_max_z(centroid_iter, N_primitives, &min_z, &max_z);
 
     thrust::device_vector<float3> d_centroids(N_primitives);
     float3* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
 
     AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr, AABB);
 
-    grace::min_max_x(d_prims_iter, N_primitives, &min_x, &max_x);
-    grace::min_max_y(d_prims_iter, N_primitives, &min_y, &max_y);
-    grace::min_max_z(d_prims_iter, N_primitives, &min_z, &max_z);
+    float min_x, max_x;
+    float min_y, max_y;
+    float min_z, max_z;
+    grace::min_max_x(d_centroids_ptr, N_primitives, &min_x, &max_x);
+    grace::min_max_y(d_centroids_ptr, N_primitives, &min_y, &max_y);
+    grace::min_max_z(d_centroids_ptr, N_primitives, &min_z, &max_z);
 
     float3 top = make_float3(max_x, max_y, max_z);
     float3 bot = make_float3(min_x, min_y, min_z);

@@ -8,7 +8,7 @@ namespace gpu {
 
 struct Delta_XOR
 {
-    GRACE_DEVICE uinteger32 operator()(
+    GRACE_HOST_DEVICE uinteger32 operator()(
         const int i,
         const uinteger32* morton_keys,
         const size_t n_keys) const
@@ -24,7 +24,7 @@ struct Delta_XOR
         return ki ^ kj;
     }
 
-    GRACE_DEVICE uinteger64 operator()(
+    GRACE_HOST_DEVICE uinteger64 operator()(
         const int i,
         const uinteger64* morton_keys,
         const size_t n_keys) const
@@ -129,7 +129,7 @@ struct Delta_sphere_SA
 struct AABB_sphere
 {
     template <typename Real4>
-    GRACE_DEVICE void operator()(
+    GRACE_HOST_DEVICE void operator()(
         Real4 sphere,
         float3* bot,
         float3* top) const

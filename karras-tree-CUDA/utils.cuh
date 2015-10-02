@@ -5,10 +5,12 @@
 #include <fstream>
 
 #include <thrust/device_vector.h>
+#include <thrust/device_ptr.h>
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 #include <thrust/extrema.h>
 #include <thrust/pair.h>
+#include <thrust/execution_policy.h>
 
 namespace grace
 {
@@ -319,148 +321,322 @@ public:
 };
 
 //-----------------------------------------------------------------------------
-// Utilities for comparing x, y, z or w components of float4-like types
+// Utilities for comparing x, y, z or w components of the CUDA vector types,
+// int{2,3,4}, float{2,3,4} etc.
 //-----------------------------------------------------------------------------
 
-struct real4_compare_x
+struct vec4_compare_x
 {
-      template<typename Real4>
-      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
+      template<typename Vec4>
+      GRACE_HOST_DEVICE bool operator()(const Vec4 a, const Vec4 b)
       {
           return a.x < b.x;
       }
 };
 
-struct real4_compare_y
+struct vec4_compare_y
 {
-      template<typename Real4>
-      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
+      template<typename Vec4>
+      GRACE_HOST_DEVICE bool operator()(const Vec4 a, const Vec4 b)
       {
           return a.y < b.y;
       }
 };
 
-struct real4_compare_z
+struct vec4_compare_z
 {
-      template<typename Real4>
-      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
+      template<typename Vec4>
+      GRACE_HOST_DEVICE bool operator()(const Vec4 a, const Vec4 b)
       {
           return a.z < b.z;
       }
 };
 
-struct real4_compare_w
+struct vec4_compare_w
 {
-      template<typename Real4>
-      GRACE_HOST_DEVICE bool operator()(const Real4 a, const Real4 b)
+      template<typename Vec4>
+      GRACE_HOST_DEVICE bool operator()(const Vec4 a, const Vec4 b)
       {
           return a.w < b.w;
       }
 };
 
+// If TIter points to on-device data, then it should be one of
+//     Any thrust iterator accepted by thrust::minmax_element();
+//     thrust::device_ptr<T>;
+// where 'T' is identical to std::iterator_traits<TIter>::value_type.
+// Alternatively, TIter may be a custom iterator, but that custom iterator
+// MUST be dereferenceable on both the host _AND_ the device!
+// For example, an iterator over float4 values with the dereference operator
+// __host__ __device__ float4& Float4Iter::operator*()
+// {
+//     #ifdef __CUDA_ARCH__
+//     *d_ptr;
+//     #else
+//     cudaMemcpy(&tmp, d_ptr, sizeof(float4), cudaMemcpyDeviceToHost);
+//     return tmp;
+//     #endif
+// }
+// Though note that the above is flawed in that *iter = x will not work as
+// desired when executed on the host.
+// comp should be one of grace::vec4_compare_{x, y, z, w}().
+template <typename TIter, typename T, typename Comp>
+GRACE_HOST void min_max(
+    TIter data_iter,
+    const size_t N,
+    T* min,
+    T* max,
+    const Comp comp)
+{
+    thrust::pair<TIter, TIter> min_max;
+    min_max = thrust::minmax_element(thrust::device, data_iter, data_iter + N,
+                                     comp);
+    *min = *min_max.first;
+    *max = *min_max.second;
+}
 
-template <typename Real4Iter, typename Real>
+// Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
+// iterator subject to the constraints described for Vec4Iter in
+// grace::min_max().
+template <typename Vec4Iter, typename T>
 GRACE_HOST void min_max_x(
-    Real4Iter d_data_iter,
+    Vec4Iter data_iter,
     const size_t N,
-    Real* min_x,
-    Real* max_x)
+    T* min_x,
+    T* max_x)
 {
-    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
-    typedef typename thrust::device_vector<Real4>::const_iterator iter;
-    thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
-                                     real4_compare_x());
-    *min_x = ((Real4) *min_max.first).x;
-    *max_x = ((Real4) *min_max.second).x;
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
+
+    Vec4 min, max;
+    min_max(data_iter, N, &min, &max, vec4_compare_x());
+    *min_x = min.x;
+    *max_x = max.x;
 }
 
-template <typename Real4, typename Real>
+// d_data must be a pointer to DEVICE memory.
+template <typename Vec4, typename T>
 GRACE_HOST void min_max_x(
-    const thrust::device_vector<Real4>& d_data,
-    Real* min_x,
-    Real* max_x)
+    const Vec4* d_data,
+    const size_t N,
+    T* min_x,
+    T* max_x)
 {
-    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
-    min_max_x(data_ptr, min_x, max_x);
+    min_max_x(thrust::device_ptr<const Vec4>(d_data), N, min_x, max_x);
 }
 
-template <typename Real4Iter, typename Real>
+// d_data must be a pointer to DEVICE memory.
+// The compiler will chose the generic Vec4Iter template over the const Vec4*
+// when provided with a non-const Vec4*. This template is therefore needed to
+// correctly handly non-const Vec4* pointers.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_x(
+    Vec4* d_data,
+    const size_t N,
+    T* min_x,
+    T* max_x)
+{
+    min_max_x(thrust::device_ptr<const Vec4>(d_data), N, min_x, max_x);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_x(
+    const thrust::device_vector<Vec4>& d_data,
+    T* min_x,
+    T* max_x)
+{
+    min_max_x(d_data.begin(), d_data.size(), min_x, max_x);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_x(
+    const thrust::host_vector<Vec4>& h_data,
+    T* min_x,
+    T* max_x)
+{
+    min_max_x(h_data.begin(), h_data.size(), min_x, max_x);
+}
+
+// Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
+// iterator subject to the constraints described for Vec4Iter in
+// grace::min_max().
+template <typename Vec4Iter, typename T>
 GRACE_HOST void min_max_y(
-    Real4Iter d_data_iter,
+    Vec4Iter data_iter,
     const size_t N,
-    Real* min_y,
-    Real* max_y)
+    T* min_y,
+    T* max_y)
 {
-    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
-    typedef typename thrust::device_vector<Real4>::const_iterator iter;
-    thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
-                                     real4_compare_y());
-    *min_y = ((Real4) *min_max.first).y;
-    *max_y = ((Real4) *min_max.second).y;
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
+
+    Vec4 min, max;
+    min_max(data_iter, N, &min, &max, vec4_compare_y());
+    *min_y = min.y;
+    *max_y = max.y;
 }
 
-template <typename Real4, typename Real>
+// d_data must be a pointer to DEVICE memory.
+template <typename Vec4, typename T>
 GRACE_HOST void min_max_y(
-    const thrust::device_vector<Real4>& d_data,
-    Real* min_y,
-    Real* max_y)
-{
-    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
-    min_max_y(data_ptr, min_y, max_y);
-}
-
-template <typename Real4Iter, typename Real>
-GRACE_HOST void min_max_z(
-    Real4Iter d_data_iter,
+    const Vec4* d_data,
     const size_t N,
-    Real* min_z,
-    Real* max_z)
+    T* min_y,
+    T* max_y)
 {
-    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
-    typedef typename thrust::device_vector<Real4>::const_iterator iter;
-    thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
-                                     real4_compare_z());
-    *min_z = ((Real4) *min_max.first).z;
-    *max_z = ((Real4) *min_max.second).z;
+    min_max_y(thrust::device_ptr<const Vec4>(d_data), N, min_y, max_y);
 }
 
-template <typename Real4, typename Real>
-GRACE_HOST void min_max_z(
-    const thrust::device_vector<Real4>& d_data,
-    Real* min_z,
-    Real* max_z)
-{
-    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
-    min_max_z(data_ptr, min_z, max_z);
-}
-
-template <typename Real4Iter, typename Real>
-GRACE_HOST void min_max_w(
-    Real4Iter d_data_iter,
+// d_data must be a pointer to DEVICE memory.
+// The compiler will chose the generic Vec4Iter template over the const Vec4*
+// when provided with a non-const Vec4*. This template is therefore needed to
+// correctly handly non-const Vec4* pointers.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_y(
+    Vec4* d_data,
     const size_t N,
-    Real* min_w,
-    Real* max_w)
+    T* min_y,
+    T* max_y)
 {
-    typedef typename std::iterator_traits<Real4Iter>::value_type Real4;
-    typedef typename thrust::device_vector<Real4>::const_iterator iter;
-    thrust::pair<iter, iter> min_max;
-    min_max = thrust::minmax_element(d_data_iter, d_data_iter + N,
-                                     real4_compare_w());
-    *min_w = ((Real4) *min_max.first).w;
-    *max_w = ((Real4) *min_max.second).w;
+    min_max_y(thrust::device_ptr<const Vec4>(d_data), N, min_y, max_y);
 }
 
-template <typename Real4, typename Real>
-GRACE_HOST void min_max_w(
-    const thrust::device_vector<Real4>& d_data,
-    Real* min_w,
-    Real* max_w)
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_y(
+    const thrust::device_vector<Vec4>& d_data,
+    T* min_y,
+    T* max_y)
 {
-    const Real4* data_ptr = thrust::raw_pointer_cast(d_data.data());
-    min_max_w(data_ptr, min_w, max_w);
+    min_max_y(d_data.begin(), d_data.size(), min_y, max_y);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_y(
+    const thrust::host_vector<Vec4>& h_data,
+    T* min_y,
+    T* max_y)
+{
+    min_max_y(h_data.begin(), h_data.size(), min_y, max_y);
+}
+
+// Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
+// iterator subject to the constraints described for Vec4Iter in
+// grace::min_max().
+template <typename Vec4Iter, typename T>
+GRACE_HOST void min_max_z(
+    Vec4Iter data_iter,
+    const size_t N,
+    T* min_z,
+    T* max_z)
+{
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
+
+    Vec4 min, max;
+    min_max(data_iter, N, &min, &max, vec4_compare_z());
+    *min_z = min.z;
+    *max_z = max.z;
+}
+
+// d_data must be a pointer to DEVICE memory.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_z(
+    const Vec4* d_data,
+    const size_t N,
+    T* min_z,
+    T* max_z)
+{
+    min_max_z(thrust::device_ptr<const Vec4>(d_data), N, min_z, max_z);
+}
+
+// d_data must be a pointer to DEVICE memory.
+// The compiler will chose the generic Vec4Iter template over the const Vec4*
+// when provided with a non-const Vec4*. This template is therefore needed to
+// correctly handly non-const Vec4* pointers.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_z(
+    Vec4* d_data,
+    const size_t N,
+    T* min_z,
+    T* max_z)
+{
+    min_max_z(thrust::device_ptr<const Vec4>(d_data), N, min_z, max_z);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_z(
+    const thrust::device_vector<Vec4>& d_data,
+    T* min_z,
+    T* max_z)
+{
+    min_max_z(d_data.begin(), d_data.size(), min_z, max_z);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_z(
+    const thrust::host_vector<Vec4>& h_data,
+    T* min_z,
+    T* max_z)
+{
+    min_max_z(h_data.begin(), h_data.size(), min_z, max_z);
+}
+
+// Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
+// iterator subject to the constraints described for Vec4Iter in
+// grace::min_max().
+template <typename Vec4Iter, typename T>
+GRACE_HOST void min_max_w(
+    Vec4Iter data_iter,
+    const size_t N,
+    T* min_w,
+    T* max_w)
+{
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
+
+    Vec4 min, max;
+    min_max(data_iter, N, &min, &max, vec4_compare_w());
+    *min_w = min.w;
+    *max_w = max.w;
+}
+
+// d_data must be a pointer to DEVICE memory.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_w(
+    const Vec4* d_data,
+    const size_t N,
+    T* min_w,
+    T* max_w)
+{
+    min_max_w(thrust::device_ptr<const Vec4>(d_data), N, min_w, max_w);
+}
+
+// d_data must be a pointer to DEVICE memory.
+// The compiler will chose the generic Vec4Iter template over the const Vec4*
+// when provided with a non-const Vec4*. This template is therefore needed to
+// correctly handly non-const Vec4* pointers.
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_w(
+    Vec4* d_data,
+    const size_t N,
+    T* min_w,
+    T* max_w)
+{
+    min_max_w(thrust::device_ptr<const Vec4>(d_data), N, min_w, max_w);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_w(
+    const thrust::device_vector<Vec4>& d_data,
+    T* min_w,
+    T* max_w)
+{
+    min_max_w(d_data.begin(), d_data.size(), min_w, max_w);
+}
+
+template <typename Vec4, typename T>
+GRACE_HOST void min_max_w(
+    const thrust::host_vector<Vec4>& h_data,
+    T* min_w,
+    T* max_w)
+{
+    min_max_w(h_data.begin(), h_data.size(), min_w, max_w);
 }
 
 //-----------------------------------------------------------------------------
