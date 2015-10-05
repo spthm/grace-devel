@@ -17,8 +17,7 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/bintree_build.cuh"
+#include "../kernels/build_sph.cuh"
 #include "../kernels/gen_rays.cuh"
 #include "../kernels/sort.cuh"
 #include "../kernels/trace_sph.cuh"
@@ -71,19 +70,15 @@ int main(int argc, char* argv[]) {
     float3 top = make_float3(1.f, 1.f, 1.f);
     float3 bot = make_float3(0.f, 0.f, 0.f);
 
-    thrust::device_vector<grace::uinteger32> d_keys(N);
-
-    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
-
+    // Allocate permanent vectors before temporaries.
     grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N+1);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::morton_keys30_sort_sph(d_spheres_xyzr, top, bot);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
 
-    // Working arrays no longer needed.
-    d_keys.clear(); d_keys.shrink_to_fit();
+    // Deltas no longer needed.
     d_deltas.clear(); d_deltas.shrink_to_fit();
 
 

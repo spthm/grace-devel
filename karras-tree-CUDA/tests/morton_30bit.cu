@@ -1,8 +1,8 @@
 #include <iostream>
 #include <bitset>
 
-#include "../kernels/bits.cuh"
-#include "../kernels/morton.cuh"
+#include "../device/bits.cuh"
+#include "../device/morton.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -18,31 +18,33 @@ int main(int argc, char* argv[]) {
     // => spaced_z = 1000000001001000001000001001   = 134513161
     // => key      = 110011010100111001110011110101
 
+    typedef grace::uinteger32 Key;
+
 
     /* 10-bit x, y, z integers and binary representation. */
 
-    grace::uinteger32 x = 309;
-    grace::uinteger32 y = 942;
-    grace::uinteger32 z = 619;
+    Key x = 309;
+    Key y = 942;
+    Key z = 619;
 
 
     /* 10-bit spaced-by-two integers and binary representation. */
 
-    grace::uinteger32 spaced_x = 16814145;
-    grace::uinteger32 spaced_y = 153125448;
-    grace::uinteger32 spaced_z = 134513161;
-    grace::uinteger32 key = 861117685;
+    Key spaced_x = 16814145;
+    Key spaced_y = 153125448;
+    Key spaced_z = 134513161;
+    Key key = 861117685;
 
-    grace::uinteger32 my_spaced_x = grace::space_by_two_10bit(x);
-    grace::uinteger32 my_spaced_y = grace::space_by_two_10bit(y);
-    grace::uinteger32 my_spaced_z = grace::space_by_two_10bit(z);
+    Key my_spaced_x = grace::bits::space_by_two_10bit(x);
+    Key my_spaced_y = grace::bits::space_by_two_10bit(y);
+    Key my_spaced_z = grace::bits::space_by_two_10bit(z);
 
 
     /* 30-bit keys and binary representation. */
 
-    grace::uinteger32 my_key = my_spaced_x | my_spaced_y << 1 |
+    Key my_key = my_spaced_x | my_spaced_y << 1 |
                                my_spaced_z << 2;
-    grace::uinteger32 my_key_2 = grace::morton_key(x, y, z);
+    Key my_key_2 = grace::morton::morton_key(x, y, z);
 
     /* Print everything. */
 

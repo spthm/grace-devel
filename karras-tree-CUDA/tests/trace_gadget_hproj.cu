@@ -9,9 +9,8 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/bintree_build.cuh"
-#include "../kernels/sort.cuh"
+#include "../device/morton.cuh"
+#include "../kernels/build_sph.cuh"
 #include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
@@ -72,35 +71,29 @@ int main(int argc, char* argv[]) {
     // Calculate limits here explicity since we need them later (i.e. do not
     // get morton_keys() to do it for us).
     float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
+    grace::min_max_x(d_spheres_xyzr, &min_x, &max_x);
 
     float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
+    grace::min_max_y(d_spheres_xyzr, &min_y, &max_y);
 
     float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
+    grace::min_max_z(d_spheres_xyzr, &min_z, &max_z);
 
     float min_r, max_r;
-    grace::min_max_w(&min_r, &max_r, d_spheres_xyzr);
+    grace::min_max_w(d_spheres_xyzr, &min_r, &max_r);
 
     float3 top = make_float3(max_x, max_y, max_z);
     float3 bot = make_float3(min_x, min_y, min_z);
 
-    // One set of keys for sorting spheres, one for sorting an arbitrary
-    // number of other properties.
-    thrust::device_vector<unsigned int> d_keys(N);
-
-    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
-
+    // Allocate permanent vectors before temporaries.
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::morton_keys30_sort_sph(d_spheres_xyzr, top, bot);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
 
-    // Keys and deltas no longer needed.
-    d_keys.clear(); d_keys.shrink_to_fit();
+    // Deltas no longer needed.
     d_deltas.clear(); d_deltas.shrink_to_fit();
 
 
@@ -138,9 +131,10 @@ int main(int argc, char* argv[]) {
 
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
-                                                          (oy-min_y)/span_y,
-                                                          0.0f);
+            h_keys[i*N_rays_side + j]
+                = grace::morton::morton_key((ox-min_x)/span_x,
+                                            (oy-min_y)/span_y,
+                                            0.0f);
         }
     }
 

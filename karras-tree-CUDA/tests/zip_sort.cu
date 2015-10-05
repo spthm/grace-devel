@@ -8,7 +8,7 @@
 #include <thrust/iterator/zip_iterator.h>
 
 #include "../types.h"
-#include "../kernels/morton.cuh"
+#include "../kernels/build_sph.cuh"
 
 __host__ __device__ unsigned int hash(unsigned int a)
 {
@@ -58,7 +58,7 @@ int main(int argc, char* argv[]) {
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
     if (argc > 2)
         Niter = (unsigned int) std::strtol(argv[2], NULL, 10);
-    
+
     std::cout << "Will generate " << N << " random points for " << Niter
               << " iteration" << ((Niter > 1) ? "s" : "") << "..."
               << std::endl;
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     float3 bottom = make_float3(0., 0., 0.);
     float3 top = make_float3(1., 1., 1.);
 
-    grace::morton_keys(d_keys, d_centres4, top, bottom);
+    grace::morton_keys_sph(d_centres4, top, bottom, d_keys);
 
     thrust::host_vector<float> h_keys = d_keys;
 

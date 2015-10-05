@@ -9,7 +9,7 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
+#include "../device/morton.cuh"
 #include "../kernel_config.h"
 
 enum DIR_CLASS
@@ -816,9 +816,9 @@ int main(int argc, char* argv[]) {
             h_rays[i].dclass += 4;
 
         // Floats must be in (0, 1) for morton_key().
-        h_keys[i] = grace::morton_key((h_rays[i].dx+1)/2.f,
-                                      (h_rays[i].dy+1)/2.f,
-                                      (h_rays[i].dz+1)/2.f);
+        h_keys[i] = grace::morton::morton_key((h_rays[i].dx+1)/2.f,
+                                              (h_rays[i].dy+1)/2.f,
+                                              (h_rays[i].dz+1)/2.f);
     }
     // Sort rays by Morton key.  This has a ~4--5x performance impact on Kepler
     // for the Plucker and Eisemann kernels.

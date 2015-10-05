@@ -12,8 +12,7 @@
 #include "../error.h"
 #include "../nodes.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/bintree_build.cuh"
+#include "../kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -115,7 +114,7 @@ int main(int argc, char* argv[]) {
     float3 top = make_float3(1., 1., 1.);
     float3 bot = make_float3(0., 0., 0.);
 
-    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+    grace::morton_keys_sph(d_spheres_xyzr, top, bot, d_keys);
 
     if (save_out) {
         h_write_uint = d_keys;
@@ -155,11 +154,13 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the keys. */
 
+    // Allocate permanent vectors before temporaries.
     grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N+1);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
+
 
     /* Save node and leaf data. */
 

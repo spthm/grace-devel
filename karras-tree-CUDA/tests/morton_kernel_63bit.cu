@@ -6,22 +6,25 @@
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 
-#include "../kernels/morton.cuh"
+#include "../device/morton.cuh"
+#include "../kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
     /*************************************************************/
-    /* Compare morton_key_kernel to a CPU loop, for 30-bit keys. */
+    /* Compare morton_key_kernel to a CPU loop, for 63-bit keys. */
     /*************************************************************/
 
-     /* Generate random doubles in [0,1) on CPU and find the keys. */
+    typedef grace::uinteger64 Key;
+
+    /* Generate random doubles in [0,1) on CPU and find the keys. */
 
     unsigned int N = 10000;
     if (argc > 1)
         N = (unsigned int) std::strtol(argv[1], NULL, 10);
 
     thrust::host_vector<double4> h_points(N);
-    thrust::host_vector<grace::uinteger64> h_keys(N);
+    thrust::host_vector<Key> h_keys(N);
 
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
@@ -29,14 +32,11 @@ int main(int argc, char* argv[]) {
                       grace::random_double4_functor());
 
     for (int i=0; i<N; i++) {
-        grace::uinteger64 ux = (grace::uinteger64) (h_points[i].x
-                                                        * ((1u << 21) - 1));
-        grace::uinteger64 uy = (grace::uinteger64) (h_points[i].y
-                                                        * ((1u << 21) - 1));
-        grace::uinteger64 uz = (grace::uinteger64) (h_points[i].z
-                                                        * ((1u << 21) - 1));
+        Key ux = (Key) (h_points[i].x * ((1u << 21) - 1));
+        Key uy = (Key) (h_points[i].y * ((1u << 21) - 1));
+        Key uz = (Key) (h_points[i].z * ((1u << 21) - 1));
 
-        h_keys[i] = grace::morton_key(ux, uy, uz);
+        h_keys[i] = grace::morton::morton_key(ux, uy, uz);
     }
 
 
@@ -47,15 +47,15 @@ int main(int argc, char* argv[]) {
     float3 bot = make_float3(0., 0., 0.);
 
     thrust::device_vector<double4> d_points = h_points;
-    thrust::device_vector<grace::uinteger64> d_keys(N);
+    thrust::device_vector<Key> d_keys(N);
 
-    grace::morton_keys(d_keys, d_points, top, bot);
+    grace::morton_keys_sph(d_points, top, bot, d_keys);
 
 
     /* Verify results are the same. */
 
     unsigned int err_count = 0;
-    thrust::host_vector<grace::uinteger64> h_d_keys = d_keys;
+    thrust::host_vector<Key> h_d_keys = d_keys;
     for (unsigned int i=0; i<N; i++) {
         if (h_keys[i] != h_d_keys[i]) {
             std::cout << "Device morton key != host morton key!" << std::endl;

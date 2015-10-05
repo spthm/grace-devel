@@ -6,13 +6,16 @@
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 
-#include "../kernels/morton.cuh"
+#include "../device/morton.cuh"
+#include "../kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
     /*************************************************************/
     /* Compare morton_key_kernel to a CPU loop, for 30-bit keys. */
     /*************************************************************/
+
+    typedef grace::uinteger32 Key;
 
     /* Generate random floats in [0,1) on CPU and find the keys. */
 
@@ -29,11 +32,11 @@ int main(int argc, char* argv[]) {
                       grace::random_float4_functor());
 
     for (int i=0; i<N; i++) {
-        grace::uinteger32 ux = (grace::uinteger32) (h_points[i].x * 1023);
-        grace::uinteger32 uy = (grace::uinteger32) (h_points[i].y * 1023);
-        grace::uinteger32 uz = (grace::uinteger32) (h_points[i].z * 1023);
+        Key ux = (Key) (h_points[i].x * 1023);
+        Key uy = (Key) (h_points[i].y * 1023);
+        Key uz = (Key) (h_points[i].z * 1023);
 
-        h_keys[i] = grace::morton_key(ux, uy, uz);
+        h_keys[i] = grace::morton::morton_key(ux, uy, uz);
     }
 
 
@@ -44,15 +47,15 @@ int main(int argc, char* argv[]) {
     float3 bot = make_float3(0., 0., 0.);
 
     thrust::device_vector<float4> d_points = h_points;
-    thrust::device_vector<grace::uinteger32> d_keys(N);
+    thrust::device_vector<Key> d_keys(N);
 
-    grace::morton_keys(d_keys, d_points, top, bot);
+    grace::morton_keys_sph(d_points, top, bot, d_keys);
 
 
     /* Verify results are the same. */
 
     unsigned int err_count = 0;
-    thrust::host_vector<grace::uinteger32> h_d_keys = d_keys;
+    thrust::host_vector<Key> h_d_keys = d_keys;
     for (unsigned int i=0; i<N; i++) {
         if (h_keys[i] != h_d_keys[i]) {
             std::cout << "Device morton key != host morton key!" << std::endl;

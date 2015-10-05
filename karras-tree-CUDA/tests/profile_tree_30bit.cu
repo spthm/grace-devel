@@ -7,8 +7,9 @@
 
 #include "../nodes.h"
 #include "../utils.cuh"
-#include "../kernels/bintree_build.cuh"
-#include "../kernels/morton.cuh"
+#include "../device/build_functors.cuh"
+#include "../kernels/albvh.cuh"
+#include "../kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -118,7 +119,7 @@ int main(int argc, char* argv[]) {
             thrust::device_vector<grace::uinteger32> d_keys(N);
 
             cudaEventRecord(part_start);
-            grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
+            grace::morton_keys_sph(d_spheres_xyzr, top, bot, d_keys);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -135,7 +136,7 @@ int main(int argc, char* argv[]) {
             thrust::device_vector<float> d_deltas(N+1);
 
             cudaEventRecord(part_start);
-            grace::compute_deltas(d_spheres_xyzr, d_deltas);
+            grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -145,9 +146,13 @@ int main(int argc, char* argv[]) {
             thrust::device_vector<int2> d_tmp_nodes(N-1);
 
             cudaEventRecord(part_start);
-            grace::build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
-                                d_deltas);
-            grace::remove_empty_leaves(d_tree);
+            grace::ALBVH::build_leaves(
+                d_tmp_nodes,
+                d_tree.leaves,
+                d_tree.max_per_leaf,
+                thrust::raw_pointer_cast(d_deltas.data()),
+                thrust::less<float>());
+            grace::ALBVH::remove_empty_leaves(d_tree);
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
@@ -157,14 +162,22 @@ int main(int argc, char* argv[]) {
             thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
 
             cudaEventRecord(part_start);
-            grace::copy_leaf_deltas(d_tree.leaves, d_deltas, d_new_deltas);
+            grace::ALBVH::copy_leaf_deltas(
+                d_tree.leaves,
+                thrust::raw_pointer_cast(d_deltas.data()),
+                thrust::raw_pointer_cast(d_new_deltas.data()));
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
             leaf_deltas_tot += part_elapsed;
 
             cudaEventRecord(part_start);
-            grace::build_nodes(d_tree, d_new_deltas, d_spheres_xyzr);
+            grace::ALBVH::build_nodes(
+                d_tree,
+                thrust::raw_pointer_cast(d_spheres_xyzr.data()),
+                thrust::raw_pointer_cast(d_new_deltas.data()),
+                thrust::less<float>(),
+                grace::AABB_sphere());
             cudaEventRecord(part_stop);
             cudaEventSynchronize(part_stop);
             cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
