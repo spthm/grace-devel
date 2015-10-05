@@ -6,8 +6,6 @@
 
 namespace grace {
 
-namespace gpu {
-
 GRACE_DEVICE int AABBs_hit(
     const float3 invd, const float3 origin, const float len,
     const float4 AABB_L,
@@ -42,7 +40,7 @@ GRACE_DEVICE int AABBs_hit(
 
 // Computations all happen with the precision of the type Real.
 template <typename Real4, typename Real>
-GRACE_DEVICE bool sphere_hit(
+GRACE_HOST_DEVICE bool sphere_hit(
     const Ray& ray,
     const Real4& sphere,
     Real& b2,
@@ -88,7 +86,5 @@ GRACE_DEVICE bool sphere_hit(
     //    ii) Ray ends inside sphere, beyond point of closest approach.
     return true;
 }
-
-} // namespace gpu
 
 } // namespace grace
