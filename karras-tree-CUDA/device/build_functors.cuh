@@ -1,6 +1,9 @@
-namespace grace {
+#pragma once
 
-namespace gpu {
+#include "../error.h"
+#include "../types.h"
+
+namespace grace {
 
 //-----------------------------------------------------------------------------
 // GPU helper functions for tree build kernels.
@@ -146,5 +149,3 @@ struct AABB_sphere
 };
 
 } // namespace grace
-
-} // namespace gpu

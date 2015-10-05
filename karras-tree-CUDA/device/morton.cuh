@@ -18,7 +18,7 @@ GRACE_HOST_DEVICE uinteger32 morton_key(
     const uinteger32 y,
     const uinteger32 z)
 {
-    return space_by_two_10bit(z) << 2 | space_by_two_10bit(y) << 1 | space_by_two_10bit(x);
+    return bits::space_by_two_10bit(z) << 2 | bits::space_by_two_10bit(y) << 1 | bits::space_by_two_10bit(x);
 }
 
 // 63-bit keys.
@@ -27,7 +27,7 @@ GRACE_HOST_DEVICE uinteger64 morton_key(
     const uinteger64 y,
     const uinteger64 z)
 {
-    return space_by_two_21bit(z) << 2 | space_by_two_21bit(y) << 1 | space_by_two_21bit(x);
+    return bits::space_by_two_21bit(z) << 2 | bits::space_by_two_21bit(y) << 1 | bits::space_by_two_21bit(x);
 }
 
 // 30-bit keys from floats.  Assumes floats lie in (0, 1)!

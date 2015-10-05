@@ -8,24 +8,10 @@
 
 namespace grace {
 
-namespace gpu {
+namespace bits {
 
 //-----------------------------------------------------------------------------
-// Functions (device only) for bitwise manipulation
-//-----------------------------------------------------------------------------
-
-// See below for CPU alternative.
-template <typename UInteger>
-GRACE_DEVICE UInteger bit_prefix_length(const UInteger a, const UInteger b)
-{
-    // The conditional return should be optimized away at compile time.
-    return (CHAR_BIT * sizeof(UInteger)) > 32 ? __clzll(a^b) : __clz(a^b);
-}
-
-} // namespace gpu
-
-//-----------------------------------------------------------------------------
-// Functions (host-compatible) for bitwise manipulation
+// Functions (host-compatible) for bitwise manipulation.
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
@@ -53,23 +39,12 @@ GRACE_HOST_DEVICE uinteger64 space_by_two_21bit(const UInteger x)
     return x_64;
 }
 
-template <typename UInteger>
-GRACE_HOST UInteger bit_prefix_length(const UInteger a, const UInteger b)
-{
-    unsigned int n_bits = CHAR_BIT * sizeof(UInteger);
-    UInteger x_or = a ^ b;
-    if (x_or > 0)
-        // Count leading zeros of the xor.
-        return n_bits - 1 - UInteger(floor(log2((float)x_or)));
-    else
-        // a == b
-        return n_bits;
-}
-
 template <typename T>
 GRACE_HOST_DEVICE int sgn(T val)
 {
     return (T(0) < val) - (val < T(0));
 }
+
+} // namespace bits
 
 } // namespace grace
