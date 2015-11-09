@@ -46,7 +46,7 @@ struct Delta_XOR
 // Euclidian distance metric.
 struct Delta_sphere_euclidean
 {
-    GRACE_DEVICE float operator()(
+    GRACE_HOST_DEVICE float operator()(
         const int i,
         const float4* spheres,
         const size_t n_spheres) const
@@ -62,7 +62,7 @@ struct Delta_sphere_euclidean
                + (si.z - sj.z) * (si.z - sj.z);
     }
 
-    GRACE_DEVICE double operator()(
+    GRACE_HOST_DEVICE double operator()(
         const int i,
         const double4* spheres,
         const size_t n_spheres) const
@@ -82,7 +82,7 @@ struct Delta_sphere_euclidean
 // Surface area 'distance' metric.
 struct Delta_sphere_SA
 {
-    GRACE_DEVICE float operator()(
+    GRACE_HOST_DEVICE float operator()(
         const int i,
         const float4* spheres,
         const size_t n_spheres) const
@@ -99,13 +99,10 @@ struct Delta_sphere_SA
 
         float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
 
-        GRACE_ASSERT(SA < CUDART_INF_F);
-        GRACE_ASSERT(SA > 0);
-
         return SA;
     }
 
-    GRACE_DEVICE float operator()(
+    GRACE_HOST_DEVICE float operator()(
         const int i,
         const double4* spheres,
         const size_t n_spheres) const
@@ -121,9 +118,6 @@ struct Delta_sphere_SA
         double L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
 
         double SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
-
-        GRACE_ASSERT(SA < CUDART_INF_F);
-        GRACE_ASSERT(SA > 0);
 
         return SA;
     }
