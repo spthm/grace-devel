@@ -25,9 +25,7 @@ OUT_DIR= bin
 
 DEPS= Makefile $(wildcard ../device/*.cuh) $(wildcard ../kernels/*.cuh) $(wildcard ../util/*.*h) $(wildcard ../*.*h)
 
-UNIT_TEST_BIN= bit_prefix_32bit.out \
-	bit_prefix_64bit.out \
-	morton_30bit.out \
+UNIT_TEST_BIN= morton_30bit.out \
 	morton_63bit.out \
 	morton_kernel_30bit.out \
 	morton_kernel_63bit.out

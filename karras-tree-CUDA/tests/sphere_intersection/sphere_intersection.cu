@@ -17,8 +17,8 @@
 
 #include "../../ray.h"
 #include "../../utils.cuh"
-#include "../../kernels/bits.cuh"
-#include "../../kernels/bintree_trace.cuh"
+#include "../../device/bits.cuh"
+#include "../../device/intersect.cuh"
 #include "../../kernels/gen_rays.cuh"
 
 struct expand_functor
@@ -31,9 +31,9 @@ struct expand_functor
     {
         float4 s = sphere;
         // Centre assumed (0, 0).
-        s.x += d * grace::sgn(s.x);
-        s.y += d * grace::sgn(s.y);
-        s.z += d * grace::sgn(s.z);
+        s.x += d * grace::bits::sgn(s.x);
+        s.y += d * grace::bits::sgn(s.y);
+        s.z += d * grace::bits::sgn(s.z);
         return s;
     }
 };

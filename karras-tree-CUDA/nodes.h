@@ -1,9 +1,13 @@
 #pragma once
 
 #include "error.h"
+#include "types.h"
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>
+#include <thrust/functional.h>
+
+#include "vector_types.h"
 
 namespace grace {
 
@@ -64,6 +68,22 @@ public:
     H_Tree(size_t N_leaves, int _max_per_leaf = 1) :
         nodes(4*(N_leaves-1)), leaves(N_leaves), root_index(0),
         max_per_leaf(max_per_leaf) {}
+};
+
+
+//-----------------------------------------------------------------------------
+// Helper functions for tree build kernels.
+//-----------------------------------------------------------------------------
+
+struct is_empty_node : public thrust::unary_function<int4, bool>
+{
+    GRACE_HOST_DEVICE
+    bool operator()(const int4 node) const
+    {
+        // Note: a node's right child can never be node 0, and a leaf can never
+        // cover zero elements.
+        return (node.y == 0);
+    }
 };
 
 } //namespace grace

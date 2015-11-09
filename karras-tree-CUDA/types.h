@@ -2,7 +2,9 @@
 
 #include <stdint.h>
 
-#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200)
+// Final clause seems to be necessary with some versions of NVCC, where
+// __CUDA_ARCH__ == 0 in host(?) compilation trajectory.
+#if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200) && (__CUDA_ARCH__ != 0)
 #error GRACE does not support devices of compute capability < 2.0.
 #endif
 

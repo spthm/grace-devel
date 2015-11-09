@@ -15,10 +15,10 @@
 #include "../../nodes.h"
 #include "../../ray.h"
 #include "../../utils.cuh"
-#include "../../kernels/morton.cuh"
-#include "../../kernels/bintree_build.cuh"
-#include "../../kernels/bintree_trace.cuh"
+#include "../../device/intersect.cuh"
+#include "../../kernels/build_sph.cuh"
 #include "../../kernels/gen_rays.cuh"
+#include "../../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 
@@ -60,22 +60,16 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree from the random data. */
 
-    thrust::device_vector<unsigned int> d_keys(N);
     float3 top = make_float3(1.2E4f, 1.2E4f, 1.2E4f);
     float3 bot = make_float3(-1.2E4f, -1.2E4f, -1.2E4f);
 
-    grace::morton_keys(d_keys, d_spheres, top, bot);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres.begin());
-
+    // Allocate permanent vectors before temporaries.
     grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N+1);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres);
-
-    // Keys no longer needed.
-    d_keys.clear();
-    d_keys.shrink_to_fit();
+    grace::morton_keys30_sort_sph(d_spheres);
+    grace::euclidean_deltas_sph(d_spheres, d_deltas);
+    grace::ALBVH_sph(d_spheres, d_deltas, d_tree);
 
 
     /* Generate the rays (emitted from box centre and of length 2E4). */
@@ -91,7 +85,7 @@ int main(int argc, char* argv[]) {
     /* Trace for per-ray hit counts. */
 
     thrust::device_vector<int> d_hit_counts(N_rays);
-    grace::trace_hitcounts(d_rays, d_hit_counts, d_tree, d_spheres);
+    grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
 
     double total = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end());
     double mean_hits = static_cast<double>(total) / N_rays;

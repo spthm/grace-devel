@@ -9,9 +9,8 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/bintree_build.cuh"
-#include "../kernels/sort.cuh"
+#include "../device/morton.cuh"
+#include "../kernels/build_sph.cuh"
 #include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
@@ -95,17 +94,14 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree. */
 
+    // Allocate permanent vectors before temporaries.
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<grace::uinteger32> d_keys(N);
-
-    grace::morton_keys(d_keys, d_spheres_xyzr);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
-
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::morton_keys30_sort_sph(d_spheres_xyzr);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
 
 
     /* Generate the rays, all emitted in +z direction from a box side. */
@@ -116,16 +112,16 @@ int main(int argc, char* argv[]) {
     // max(y) limits and smoothing lengths are ignored.  This ensures that rays
     // at the edge will hit something!
     float min_x, max_x;
-    grace::min_max_x(&min_x, &max_x, d_spheres_xyzr);
+    grace::min_max_x(d_spheres_xyzr, &min_x, &max_x);
 
     float min_y, max_y;
-    grace::min_max_y(&min_y, &max_y, d_spheres_xyzr);
+    grace::min_max_y(d_spheres_xyzr, &min_y, &max_y);
 
     float min_z, max_z;
-    grace::min_max_z(&min_z, &max_z, d_spheres_xyzr);
+    grace::min_max_z(d_spheres_xyzr, &min_z, &max_z);
 
     float min_r, max_r;
-    grace::min_max_w(&min_r, &max_r, d_spheres_xyzr);
+    grace::min_max_w(d_spheres_xyzr, &min_r, &max_r);
 
     float span_x = max_x - min_x;
     float span_y = max_y - min_y;
@@ -155,9 +151,10 @@ int main(int argc, char* argv[]) {
 
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
-            h_ray_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
-                                                              (oy-min_y)/span_y,
-                                                              0.0f);
+            h_ray_keys[i*N_rays_side + j]
+                = grace::morton::morton_key((ox-min_x)/span_x,
+                                            (oy-min_y)/span_y,
+                                            0.0f);
         }
     }
 
@@ -217,7 +214,8 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_traced_integrals.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
 
-            unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
+            // Morton keys used for computing deltas.
+            unused_bytes += d_spheres_xyzr.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);
             unused_bytes += d_ray_keys.size() * sizeof(unsigned int);
 

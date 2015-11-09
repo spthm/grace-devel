@@ -1,5 +1,7 @@
 #pragma once
 
+namespace grace {
+
 // See http://hpc.oit.uci.edu/nvidia-doc/sdk-cuda-doc/C/doc/ptx_isa_3.0.pdf
 // for details of the scalar vmin/vmax.
 // min(min(a, b), c)
@@ -47,3 +49,5 @@ __device__ __forceinline__ float maxf_vminf(float f1, float f2, float f3) {
                                    __float_as_int(f2),
                                    __float_as_int(f3)));
 }
+
+} // namespace grace

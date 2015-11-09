@@ -62,18 +62,18 @@ GRACE_HOST void trace_hitcounts_sph(
     thrust::device_vector<int>& d_hit_counts)
 {
     // Defines only RayData.data, of type int.
-    typedef gpu::RayData_datum<int> RayData;
+    typedef RayData_datum<int> RayData;
 
     trace_texref<RayData>(
         d_rays,
         d_spheres,
         d_tree,
         0,
-        gpu::Init_null(),
-        gpu::Intersect_sphere_bool(),
-        gpu::OnHit_increment(),
-        gpu::RayEntry_null(),
-        gpu::RayExit_to_array<int>(
+        Init_null(),
+        Intersect_sphere_bool(),
+        OnHit_increment(),
+        RayEntry_null(),
+        RayExit_to_array<int>(
             thrust::raw_pointer_cast(d_hit_counts.data()))
     );
 }
@@ -91,19 +91,19 @@ GRACE_HOST void trace_cumulative_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef gpu::RayData_sphere<Real, Real> RayData;
+    typedef RayData_sphere<Real, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
         d_tree,
         sm_table_size,
-        gpu::InitGlobalToSmem<double>(
+        InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        gpu::Intersect_sphere_b2dist(),
-        gpu::OnHit_sphere_cumulate(N_table),
-        gpu::RayEntry_null(),
-        gpu::RayExit_to_array<Real>(
+        Intersect_sphere_b2dist(),
+        OnHit_sphere_cumulate(N_table),
+        RayEntry_null(),
+        RayExit_to_array<Real>(
             thrust::raw_pointer_cast(d_cumulated.data()))
     );
 }
@@ -147,24 +147,24 @@ GRACE_HOST void trace_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef gpu::RayData_sphere<int, Real> RayData;
+    typedef RayData_sphere<int, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
         d_tree,
         sm_table_size,
-        gpu::InitGlobalToSmem<double>(
+        InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        gpu::Intersect_sphere_b2dist(),
-        gpu::OnHit_sphere_individual<int, Real>(
+        Intersect_sphere_b2dist(),
+        OnHit_sphere_individual<int, Real>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),
             N_table),
-        gpu::RayEntry_from_array<int>(
+        RayEntry_from_array<int>(
             thrust::raw_pointer_cast(d_ray_offsets.data())),
-        gpu::RayExit_null()
+        RayExit_null()
     );
 }
 
@@ -220,24 +220,24 @@ GRACE_HOST void trace_sph_with_sentinels(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef gpu::RayData_sphere<int, Real> RayData;
+    typedef RayData_sphere<int, Real> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
         d_tree,
         sm_table_size,
-        gpu::InitGlobalToSmem<double>(
+        InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        gpu::Intersect_sphere_b2dist(),
-        gpu::OnHit_sphere_individual<int, Real>(
+        Intersect_sphere_b2dist(),
+        OnHit_sphere_individual<int, Real>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),
             N_table),
-        gpu::RayEntry_from_array<int>(
+        RayEntry_from_array<int>(
             thrust::raw_pointer_cast(d_ray_offsets.data())),
-        gpu::RayExit_null()
+        RayExit_null()
     );
 }
 

@@ -8,9 +8,8 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/bintree_build.cuh"
-#include "../kernels/sort.cuh"
+#include "../device/morton.cuh"
+#include "../kernels/build_sph.cuh"
 #include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
@@ -66,16 +65,16 @@ int main(int argc, char* argv[]) {
     float3 top = make_float3(max_x, max_y, max_z);
     float3 bot = make_float3(min_x, min_y, min_z);
 
-    thrust::device_vector<unsigned int> d_keys(N);
-
-    grace::morton_keys(d_keys, d_spheres_xyzr, top, bot);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
-
+    // Allocate permanent vectors before temporaries.
     grace::Tree d_tree(N, max_per_leaf);
     thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::morton_keys30_sort_sph(d_spheres_xyzr, top, bot);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
+
+    // Deltas no longer needed.
+    d_deltas.clear(); d_deltas.shrink_to_fit();
 
     /* Generate the rays, all emitted in +z direction from a box side. */
 
@@ -112,9 +111,10 @@ int main(int argc, char* argv[]) {
 
             // Since all rays are PPP, base key on origin instead.
             // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j] = grace::morton_key((ox-min_x)/span_x,
-                                                          (oy-min_y)/span_y,
-                                                          0.0f);
+            h_keys[i*N_rays_side + j]
+                = grace::morton::morton_key((ox-min_x)/span_x,
+                                            (oy-min_y)/span_y,
+                                            0.0f);
         }
     }
 

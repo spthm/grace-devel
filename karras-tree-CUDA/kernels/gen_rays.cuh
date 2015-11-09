@@ -5,8 +5,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
-#include "morton.cuh"
 #include "sort.cuh"
+#include "../device/morton.cuh"
 #include "../error.h"
 #include "../kernel_config.h"
 #include "../ray.h"
@@ -15,7 +15,7 @@
 
 namespace grace {
 
-namespace gpu {
+namespace random {
 
 __global__ void init_PRNG(
     curandState* const prng_states,
@@ -63,7 +63,9 @@ __global__ void gen_uniform_rays(
         ray.dz = dz * invR;
 
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
-        keys[tid] = morton_key((ray.dx+1)/2.f, (ray.dy+1)/2.f, (ray.dz+1)/2.f);
+        keys[tid] = morton::morton_key((ray.dx+1)/2.f,
+                                       (ray.dy+1)/2.f,
+                                       (ray.dz+1)/2.f);
 
         ray.ox = ol.x;
         ray.oy = ol.y;
@@ -76,7 +78,7 @@ __global__ void gen_uniform_rays(
     }
 }
 
-} // namespace gpu
+} // namespace random
 
 template <typename Float>
 GRACE_HOST void uniform_random_rays(
@@ -115,12 +117,12 @@ GRACE_HOST void uniform_random_rays(
     GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the Q-RNG states.
-    gpu::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
+    random::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
                                                            seed);
     GRACE_KERNEL_CHECK();
 
     thrust::device_vector<unsigned int> d_keys(N_rays);
-    gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+    random::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
         thrust::raw_pointer_cast(d_rays.data()),
@@ -140,18 +142,18 @@ GRACE_HOST void uniform_random_rays(
 //     const unsigned int N_rays_side)
 // {
 //     float min_x, max_x;
-//     min_max_x(&min_x, &max_x, d_spheres);
+//     min_max_x(d_spheres, &min_x, &max_x);
 
 //     float min_y, max_y;
-//     min_max_y(&min_y, &max_y, d_spheres);
+//     min_max_y(d_spheres, &min_y, &max_y);
 
 //     float min_z, max_z;
-//     min_max_z(&min_z, &max_z, d_spheres);
+//     min_max_z(d_spheres, &min_z, &max_z);
 
 //     float min_r, max_r;
-//     min_max_w(&min_r, &max_r, d_spheres);
+//     min_max_w(d_spheres, &min_r, &max_r);
 
-//     gpu::gen_grid_rays(thrust::raw_pointer_cast(d_rays.data()),
+//     random::gen_grid_rays(thrust::raw_pointer_cast(d_rays.data()),
 //                        N_rays_side);
 // }
 

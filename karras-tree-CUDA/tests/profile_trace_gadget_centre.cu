@@ -16,10 +16,8 @@
 #include "../nodes.h"
 #include "../ray.h"
 #include "../utils.cuh"
-#include "../kernels/bintree_build.cuh"
+#include "../kernels/build_sph.cuh"
 #include "../kernels/gen_rays.cuh"
-#include "../kernels/morton.cuh"
-#include "../kernels/sort.cuh"
 #include "../kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
@@ -101,17 +99,14 @@ int main(int argc, char* argv[]) {
 
     /* Build the tree. */
 
+    // Allocate permanent vectors before temporaries.
     thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-    thrust::device_vector<grace::uinteger32> d_keys(N);
-    thrust::device_vector<float> d_deltas(N+1);
-
-    grace::morton_keys(d_keys, d_spheres_xyzr);
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres_xyzr.begin());
-
     grace::Tree d_tree(N, max_per_leaf);
+    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::compute_deltas(d_spheres_xyzr, d_deltas);
-    grace::build_tree(d_tree, d_deltas, d_spheres_xyzr);
+    grace::morton_keys30_sort_sph(d_spheres_xyzr);
+    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
+    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
 
 
     /* Compute information needed for ray generation; rays are emitted from the
@@ -120,7 +115,7 @@ int main(int argc, char* argv[]) {
 
     // Assume x, y and z spatial extents are similar.
     float min, max;
-    grace::min_max_x(&min, &max, d_spheres_xyzr);
+    grace::min_max_x(d_spheres_xyzr, &min, &max);
     float x_centre = (max + min) / 2.;
     float y_centre = x_centre;
     float z_centre = x_centre;
@@ -235,7 +230,8 @@ int main(int argc, char* argv[]) {
             trace_bytes += d_hit_distances.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
 
-            unused_bytes += d_keys.size() * sizeof(grace::uinteger32);
+            // Morton keys used for computing deltas.
+            unused_bytes += d_spheres_xyzr.size() * sizeof(grace::uinteger32);
             unused_bytes += d_deltas.size() * sizeof(float);
             // Ray keys, used when generating rays.
             unused_bytes += d_rays.size() * sizeof(unsigned int);
