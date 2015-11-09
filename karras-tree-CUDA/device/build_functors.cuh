@@ -46,7 +46,7 @@ struct Delta_XOR
 // Euclidian distance metric.
 struct Delta_sphere_euclidean
 {
-    GRACE_HOST_DEVICE float operator()(
+    GRACE_DEVICE float operator()(
         const int i,
         const float4* spheres,
         const size_t n_spheres) const
@@ -62,7 +62,7 @@ struct Delta_sphere_euclidean
                + (si.z - sj.z) * (si.z - sj.z);
     }
 
-    GRACE_HOST_DEVICE double operator()(
+    GRACE_DEVICE double operator()(
         const int i,
         const double4* spheres,
         const size_t n_spheres) const
@@ -82,7 +82,7 @@ struct Delta_sphere_euclidean
 // Surface area 'distance' metric.
 struct Delta_sphere_SA
 {
-    GRACE_HOST_DEVICE float operator()(
+    GRACE_DEVICE float operator()(
         const int i,
         const float4* spheres,
         const size_t n_spheres) const
@@ -102,7 +102,7 @@ struct Delta_sphere_SA
         return SA;
     }
 
-    GRACE_HOST_DEVICE float operator()(
+    GRACE_DEVICE float operator()(
         const int i,
         const double4* spheres,
         const size_t n_spheres) const
