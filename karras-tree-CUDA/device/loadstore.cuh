@@ -12,7 +12,6 @@
  */
 
 namespace grace {
-namespace gpu {
 
 __device__ __forceinline__ int2 load_vec2s32(const int* const addr)
 {
@@ -132,5 +131,4 @@ __device__ __forceinline__ void store_L2_vec4f32(
     #endif
 }
 
-} // namespace gpu
 } // namespace grace

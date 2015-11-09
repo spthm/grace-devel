@@ -147,7 +147,7 @@ __global__ void build_leaves_kernel(
 
             // Normal store.  Other threads in this block can read from L1 if
             // they get a hit.  No requirement for global coherency.
-            gpu::store_s32(addr, end);
+            store_s32(addr, end);
 
             // Travel up the tree.  The second thread to reach a node writes its
             // left or right end to its parent.  The first exits the loop.
@@ -165,7 +165,7 @@ __global__ void build_leaves_kernel(
                 // We are certain that a thread in this block has already
                 // written the other child of the current node, so we can read
                 // from L1 cache if we get a hit.  Normal vector int2 load.
-                int2 left_right = gpu::load_vec2s32(&(nodes[parent_index].x));
+                int2 left_right = load_vec2s32(&(nodes[parent_index].x));
                 int left = left_right.x;
                 int right = left_right.y;
 
@@ -213,7 +213,7 @@ __global__ void build_leaves_kernel(
                 }
 
                 // Normal store.
-                gpu::store_s32(addr, end);
+                store_s32(addr, end);
 
                 __threadfence_block();
 
@@ -515,10 +515,10 @@ __global__ void build_nodes_slice_kernel(
             // Normal stores.  Other threads in this block can read from L1 if
             // they get a cache hit, i.e. there is no requirement for global
             // coherency.
-            gpu::store_s32(child_addr, g_cur_index);
-            gpu::store_s32(end_addr, end);
-            gpu::store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-            gpu::store_vec2f32(AABB_f2_addr, z_min, z_max);
+            store_s32(child_addr, g_cur_index);
+            store_s32(end_addr, end);
+            store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+            store_vec2f32(AABB_f2_addr, z_min, z_max);
             *sm_addr = sm_end;
 
             // Travel up the tree.  The second thread to reach a node writes its
@@ -540,7 +540,7 @@ __global__ void build_nodes_slice_kernel(
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
-                int4 node = gpu::load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+                int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
 
                 // 'error: class "int2" has no suitable copy constructor'
                 // int2 left_right = sm_nodes[cur_index - low];
@@ -578,9 +578,9 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 // Again, L1 data will be accurate.
-                float4 AABB_L  = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
-                float4 AABB_R  = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
-                float4 AABB_LR = gpu::load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
+                float4 AABB_L  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
+                float4 AABB_R  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
+                float4 AABB_LR = load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
 
                 float x_min = min(AABB_L.x, AABB_R.x);
                 float x_max = max(AABB_L.y, AABB_R.y);
@@ -645,10 +645,10 @@ __global__ void build_nodes_slice_kernel(
                     break;
                 }
 
-                gpu::store_s32(child_addr, g_cur_index);
-                gpu::store_s32(end_addr, end);
-                gpu::store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-                gpu::store_vec2f32(AABB_f2_addr, z_min, z_max);
+                store_s32(child_addr, g_cur_index);
+                store_s32(end_addr, end);
+                store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
+                store_vec2f32(AABB_f2_addr, z_min, z_max);
                 *sm_addr = sm_end;
 
                 __threadfence_block();

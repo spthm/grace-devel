@@ -2,7 +2,7 @@
 
 namespace grace {
 
-namespace gpu {
+namespace interp {
 
 // Requires x in [0, N_table)
 template <typename Real, typename TableIter>
@@ -21,6 +21,6 @@ GRACE_DEVICE Real lerp(Real x, TableIter table, int N_table)
     return integral;
 }
 
-} // namespace gpu
+} // namespace interp
 
 } // namespace grace

@@ -15,7 +15,7 @@
 
 namespace grace {
 
-namespace gpu {
+namespace random {
 
 __global__ void init_PRNG(
     curandState* const prng_states,
@@ -78,7 +78,7 @@ __global__ void gen_uniform_rays(
     }
 }
 
-} // namespace gpu
+} // namespace random
 
 template <typename Float>
 GRACE_HOST void uniform_random_rays(
@@ -117,12 +117,12 @@ GRACE_HOST void uniform_random_rays(
     GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the Q-RNG states.
-    gpu::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
+    random::init_PRNG<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(d_prng_states,
                                                            seed);
     GRACE_KERNEL_CHECK();
 
     thrust::device_vector<unsigned int> d_keys(N_rays);
-    gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+    random::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
         thrust::raw_pointer_cast(d_rays.data()),
@@ -153,7 +153,7 @@ GRACE_HOST void uniform_random_rays(
 //     float min_r, max_r;
 //     min_max_w(d_spheres, &min_r, &max_r);
 
-//     gpu::gen_grid_rays(thrust::raw_pointer_cast(d_rays.data()),
+//     random::gen_grid_rays(thrust::raw_pointer_cast(d_rays.data()),
 //                        N_rays_side);
 // }
 
