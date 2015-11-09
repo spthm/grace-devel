@@ -427,7 +427,7 @@ GRACE_HOST void min_max_x(
 // d_data must be a pointer to DEVICE memory.
 // The compiler will chose the generic Vec4Iter template over the const Vec4*
 // when provided with a non-const Vec4*. This template is therefore needed to
-// correctly handly non-const Vec4* pointers.
+// correctly handle non-const Vec4* pointers.
 template <typename Vec4, typename T>
 GRACE_HOST void min_max_x(
     Vec4* d_data,

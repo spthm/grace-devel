@@ -127,22 +127,14 @@ GRACE_HOST void morton_keys(
     KeyIter d_keys_iter,
     const AABBFunc AABB)
 {
-    // The below is not possible, as grace::min_max will attempt to dereference
-    // centroid_iter on the _host_, leading to a segfault for any device-side
-    // iterators - but device-side iterators are exactly what we might expect
-    // PrimitiveIter to be, e.g. a SoA to AoS conversion.
-    //
-    // typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    // typedef typename AABB::CentroidFunc<TPrimitive, AABBFunc> centroid_func;
-    // typedef thrust::transform_iterator<centroid_func, PrimitiveIter> CentroidIter;
-    // CentroidIter centroid_iter(d_prims_iter, centroid_func());
-
-    // float min_x, max_x;
-    // float min_y, max_y;
-    // float min_z, max_z;
-    // grace::min_max_x(centroid_iter, N_primitives, &min_x, &max_x);
-    // grace::min_max_y(centroid_iter, N_primitives, &min_y, &max_y);
-    // grace::min_max_z(centroid_iter, N_primitives, &min_z, &max_z);
+    // grace::min_max_{x,y,z} use Thrust functions, which must accept either
+    // Thrust iterators or device pointers.
+    // We therefore cannot create a d_centroids_iter which converts primitives
+    // to centroids in-place, because such an iterator would need to be
+    // dereferenceable on both the host and the device. The underlying thrust
+    // kernel would dereference on the device, but grace::min_max_x would
+    // dereference the result on the host. This will work if PrimitiveIter is
+    // actually a Thrust iterator, but not otherwise!
 
     thrust::device_vector<float3> d_centroids(N_primitives);
     float3* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
