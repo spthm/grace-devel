@@ -200,6 +200,7 @@ __global__ void trace_kernel(
 
 // RayIter _may_ be a const Ray* or const_iterator<Ray>.
 // PrimitiveIter _may_ be a const TPrimitive* or const_iterator<TPrimitive>
+// Both must be dereferencable on the device.
 template <typename RayData,
           typename RayIter,
           typename PrimitiveIter,
@@ -303,7 +304,8 @@ GRACE_HOST void trace(
 }
 
 // Reads the primitives through the texture cache.
-// RayIter _may_ be a const Ray* or const_iterator<Ray>.
+// RayIter _may_ be a const Ray* or const_iterator<Ray>. It must be
+// dereferencable on the device.
 template <typename RayData,
           typename RayIter,
           typename TPrimitive,

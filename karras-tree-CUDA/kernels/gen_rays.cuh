@@ -196,14 +196,14 @@ GRACE_HOST void init_PRNG(
 
 template <typename Real>
 GRACE_HOST void uniform_random_rays(
-    thrust::device_vector<Ray>& d_rays,
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
     const Real ox,
     const Real oy,
     const Real oz,
     const Real length,
     const unsigned long long seed = 1234)
 {
-    size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, oz, length);
 
     curandState* d_prng_states;
@@ -217,19 +217,36 @@ GRACE_HOST void uniform_random_rays(
     gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
-        thrust::raw_pointer_cast(d_rays.data()),
+        d_rays_ptr,
         thrust::raw_pointer_cast(d_keys.data()),
         N_rays);
     GRACE_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                        thrust::device_ptr<Ray>(d_rays_ptr));
+}
+
+template <typename Real>
+GRACE_HOST void uniform_random_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const Real length,
+    const unsigned long long seed = 1234)
+{
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+    size_t N_rays = d_rays.size();
+
+    uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
 }
 
 template <typename Real>
 GRACE_HOST void uniform_random_rays_single_octant(
-    thrust::device_vector<Ray>& d_rays,
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
     const Real ox,
     const Real oy,
     const Real oz,
@@ -237,7 +254,6 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const unsigned long long seed = 1234,
     const enum Octants octant = PPP)
 {
-    size_t N_rays = d_rays.size();
     float4 origin = make_float4(ox, oy, oz, length);
 
     curandState* d_prng_states;
@@ -251,7 +267,7 @@ GRACE_HOST void uniform_random_rays_single_octant(
     gpu::gen_uniform_rays_single_octant<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
-        thrust::raw_pointer_cast(d_rays.data()),
+        d_rays_ptr,
         thrust::raw_pointer_cast(d_keys.data()),
         N_rays,
         octant);
@@ -259,7 +275,26 @@ GRACE_HOST void uniform_random_rays_single_octant(
 
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 
-    thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_rays.begin());
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                        thrust::device_ptr<Ray>(d_rays_ptr));
+}
+
+template <typename Real>
+GRACE_HOST void uniform_random_rays_single_octant(
+    thrust::device_vector<Ray>& d_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const Real length,
+    const unsigned long long seed = 1234,
+    const enum Octants octant = PPP)
+{
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+    size_t N_rays = d_rays.size();
+
+    uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz, length,
+                                      seed, octant);
+
 }
 
 // template <typename Float4>
