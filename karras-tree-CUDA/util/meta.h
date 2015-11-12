@@ -6,9 +6,35 @@
 
 namespace grace {
 
-// Usage:  typedef typename Real4ToRealMapper<Real4>::type Real
-// Result: Real4 == float4  -> Real == float
-//         Real4 == double4 -> Real == double
+// Usage:  typedef typename Real{2,3,4}ToRealMapper<Real{2,3,4}>::type Real
+// Result: Real{2,3,4} == float{2,3,4}  -> Real == float
+//         Real{2,3,4} == double{2,3,4} -> Real == double
+template <typename>
+struct Real2ToRealMapper;
+
+template <>
+struct Real2ToRealMapper<float2> {
+    typedef float type;
+};
+
+template <>
+struct Real2ToRealMapper<double2> {
+    typedef double type;
+};
+
+template <typename>
+struct Real3ToRealMapper;
+
+template <>
+struct Real3ToRealMapper<float3> {
+    typedef float type;
+};
+
+template <>
+struct Real3ToRealMapper<double3> {
+    typedef double type;
+};
+
 template <typename>
 struct Real4ToRealMapper;
 
