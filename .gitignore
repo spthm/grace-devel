@@ -2,7 +2,7 @@
 *.out
 *.log
 
-Makefile
+Makefile.config
 
 # Mac stuff
 *.DS_Store
