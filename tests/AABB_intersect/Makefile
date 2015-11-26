@@ -1,9 +1,25 @@
 include ../Makefile.common
 
+# AABB_intersect.o should be first, otherwise the linker might throw away
+# symbols we need.
+OBJS = AABB_intersect.o \
+AABB.o \
+ray.o \
+aila_laine_karras.o \
+eisemann.o \
+plucker.o \
+williams.o
+
+NVCCFLAGS += -O3
+
 all: AABB_intersect
 
-AABB_intersect: AABB_intersect.cu $(NVCCDEPS)
-	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(NVCCLFLAGS) $(NVCCLIBS)
+AABB_intersect: $(OBJS) $(NVCCDEPS)
+	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
+
+# Note we need -dc in order to link device code from multiple .cu files.
+%.o: %.cu $(NVCCDEPS)
+	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -dc $< -o $@
 
 clean:
 	@-rm -f *.o
