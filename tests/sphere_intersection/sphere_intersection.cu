@@ -15,11 +15,11 @@
 
 #include "intersection.cuh"
 
-#include "../../ray.h"
-#include "../../utils.cuh"
-#include "../../device/bits.cuh"
-#include "../../device/intersect.cuh"
-#include "../../kernels/gen_rays.cuh"
+#include "ray.h"
+#include "utils.cuh"
+#include "device/bits.cuh"
+#include "device/intersect.cuh"
+#include "kernels/gen_rays.cuh"
 
 struct expand_functor
 {

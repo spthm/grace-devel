@@ -6,8 +6,8 @@
 #include <thrust/host_vector.h>
 #include <thrust/random.h>
 
-#include "../device/morton.cuh"
-#include "../kernels/build_sph.cuh"
+#include "device/morton.cuh"
+#include "kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 

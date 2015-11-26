@@ -1,8 +1,8 @@
 #include <iostream>
 #include <bitset>
 
-#include "../device/bits.cuh"
-#include "../device/morton.cuh"
+#include "device/bits.cuh"
+#include "device/morton.cuh"
 
 int main(int argc, char* argv[]) {
 

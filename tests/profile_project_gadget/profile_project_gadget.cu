@@ -5,13 +5,13 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "../kernel_config.h"
-#include "../nodes.h"
-#include "../ray.h"
-#include "../utils.cuh"
-#include "../device/morton.cuh"
-#include "../kernels/build_sph.cuh"
-#include "../kernels/trace_sph.cuh"
+#include "kernel_config.h"
+#include "nodes.h"
+#include "ray.h"
+#include "utils.cuh"
+#include "device/morton.cuh"
+#include "kernels/build_sph.cuh"
+#include "kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 

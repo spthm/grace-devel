@@ -6,11 +6,11 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "../nodes.h"
-#include "../utils.cuh"
-#include "../device/build_functors.cuh"
-#include "../kernels/albvh.cuh"
-#include "../kernels/build_sph.cuh"
+#include "nodes.h"
+#include "utils.cuh"
+#include "device/build_functors.cuh"
+#include "kernels/albvh.cuh"
+#include "kernels/build_sph.cuh"
 
 int main(int argc, char* argv[]) {
 

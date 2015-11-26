@@ -5,8 +5,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "../kernels/gen_rays.cuh"
-#include "../ray.h"
+#include "kernels/gen_rays.cuh"
+#include "ray.h"
 
 int main(int argc, char* argv[]) {
 

@@ -5,12 +5,12 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
-#include "../error.h"
-#include "../nodes.h"
-#include "../ray.h"
-#include "../utils.cuh"
-#include "../device/morton.cuh"
-#include "../kernel_config.h"
+#include "error.h"
+#include "nodes.h"
+#include "ray.h"
+#include "utils.cuh"
+#include "device/morton.cuh"
+#include "kernel_config.h"
 
 enum DIR_CLASS
 { MMM, PMM, MPM, PPM, MMP, PMP, MPP, PPP };

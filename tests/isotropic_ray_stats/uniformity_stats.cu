@@ -7,10 +7,10 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "../error.h"
-#include "../ray.h"
-#include "../kernels/gen_rays.cuh"
-#include "../util/meta.h"
+#include "error.h"
+#include "ray.h"
+#include "kernels/gen_rays.cuh"
+#include "util/meta.h"
 
 double PI = 3.141592653589793;
 

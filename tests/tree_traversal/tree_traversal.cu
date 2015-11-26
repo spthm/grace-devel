@@ -12,13 +12,13 @@
 #include <thrust/reduce.h>
 #include <thrust/sort.h>
 
-#include "../../nodes.h"
-#include "../../ray.h"
-#include "../../utils.cuh"
-#include "../../device/intersect.cuh"
-#include "../../kernels/build_sph.cuh"
-#include "../../kernels/gen_rays.cuh"
-#include "../../kernels/trace_sph.cuh"
+#include "nodes.h"
+#include "ray.h"
+#include "utils.cuh"
+#include "device/intersect.cuh"
+#include "kernels/build_sph.cuh"
+#include "kernels/gen_rays.cuh"
+#include "kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 

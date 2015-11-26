@@ -1,3 +1,5 @@
+# TODO: Explain the Ripley K statistic.
+
 For a relatively brief description of the statistic tests used here to assess
 the isotropy of the ray directions, see Fisher, Lewis and Embleton (1987):
 section 5.3.1 discusses the Rayleigh test, and 5.6.1 covers An, Gn and Fn.

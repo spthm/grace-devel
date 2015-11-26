@@ -14,13 +14,13 @@
 #include <thrust/sort.h>
 #include <thrust/scan.h>
 
-#include "../nodes.h"
-#include "../ray.h"
-#include "../utils.cuh"
-#include "../kernels/build_sph.cuh"
-#include "../kernels/gen_rays.cuh"
-#include "../kernels/sort.cuh"
-#include "../kernels/trace_sph.cuh"
+#include "nodes.h"
+#include "ray.h"
+#include "utils.cuh"
+#include "kernels/build_sph.cuh"
+#include "kernels/gen_rays.cuh"
+#include "kernels/sort.cuh"
+#include "kernels/trace_sph.cuh"
 
 int main(int argc, char* argv[]) {
 

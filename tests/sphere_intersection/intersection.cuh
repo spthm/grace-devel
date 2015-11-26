@@ -3,7 +3,7 @@
 #include "interval.h"
 #include "quadratic.h"
 
-#include "../../ray.h"
+#include "ray.h"
 
 #include <gmpxx.h>
 

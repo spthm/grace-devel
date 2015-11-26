@@ -49,10 +49,11 @@
 #include <thrust/host_vector.h>
 #include <thrust/scan.h>
 
-#include "../kernels/sort.cuh"
-#include "../kernels/scan.cuh"
+#include "kernels/sort.cuh"
+#include "kernels/scan.cuh"
 
-#include "../../../moderngpu/include/util/format.h"
+// moderngpu
+#include "util/format.h"
 
 #include <cstdlib>
 
