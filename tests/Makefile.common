@@ -23,8 +23,10 @@ MGPU_OBJS := $(abspath $(addprefix $(THIS_PATH),$(MGPU_OBJS)))
 NVCCDEPS = Makefile
 NVCCDEPS += $(abspath $(wildcard ../device/*.cuh))
 NVCCDEPS += $(abspath $(wildcard ../kernels/*.cuh))
-NVCCDEPS += $(abspath $(wildcard ../util/*.*h))
-NVCCDEPS += $(abspath $(wildcard ../*.*h))
+NVCCDEPS += $(abspath $(wildcard ../util/*.cuh))
+NVCCDEPS += $(abspath $(wildcard ../util/*.h))
+NVCCDEPS += $(abspath $(wildcard ../*.cuh))
+NVCCDEPS += $(abspath $(wildcard ../*.h))
 NVCCDEPS += $(MGPU_OBJS)
 
 NVCCINCLUDES = -I$(GRACE_DIR) -I$(MGPU_DIR)/include/
@@ -33,7 +35,7 @@ NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 
 NVCCLFLAGS = -L$(CUDA_DIR)
 
-NVCCLIBS = -lcuda -lcurand $(MGPU_OBJS)
+NVCCLIBS = $(MGPU_OBJS) -lcuda -lcurand
 
 # TODO: These rules are too fragile! E.g. if MGPU_OBJS has its order switched.
 $(firstword $(MGPU_OBJS)): $(MGPU_DIR)/src/mgpucontext.cu
