@@ -17,19 +17,23 @@ MGPU_OBJS = mgpucontext.o mgpuutil.o
 GRACE_DIR := $(abspath $(GRACE_DIR))
 MGPU_OBJS := $(abspath $(addprefix $(THIS_PATH),$(MGPU_OBJS)))
 
-# We could do this on a Makefile-by-Makefile basis instead to save re-compiling
-# everything when only a few headers are changed, but that is extremely prone
-# to error.
+# We could do some of this on a Makefile-by-Makefile basis instead to save
+# re-compiling everything when only a few headers are changed, but that is
+# extremely error prone.
 NVCCDEPS = Makefile
-NVCCDEPS += $(abspath $(wildcard ../device/*.cuh))
-NVCCDEPS += $(abspath $(wildcard ../kernels/*.cuh))
-NVCCDEPS += $(abspath $(wildcard ../util/*.cuh))
-NVCCDEPS += $(abspath $(wildcard ../util/*.h))
-NVCCDEPS += $(abspath $(wildcard ../*.cuh))
-NVCCDEPS += $(abspath $(wildcard ../*.h))
+NVCCDEPS += $(abspath $(THIS_PATH)Makefile.common)
+NVCCDEPS += $(abspath $(THIS_PATH)Makefile.config)
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../device/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../kernels/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../util/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../util/*.h))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.h))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.h))
 NVCCDEPS += $(MGPU_OBJS)
 
-NVCCINCLUDES = -I$(GRACE_DIR) -I$(MGPU_DIR)/include/
+NVCCINCLUDES = -I$(GRACE_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
 
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 
