@@ -22,6 +22,9 @@ __global__ void intersect_kernel(const Ray* rays, const AABB* boxes,
 
     while (tid < N_rays)
     {
+        // While its impact varies with the number of intersections per ray, it
+        // still seems fairer to include any per-ray overhead in the
+        // profiling results.
         Ray ray = intersector.prepare(rays[tid]);
 
         int hit_count = 0;
@@ -42,7 +45,7 @@ void intersect(const thrust::host_vector<Ray>& rays,
                thrust::host_vector<int>& hits,
                const Intersector intersector)
 {
-    for (size_t i = 0; i < rays.size(); i++)
+    for (size_t i = 0; i < rays.size(); ++i)
     {
         Ray ray = intersector.prepare(rays[i]);
         int hit_count = 0;
@@ -78,11 +81,23 @@ inline int compare_hitcounts(const thrust::host_vector<int>& hits_a,
                 continue;
             }
 
-            std::cout << "Ray " << i << ": " << name_a << " !=  " << name_b
-                      << "(" << hits_a[i] << ", " << hits_b[i] << ")"
+            std::cout << "Ray " << i << ": " << name_a << " != " << name_b
+                      << "  (" << hits_a[i] << " != " << hits_b[i] << ")"
                       << std::endl;
         }
     }
+    if (errors != 0) {
+        std::cout << name_a << " != " << name_b << " (" << errors << " case"
+                  << (errors > 1 ? "s)" : ")") << std::endl;
+    }
+    else {
+        std::cout << name_a << " == " << name_b << " for all ray-AABB pairs"
+                  << std::endl;
+    }
+    if (verbose) {
+        std::cout << std::endl;
+    }
+
     return errors;
 }
 

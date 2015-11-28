@@ -12,12 +12,15 @@
 int main(int argc, char* argv[])
 {
     unsigned int N_rays = 100000;
-    unsigned int N_AABBs = 1000;
+    unsigned int N_AABBs = 5000;
+    bool verbose = true;
 
     if (argc > 1)
         N_rays = (unsigned int)std::strtol(argv[1], NULL, 10);
     if (argc > 2)
-        N_AABBs = 2 * (unsigned int)std::strtol(argv[2], NULL, 10);
+        N_AABBs = (unsigned int)std::strtol(argv[2], NULL, 10);
+    if (argc > 3)
+        verbose = std::string(argv[3]) == "true" ? true : false;
 
     std::cout << "Testing " << N_rays << " rays against "
               << N_AABBs << " AABBs." << std::endl;
@@ -77,30 +80,17 @@ int main(int argc, char* argv[])
 
     std::cout << std::endl;
 
-    int errors;
-    errors = compare_hitcounts(h_eisemann_hits, "Eisemann",
-                               h_plucker_hits, "Plucker", false);
-    if (errors != 0) {
-        std::cout << "Eisemann != Plucker (" << errors << " cases)" << std::endl;
-    }
+    compare_hitcounts(h_eisemann_hits, "Eisemann",
+                      h_williams_hits, "Williams", verbose);
 
-    errors = compare_hitcounts(h_aila_laine_hits, "Aila",
-                               h_plucker_hits, "Plucker", false);
-    if (errors != 0) {
-        std::cout << "Aila != Plucker (" << errors << " cases)" << std::endl;
-    }
+    compare_hitcounts(h_plucker_hits, "Plucker",
+                      h_williams_hits, "Williams", verbose);
 
-    errors = compare_hitcounts(h_williams_hits, "Williams",
-                               h_plucker_hits, "Plucker", false);
-    if (errors != 0) {
-        std::cout << "Williams != Plucker (" << errors << " cases)" << std::endl;
-    }
+    compare_hitcounts(h_aila_laine_hits, "Aila",
+                      h_williams_hits, "Williams", verbose);
 
-    errors = compare_hitcounts(h_williams_noif_hits, "Williams (no ifs)",
-                               h_plucker_hits, "Plucker", false);
-    if (errors != 0) {
-        std::cout << "Williams (no if) != Plucker (" << errors << " cases)" << std::endl;
-    }
+    compare_hitcounts(h_williams_noif_hits, "Williams (no ifs)",
+                      h_williams_hits, "Williams", verbose);
 
     return EXIT_SUCCESS;
 }
