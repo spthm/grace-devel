@@ -70,7 +70,11 @@ __global__ void gen_uniform_rays(
         dx = curand_normal(&state);
         dy = curand_normal(&state);
         dz = curand_normal(&state);
+        #if __CUDACC_VER_MAJOR__ < 7
+        invR = rsqrt(dx*dx + dy*dy + dz*dz);
+        #else
         invR = rnorm3d(dx, dy, dz);
+        #endif
 
         ray.dx = dx * invR;
         ray.dy = dy * invR;
@@ -119,7 +123,11 @@ __global__ void gen_uniform_rays_single_octant(
         dx = sign.x * fabsf(curand_normal(&state));
         dy = sign.y * fabsf(curand_normal(&state));
         dz = sign.z * fabsf(curand_normal(&state));
+        #if __CUDACC_VER_MAJOR__ < 7
+        invR = rsqrt(dx*dx + dy*dy + dz*dz);
+        #else
         invR = rnorm3d(dx, dy, dz);
+        #endif
 
         ray.dx = dx * invR;
         ray.dy = dy * invR;
