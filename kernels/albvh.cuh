@@ -147,7 +147,7 @@ __global__ void build_leaves_kernel(
 
             // Normal store.  Other threads in this block can read from L1 if
             // they get a hit.  No requirement for global coherency.
-            store_s32(addr, end);
+            *addr = end;
 
             // Travel up the tree.  The second thread to reach a node writes its
             // left or right end to its parent.  The first exits the loop.
@@ -164,8 +164,8 @@ __global__ void build_leaves_kernel(
 
                 // We are certain that a thread in this block has already
                 // written the other child of the current node, so we can read
-                // from L1 cache if we get a hit.  Normal vector int2 load.
-                int2 left_right = load_vec2s32(&(nodes[parent_index].x));
+                // from L1 cache if we get a hit.
+                int2 left_right = nodes[parent_index];
                 int left = left_right.x;
                 int right = left_right.y;
 
@@ -213,7 +213,7 @@ __global__ void build_leaves_kernel(
                 }
 
                 // Normal store.
-                store_s32(addr, end);
+                *addr = end;
 
                 __threadfence_block();
 
@@ -456,8 +456,8 @@ __global__ void build_nodes_slice_kernel(
             int* child_addr;
             int* end_addr;
             volatile int* sm_addr;
-            float* AABB_f2_addr;
-            float* AABB_f4_addr;
+            float2* AABB_f2_addr;
+            float4* AABB_f4_addr;
             int end, sm_end;
             // Compute the current node's parent index and write-to locations.
             if (delta_comp(delta_L, delta_R))
@@ -478,8 +478,8 @@ __global__ void build_nodes_slice_kernel(
                 sm_end = g_right;
 
                 // Right child AABB.
-                AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 2].x);
-                AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].z);
+                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
+                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
             }
             else {
                 // Rightward node is parent.
@@ -498,8 +498,8 @@ __global__ void build_nodes_slice_kernel(
                 sm_end = g_left;
 
                 // Left child AABB.
-                AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 1].x);
-                AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].x);
+                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
+                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
             }
 
             // If the leaf's parent is outside this block do not write anything;
@@ -515,10 +515,10 @@ __global__ void build_nodes_slice_kernel(
             // Normal stores.  Other threads in this block can read from L1 if
             // they get a cache hit, i.e. there is no requirement for global
             // coherency.
-            store_s32(child_addr, g_cur_index);
-            store_s32(end_addr, end);
-            store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-            store_vec2f32(AABB_f2_addr, z_min, z_max);
+            *child_addr = g_cur_index;
+            *end_addr = end;
+            *AABB_f4_addr = make_float4(x_min, x_max, y_min, y_max);
+            *AABB_f2_addr = make_float2(z_min, z_max);
             *sm_addr = sm_end;
 
             // Travel up the tree.  The second thread to reach a node writes its
@@ -540,7 +540,8 @@ __global__ void build_nodes_slice_kernel(
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
-                int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+                // int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
+                int4 node = nodes[4 * g_cur_index + 0];
 
                 // 'error: class "int2" has no suitable copy constructor'
                 // int2 left_right = sm_nodes[cur_index - low];
@@ -578,9 +579,9 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 // Again, L1 data will be accurate.
-                float4 AABB_L  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 1].x));
-                float4 AABB_R  = load_vec4f32(&(f4_nodes[4 * g_cur_index + 2].x));
-                float4 AABB_LR = load_vec4f32(&(f4_nodes[4 * g_cur_index + 3].x));
+                float4 AABB_L  = f4_nodes[4 * g_cur_index + 1];
+                float4 AABB_R  = f4_nodes[4 * g_cur_index + 2];
+                float4 AABB_LR = f4_nodes[4 * g_cur_index + 3];
 
                 float x_min = min(AABB_L.x, AABB_R.x);
                 float x_max = max(AABB_L.y, AABB_R.y);
@@ -598,8 +599,8 @@ __global__ void build_nodes_slice_kernel(
                 int* child_addr;
                 int* end_addr;
                 volatile int* sm_addr;
-                float* AABB_f2_addr;
-                float* AABB_f4_addr;
+                float2* AABB_f2_addr;
+                float4* AABB_f4_addr;
                 int end, sm_end;
                 if (delta_comp(delta_L, delta_R))
                 {
@@ -616,8 +617,8 @@ __global__ void build_nodes_slice_kernel(
                     sm_end = g_right;
 
                     // Right child AABB.
-                    AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 2].x);
-                    AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].z);
+                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
+                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
 
                 }
                 else {
@@ -634,8 +635,8 @@ __global__ void build_nodes_slice_kernel(
                     sm_end = g_left;
 
                     // Left child AABB.
-                    AABB_f4_addr = &(f4_nodes[4 * g_parent_index + 1].x);
-                    AABB_f2_addr = &(f4_nodes[4 * g_parent_index + 3].x);
+                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
+                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
                 }
 
                 if (parent_index < low || parent_index >= high) {
@@ -645,10 +646,10 @@ __global__ void build_nodes_slice_kernel(
                     break;
                 }
 
-                store_s32(child_addr, g_cur_index);
-                store_s32(end_addr, end);
-                store_vec4f32(AABB_f4_addr, x_min, x_max, y_min, y_max);
-                store_vec2f32(AABB_f2_addr, z_min, z_max);
+                *child_addr = g_cur_index;
+                *end_addr = end;
+                *AABB_f4_addr = make_float4(x_min, x_max, y_min, y_max);
+                *AABB_f2_addr = make_float2(z_min, z_max);
                 *sm_addr = sm_end;
 
                 __threadfence_block();
