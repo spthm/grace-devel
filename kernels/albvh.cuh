@@ -172,8 +172,8 @@ __global__ void build_leaves_kernel(
                 // Only the left-most leaf can have an index of 0, and only the
                 // right-most leaf can have an index of n_leaves - 1.
                 GRACE_ASSERT(left >= 0);
-                GRACE_ASSERT(left < n_leaves - 1);
                 GRACE_ASSERT(right > 0);
+                GRACE_ASSERT(left < n_leaves - 1);
                 GRACE_ASSERT(right < n_leaves);
 
                 int size = right - left + 1;
@@ -437,14 +437,14 @@ __global__ void build_nodes_slice_kernel(
             // right-most leaf can have an index of n_leaves - 1.
             if (g_cur_index < n_nodes) {
                 GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_left < n_leaves - 1);
                 GRACE_ASSERT(g_right > 0);
+                GRACE_ASSERT(g_left < n_leaves - 1);
                 GRACE_ASSERT(g_right < n_leaves);
             }
             else {
                 GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_left < n_leaves);
                 GRACE_ASSERT(g_right >= 0);
+                GRACE_ASSERT(g_left < n_leaves);
                 GRACE_ASSERT(g_right < n_leaves);
             }
 
@@ -550,8 +550,8 @@ __global__ void build_nodes_slice_kernel(
                 int g_left = sm_nodes[cur_index - low].x;
                 int g_right = sm_nodes[cur_index - low].y;
                 GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_left < n_leaves - 1);
                 GRACE_ASSERT(g_right > 0);
+                GRACE_ASSERT(g_left < n_leaves - 1);
                 GRACE_ASSERT(g_right < n_leaves);
 
                 // Undo the -ve sign encoding.
@@ -561,8 +561,8 @@ __global__ void build_nodes_slice_kernel(
                 // Both of its logical/compressed end-indices must also be in
                 // this block.
                 GRACE_ASSERT(left >= low);
-                GRACE_ASSERT(left < high - 1);
                 GRACE_ASSERT(right > low);
+                GRACE_ASSERT(left < high - 1);
                 GRACE_ASSERT(right < high);
 
                 // Even if this is true, the following compacted/logical size
