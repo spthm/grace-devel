@@ -18,6 +18,9 @@ GENCODE_35 = -gencode arch=compute_35,code=sm_35
 # Include above as appropriate.
 CUARCH = $(GENCODE_30)
 
+# Set to 0 or comment out to compile without OpenMP.
+USE_OPENMP = 1
+
 # moderngpu
 MGPU_DIR = $(HOME)/Code/moderngpu/
 # CUDA toolkit

@@ -36,6 +36,11 @@ NVCCDEPS += $(MGPU_OBJS)
 NVCCINCLUDES = -I$(GRACE_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
 
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
+ifdef USE_OPENMP
+ifeq ($(USE_OPENMP), 1)
+NVCCFLAGS += -Xcompiler -fopenmp
+endif
+endif
 
 NVCCLFLAGS = -L$(CUDA_DIR)
 
