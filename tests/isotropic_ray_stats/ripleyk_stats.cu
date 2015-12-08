@@ -1,87 +1,105 @@
-#include <math.h>
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
 
-#include <curand.h>
+#include "stats_math.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "kernels/gen_rays.cuh"
 #include "ray.h"
+#include "kernels/gen_rays.cuh"
 
-int main(int argc, char* argv[]) {
+#include <cmath>
+#include <iomanip>
 
+const size_t N_scales = 12;
+float Rs[N_scales] = { 0.005,
+                       0.01,
+                       0.02,
+                       0.03,
+                       0.05,
+                       0.1,
+                       0.2,
+                       0.5,
+                       0.75,
+                       1.0,
+                       1.25,
+                       PI / 2.0
+                     };
+
+int main(int argc, char* argv[])
+{
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
-    std::cout.precision(5);
+    std::cout.precision(6);
 
     size_t N_rays = 32 * 300; // = 9600
     if (argc > 1) {
-        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (size_t)std::strtol(argv[1], NULL, 10);
     }
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<grace::Ray> h_rays(N_rays);
 
-    float ox, oy, oz;
-    ox = oy = oz = 0;
+    float3 O = make_float3(0.f, 0.f, 0.f);
     float length = 1;
-    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
+    grace::uniform_random_rays(d_rays, O.x, O.y, O.z, length);
 
     h_rays = d_rays;
 
     // Header of output table.
     std::cout << "Testing uniformity of " << N_rays << " generated ray "
-              << "directions with Ripley's K function." << std::endl;
-    std::cout << "L(r) - r = 0 when perfectly uniform on scale r." << std::endl;
-    std::cout << std::endl;
-    std::cout << "     r     |    L(r)   |  L(r) - r  " << std::endl;
-    std::cout << "-------------------------------------" << std::endl;
+              << "directions with Ripley's K(r) function." << std::endl
+              << "r is the distance scale: 1/2 arc length of a spherical cap "
+              << "on the unit sphere." << std::endl
+              << "CSR(r) is the value of K(r) under Complete Spatial "
+              << "Randomness." << std::endl
+              << std::endl
+              << "      r     |    K(r)    | K(r) - CSR(r)" << std::endl
+              << "----------------------------------------" << std::endl;
 
-    // Below required for calculating K function.
-    double inv_N_rays = 1. / N_rays;
-    double prefactor = 4 * inv_N_rays;
-
-    // Loop through various distance scales.
-    const size_t N_scales = 10;
-    float Rs[N_scales] = {0.005, 0.01, 0.02, 0.03, 0.05,
-                          0.1, 0.2, 0.5, 1.0, sqrt(2)};
-    for (unsigned int ir=0; ir<N_scales; ir++)
+    #pragma omp parallel for schedule(static,1) ordered
+    for (int s = 0; s < N_scales; ++s)
     {
-        float r = Rs[ir];
-        double Lr;
-        unsigned int N_within_tot = 0;
-        // Loop through each particle.
-        for (unsigned int i=0; i<N_rays; i++)
-        {
-            float dxi, dyi, dzi;
-            dxi = h_rays[i].dx;
-            dyi = h_rays[i].dy;
-            dzi = h_rays[i].dz;
+        float r = Rs[s];
+        int N_within = 0;
 
-            for (unsigned int j=0; j<N_rays; j++)
+        for (int i = 0; i < N_rays; ++i)
+        {
+            float3 p;
+            p.x = h_rays[i].dx;
+            p.y = h_rays[i].dy;
+            p.z = h_rays[i].dz;
+
+            for (int j = 0; j < N_rays; ++j)
             {
-                // Do not include a point as part of its own count.
+                // Do not include a direction as part of its own count.
                 if (i == j)
                     continue;
 
-                float dxj, dyj, dzj;
-                dxj = h_rays[j].dx;
-                dyj = h_rays[j].dy;
-                dzj = h_rays[j].dz;
+                float3 q;
+                q.x = h_rays[j].dx;
+                q.y = h_rays[j].dy;
+                q.z = h_rays[j].dz;
 
-                if ( (dxi-dxj)*(dxi-dxj) +
-                     (dyi-dyj)*(dyi-dyj) +
-                     (dzi-dzj)*(dzi-dzj) < r*r)
-                {
-                    N_within_tot++;
+                if (great_circle_distance(p, q) < r) {
+                    ++N_within;
                 }
             }
         }
-        double N_within_avg = N_within_tot * inv_N_rays;
-        // L(r) = sqrt[K(r)/pi], where K(r) is Ripley's K function.
-        Lr = sqrt(prefactor * N_within_avg);
-        std::cout << "  " << r << "  |  " << Lr << "  |  ";
-        std::cout.width(8);
-        std::cout << Lr - r << std::endl;
+
+        double CSR = 2 * PI * (1 - std::cos(r));
+        double K = (4 * PI / (N_rays * (N_rays - 1))) * N_within;
+
+        #pragma omp ordered
+        {
+            std::cout << "  " << std::setw(8) << r << "  |"
+                      << "  " << std::setw(8) << K << "  |"
+                      << "  " << std::setw(9) << K - CSR
+                      << std::endl;
+        }
     }
-    return 0;
+    return EXIT_SUCCESS;
 }
