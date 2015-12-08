@@ -15,6 +15,8 @@ struct Aila
         return compute_ray_invd(in_ray);
     }
 
+    // This method uses device-only functions. The lack of __host__ is not a
+    // mistake.
     __device__ int intersect(const Ray& ray, const AABB& box) const
     {
         return aila_laine_karras(ray, box);

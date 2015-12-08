@@ -8,8 +8,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include <stdexcept>
-#include <string>
+#include <time.h>
 
 template <typename Intersector>
 __global__ void intersect_kernel(const Ray* rays, const AABB* boxes,
@@ -45,6 +44,7 @@ void intersect(const thrust::host_vector<Ray>& rays,
                thrust::host_vector<int>& hits,
                const Intersector intersector)
 {
+    #pragma omp parallel for
     for (size_t i = 0; i < rays.size(); ++i)
     {
         Ray ray = intersector.prepare(rays[i]);
@@ -60,47 +60,6 @@ void intersect(const thrust::host_vector<Ray>& rays,
     }
 }
 
-// Inline only because it's defined in a header file.
-inline int compare_hitcounts(const thrust::host_vector<int>& hits_a,
-                             const std::string name_a,
-                             const thrust::host_vector<int>& hits_b,
-                             const std::string name_b,
-                             const bool verbose = true)
-{
-    if (hits_a.size() != hits_b.size()) {
-        throw std::invalid_argument("Hit vectors are different sizes");
-    }
-
-    size_t errors = 0;
-    for (size_t i = 0; i < hits_a.size(); ++i)
-    {
-        if (hits_a[i] != hits_b[i]) {
-            ++errors;
-
-            if (!verbose) {
-                continue;
-            }
-
-            std::cout << "Ray " << i << ": " << name_a << " != " << name_b
-                      << "  (" << hits_a[i] << " != " << hits_b[i] << ")"
-                      << std::endl;
-        }
-    }
-    if (errors != 0) {
-        std::cout << name_a << " != " << name_b << " (" << errors << " case"
-                  << (errors > 1 ? "s)" : ")") << std::endl;
-    }
-    else {
-        std::cout << name_a << " == " << name_b << " for all ray-AABB pairs"
-                  << std::endl;
-    }
-    if (verbose) {
-        std::cout << std::endl;
-    }
-
-    return errors;
-}
-
 template <typename Intersector>
 float profile_gpu(const thrust::device_vector<Ray>& rays,
                   const thrust::device_vector<AABB>& boxes,
@@ -112,8 +71,10 @@ float profile_gpu(const thrust::device_vector<Ray>& rays,
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
+    const int num_blocks = min((rays.size() + 127) / 128, (size_t)48);
+
     cudaEventRecord(start);
-    intersect_kernel<<<48, 128>>>(
+    intersect_kernel<<<num_blocks, 128>>>(
         thrust::raw_pointer_cast(rays.data()),
         thrust::raw_pointer_cast(boxes.data()),
         thrust::raw_pointer_cast(hits.data()),
@@ -135,9 +96,24 @@ float profile_cpu(const thrust::host_vector<Ray>& rays,
                   thrust::host_vector<int>& hits,
                   const Intersector intersector)
 {
-    clock_t t = clock();
-    intersect(rays, boxes, hits, intersector);
-    float elapsed = ((double) (clock() - t)) / CLOCKS_PER_SEC;
+    // We could do something like
+    //   #ifdef _OPENMP
+    //   float t = omp_get_wtime()
+    //   #else
+    //   struct timespec start;
+    //   ...
+    //   #endif
+    // But this keeps the timing method consistent regardless of OpenMP support.
+    struct timespec start;
+    struct timespec end;
+    clock_gettime(CLOCK_MONOTONIC, &start);
 
-    return (float)(1000 * t); // convert to ms.
+    intersect(rays, boxes, hits, intersector);
+
+    clock_gettime(CLOCK_MONOTONIC, &end);
+    // Elapsed time in ms to match cudaEventElapsedTime().
+    float elapsed = 1e3 * (end.tv_sec - start.tv_sec)
+                      + 1e-6 * (end.tv_nsec - start.tv_nsec);
+
+    return elapsed;
 }

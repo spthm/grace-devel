@@ -5,10 +5,13 @@ include ../Makefile.common
 OBJS = AABB_intersect.o \
 AABB.o \
 ray.o \
+compare.o \
 aila_laine_karras.o \
 eisemann.o \
 plucker.o \
 williams.o
+
+NVCCDEPS += profile.cuh intersectors.cuh
 
 NVCCFLAGS += -O3
 
