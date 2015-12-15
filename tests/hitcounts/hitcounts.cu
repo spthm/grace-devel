@@ -4,125 +4,78 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include <cmath>
-#include <fstream>
+#include "nodes.h"
+#include "ray.h"
+#include "kernels/gen_rays.cuh"
+#include "kernels/trace_sph.cuh"
+#include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/sort.h>
 
-#include "nodes.h"
-#include "ray.h"
-#include "utils.cuh"
-#include "kernels/build_sph.cuh"
-#include "kernels/gen_rays.cuh"
-#include "kernels/trace_sph.cuh"
+#include <cstdlib>
+#include <iostream>
+#include <fstream>
+#include <string>
 
-int main(int argc, char* argv[]) {
-
-    std::ofstream outfile;
-
-    outfile.setf(std::ios::fixed, std::ios::floatfield);
-    outfile.precision(9);
-
-    /* Initialize run parameters. */
-
-    unsigned int N = 1000000;
-    unsigned int N_rays = 3125*32; // = 100,000
-    unsigned int max_per_leaf = 32;
+int main(int argc, char* argv[])
+{
+    size_t N = 1000000;
+    size_t N_rays = 3125 * 32; // = 100,000
+    int max_per_leaf = 32;
     bool save_data = false;
 
     if (argc > 1) {
-        N = (unsigned int) std::strtol(argv[1], NULL, 10);
+        N = (size_t)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_rays = 32 * (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_rays = 32 * (size_t)std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
-        max_per_leaf = (unsigned int) std::strtol(argv[3], NULL, 10);
+        max_per_leaf = (int)std::strtol(argv[3], NULL, 10);
     }
     if (argc > 4) {
-        if (strcmp("save", argv[4]) == 0)
-            save_data = true;
+        save_data = (std::string(argv[4]) == "save") ? true : false;
     }
 
-    std::cout << "Generating " << N << " random points and " << N_rays
-              << " random rays, with up to " << max_per_leaf << " point(s) per"
-              << std::endl
-              << "leaf." << std::endl;
-    if (save_data)
-        std::cout << "Will save all data." << std::endl;
-    std::cout << std::endl;
+    if (save_data) std::cout << "Will save all data." << std::endl;
+    std::cout << "Number of rays:         " << N_rays << std::endl
+              << "Number of particles:    " << N << std::endl
+              << "Max particles per leaf: " << max_per_leaf << std::endl
+              << std::endl;
 
-{ // Device code.
-
-    /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
-
-    thrust::device_vector<float4> d_spheres_xyzr(N);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
-                      d_spheres_xyzr.begin(),
-                      grace::random_float4_functor(0.1f) );
-
-
-    /* Build the tree from the random data. */
-
-    float3 top = make_float3(1.f, 1.f, 1.f);
-    float3 bot = make_float3(0.f, 0.f, 0.f);
-
-    // Allocate permanent data before temporaries.
-    grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N + 1);
-
-    grace::morton_keys30_sort_sph(d_spheres_xyzr);
-    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
-    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
-
-    // Deltas no longer needed.
-    d_deltas.clear(); d_deltas.shrink_to_fit();
-
-
-    /* Generate the rays (emitted from box centre and of length 2). */
-
-    float ox, oy, oz, length;
-    ox = oy = oz = 0.5f;
-    length = 2;
-
+    thrust::device_vector<float4> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
-
-
-    /* Trace for per-ray hit counts. */
-
     thrust::device_vector<int> d_hit_counts(N_rays);
-    grace::trace_hitcounts_sph(d_rays, d_spheres_xyzr, d_tree, d_hit_counts);
+    grace::Tree d_tree(N, max_per_leaf);
 
+    // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
+    float4 high = make_float4(1.f, 1.f, 1.f, 0.1f);
+    float4 low = make_float4(0.f, 0.f, 0.f, 0.f);
+    // Rays emitted from box centre and of length 2.
+    float4 O = make_float4(.5f, .5f, .5f, 2.f);
 
-    /* Output simple hit-count statistics. */
+    random_spheres_tree(low, high, N, d_spheres, d_tree);
+    grace::uniform_random_rays(d_rays, O.x, O.y, O.z, O.w);
+    grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
 
-    unsigned int max_hits = thrust::reduce(d_hit_counts.begin(),
-                                           d_hit_counts.end(),
-                                           0, thrust::maximum<unsigned int>());
-    unsigned int min_hits = thrust::reduce(d_hit_counts.begin(),
-                                           d_hit_counts.end(),
-                                           N, thrust::minimum<unsigned int>());
-    unsigned int total_hits = thrust::reduce(d_hit_counts.begin(),
-                                             d_hit_counts.end(),
-                                             0, thrust::plus<unsigned int>());
-
-    std::cout << "Number of rays:       " << N_rays << std::endl;
-    std::cout << "Number of particles:  " << N << std::endl;
-    std::cout << "Total hits:           " << total_hits << std::endl;
-    std::cout << "Max hits:             " << max_hits << std::endl;
-    std::cout << "Min hits:             " << min_hits << std::endl;
-
-
-    /* Save sphere, ray and hit count data. */
+    int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,
+                                  thrust::maximum<int>());
+    int min_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), N,
+                                  thrust::minimum<int>());
+    int total_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,
+                                    thrust::plus<int>());
+    std::cout << "Total hits: " << total_hits << std::endl
+              << "Max hits:   " << max_hits << std::endl
+              << "Min hits:   " << min_hits << std::endl;
 
     if (save_data)
     {
-        thrust::host_vector<float4> h_spheres_xyzr = d_spheres_xyzr;
+        std::ofstream outfile;
+        outfile.setf(std::ios::fixed, std::ios::floatfield);
+        outfile.precision(8);
+
+        thrust::host_vector<float4> h_spheres_xyzr = d_spheres;
         thrust::host_vector<grace::Ray> h_rays = d_rays;
 
         outfile.open("indata/spheredata.txt");
@@ -150,9 +103,5 @@ int main(int argc, char* argv[]) {
         outfile.close();
     }
 
-} // End device code.
-
-    // Exit cleanly to ensure a full profiler trace.
-    cudaDeviceReset();
-    return 0;
+    return EXIT_SUCCESS;
 }

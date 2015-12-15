@@ -16,7 +16,8 @@ int compare_hitcounts(const thrust::host_vector<int>& hits_a,
     size_t errors = 0;
     for (size_t i = 0; i < hits_a.size(); ++i)
     {
-        if (hits_a[i] != hits_b[i]) {
+        if (hits_a[i] != hits_b[i])
+        {
             ++errors;
 
             if (!verbose) {

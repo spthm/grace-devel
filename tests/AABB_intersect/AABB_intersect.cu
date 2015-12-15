@@ -22,7 +22,7 @@ int main(int argc, char* argv[])
     if (argc > 2)
         N_AABBs = (unsigned int)std::strtol(argv[2], NULL, 10);
     if (argc > 3)
-        verbose = std::string(argv[3]) == "true" ? true : false;
+        verbose = (std::string(argv[3]) == "true") ? true : false;
 
     std::cout << "Testing " << N_rays << " rays against "
               << N_AABBs << " AABBs." << std::endl

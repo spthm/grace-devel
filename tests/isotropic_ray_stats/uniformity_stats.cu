@@ -27,9 +27,7 @@ int main(int argc, char* argv[]) {
         N_rays = 32 * (size_t)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        if (std::string(argv[2]) == "save") {
-            save_out = true;
-        }
+      save_out = (std::string(argv[2]) == "save") ? true : false;
     }
 
     std::cout << "For details of these tests, see isotropic_stats.md"

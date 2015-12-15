@@ -1,151 +1,114 @@
-#include <cstring>
-#include <sstream>
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
 
+#include "nodes.h"
+#include "device/build_functors.cuh"
+#include "kernels/albvh.cuh"
+#include "kernels/build_sph.cuh"
+#include "helper/cuda_timer.cuh"
+#include "helper/random.cuh"
+
+#include <thrust/iterator/counting_iterator.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "nodes.h"
-#include "utils.cuh"
-#include "device/build_functors.cuh"
-#include "kernels/albvh.cuh"
-#include "kernels/build_sph.cuh"
+#include <cstdlib>
+#include <iomanip>
+#include <iostream>
 
-int main(int argc, char* argv[]) {
-
+int main(int argc, char* argv[])
+{
     cudaDeviceProp deviceProp;
-
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(3);
 
-
-    /* Initialize run parameters. */
-
+    int max_per_leaf = 32;
+    int N_iter = 100;
+    int log2N_min = 20;
+    int log2N_max = 23; // Should run on most devices.
     unsigned int device_ID = 0;
-    unsigned int max_per_leaf = 32;
-    unsigned int N_iter = 100;
-    unsigned int start = 20;
-    unsigned int end = 23;
-    unsigned int seed_factor = 1u;
 
     if (argc > 1) {
-        device_ID = (unsigned int) std::strtol(argv[1], NULL, 10);
+        max_per_leaf = (int)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
+        N_iter = (int)std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
-        N_iter = (unsigned int) std::strtol(argv[3], NULL, 10);
+        log2N_max = (int)std::strtol(argv[3], NULL, 10);
+        log2N_max = min(28, max(5, log2N_max));
+        if (log2N_max < log2N_min)
+            log2N_min = log2N_max;
     }
     if (argc > 4) {
-        end = (unsigned int) std::strtol(argv[4], NULL, 10);
-        end = min(28, max(5, end));
-        if (end < start)
-            start = end;
+        log2N_max = (int)std::strtol(argv[4], NULL, 10);
+        // Keep levels in [5, 28].
+        log2N_max = min(28, max(5, log2N_max));
+        log2N_min = (int)std::strtol(argv[3], NULL, 10);
+        log2N_min = min(28, max(5, log2N_min));
     }
     if (argc > 5) {
-        end = (unsigned int) std::strtol(argv[5], NULL, 10);
-        // Keep levels in [5, 28].
-        end = min(28, max(5, end));
-        start = (unsigned int) std::strtol(argv[4], NULL, 10);
-        start = min(28, max(5, start));
+        device_ID = (unsigned int)std::strtol(argv[5], NULL, 10);
     }
-    if (argc > 6) {
-        seed_factor = (unsigned int) std::strtol(argv[6], NULL, 10);
-    }
-
-
-    /* Output run parameters and device properties to console. */
 
     cudaGetDeviceProperties(&deviceProp, device_ID);
     cudaSetDevice(device_ID);
 
-    std::cout << "Device " << device_ID
-                    << ":                   " << deviceProp.name << std::endl;
-    std::cout << "MORTON_THREADS_PER_BLOCK:   "
-              << grace::MORTON_THREADS_PER_BLOCK << std::endl;
-    std::cout << "BUILD_THREADS_PER_BLOCK:    "
-              << grace::BUILD_THREADS_PER_BLOCK << std::endl;
-    std::cout << "AABB_THREADS_PER_BLOCK:     "
-              << grace::AABB_THREADS_PER_BLOCK << std::endl;
-    std::cout << "MAX_BLOCKS:                 "
-              << grace::MAX_BLOCKS << std::endl;
-    std::cout << "Starting log2(N_points):    " << start << std::endl;
-    std::cout << "Finishing log2(N_points):   " << end << std::endl;
-    std::cout << "Max points per leaf:        " << max_per_leaf << std::endl;
-    std::cout << "Iterations per tree:        " << N_iter << std::endl;
-    std::cout << "Random points' seed factor: " << seed_factor << std::endl;
-    std::cout << std::endl << std::endl;
+    std::cout << "Max particles per leaf:   " << max_per_leaf << std::endl
+              << "Iterations per tree:      " << N_iter << std::endl
+              << "Starting log2(N_points):  " << log2N_min << std::endl
+              << "Finishing log2(N_points): " << log2N_max << std::endl
+              << "Running on device:        " << device_ID
+                                            << " (" << deviceProp.name << ")"
+                                            << std::endl
+              << std::endl;
 
+{   // Device code. To ensure that cudaDeviceReset() does not fail, all Thrust
+    // vectors should be allocated within this block. (The closing } brace
+    // causes them to be freed before we call cudaDeviceReset(); if device
+    // vectors are not freed, cudaDeviceReset() will throw.)
 
-    /* Profile the tree by generating random data, and further profile the AABB
-     * construction with an additional fully-balanced tree built on the host.
-     */
-
-    for (int power = start; power <= end; power++)
+    for (int p = log2N_min; p <= log2N_max; ++p)
     {
-        unsigned int N = 1u << power;
+        size_t N = 1u << p;
 
+        float4 high = make_float4(1.0f, 1.0f, 1.0f, 0.1f);
+        float4 low = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
 
-        /* Generate N random points as floats in [0,1) and radii in [0,0.1). */
-
-        thrust::host_vector<float4> h_spheres_xyzr(N);
+        thrust::host_vector<float4> h_spheres(N);
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(N),
-                          h_spheres_xyzr.begin(),
-                          grace::random_float4_functor(0.1f, seed_factor));
+                          h_spheres.begin(),
+                          random_real4_functor<float4>(low, high));
 
-        // Set the tree-build AABB (contains all sphere centres).
-        float3 top = make_float3(1., 1., 1.);
-        float3 bot = make_float3(0., 0., 0.);
+        CUDATimer timer;
+        double t_all, t_morton, t_sort, t_deltas, t_leaves, t_leaf_deltas, t_nodes;
+        for (int i = -1; i < N_iter; ++i)
+        {
+            timer.start();
 
-
-        /* Build the tree from and time it for N_iter iterations. */
-
-        cudaEvent_t part_start, part_stop;
-        cudaEvent_t tot_start, tot_stop;
-        float part_elapsed;
-        double all_tot, morton_tot, sort_tot;
-        double deltas_tot, leaves_tot, leaf_deltas_tot, nodes_tot;
-        cudaEventCreate(&part_start);
-        cudaEventCreate(&part_stop);
-        cudaEventCreate(&tot_start);
-        cudaEventCreate(&tot_stop);
-
-        for (int i=0; i<N_iter; i++) {
-            cudaEventRecord(tot_start);
-
-            thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
+            thrust::device_vector<float4> d_spheres = h_spheres;
             thrust::device_vector<grace::uinteger32> d_keys(N);
-
-            cudaEventRecord(part_start);
-            grace::morton_keys_sph(d_spheres_xyzr, top, bot, d_keys);
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            morton_tot += part_elapsed;
-
-            cudaEventRecord(part_start);
-            thrust::sort_by_key(d_keys.begin(), d_keys.end(),
-                                d_spheres_xyzr.begin());
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            sort_tot += part_elapsed;
-
-            thrust::device_vector<float> d_deltas(N+1);
-
-            cudaEventRecord(part_start);
-            grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            deltas_tot += part_elapsed;
-
+            thrust::device_vector<float> d_deltas(N + 1);
             grace::Tree d_tree(N, max_per_leaf);
-            thrust::device_vector<int2> d_tmp_nodes(N-1);
+            thrust::device_vector<int2> d_tmp_nodes(N - 1);
+            // Don't include above memory allocations in t_morton.
+            timer.split();
 
-            cudaEventRecord(part_start);
+            grace::morton_keys_sph(d_spheres, high, low, d_keys);
+            if (i >= 0) t_morton += timer.split();
+
+            thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                                d_spheres.begin());
+            if (i >= 0) t_sort += timer.split();
+
+            grace::euclidean_deltas_sph(d_spheres, d_deltas);
+            if (i >= 0) t_deltas += timer.split();
+
             grace::ALBVH::build_leaves(
                 d_tmp_nodes,
                 d_tree.leaves,
@@ -153,78 +116,51 @@ int main(int argc, char* argv[]) {
                 thrust::raw_pointer_cast(d_deltas.data()),
                 thrust::less<float>());
             grace::ALBVH::remove_empty_leaves(d_tree);
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            leaves_tot += part_elapsed;
+            if (i >= 0) t_leaves += timer.split();
 
             const size_t n_new_leaves = d_tree.leaves.size();
             thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
+            // Don't include above memory allocation in t_leaf_deltas.
+            timer.split();
 
-            cudaEventRecord(part_start);
             grace::ALBVH::copy_leaf_deltas(
                 d_tree.leaves,
                 thrust::raw_pointer_cast(d_deltas.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()));
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            leaf_deltas_tot += part_elapsed;
+            if (i >= 0) t_leaf_deltas += timer.split();
 
-            cudaEventRecord(part_start);
             grace::ALBVH::build_nodes(
                 d_tree,
-                thrust::raw_pointer_cast(d_spheres_xyzr.data()),
+                thrust::raw_pointer_cast(d_spheres.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()),
                 thrust::less<float>(),
                 grace::AABB_sphere());
-            cudaEventRecord(part_stop);
-            cudaEventSynchronize(part_stop);
-            cudaEventElapsedTime(&part_elapsed, part_start, part_stop);
-            nodes_tot += part_elapsed;
+            if (i >= 0) t_nodes += timer.split();
 
             // Record the total time spent in the loop.
-            cudaEventRecord(tot_stop);
-            cudaEventSynchronize(tot_stop);
-            cudaEventElapsedTime(&part_elapsed, tot_start, tot_stop);
-            all_tot += part_elapsed;
+            if (i >= 0) t_all += timer.elapsed();
         }
 
-        std::cout << "Will generate a tree from " << N << " random points."
+        std::cout << "Number of particles:               " << N << std::endl
+                  << "Time for Morton key generation:    " << std::setw(7)
+                  << t_morton/N_iter << " ms." << std::endl
+                  << "Time for sort-by-key:              " << std::setw(7)
+                  << t_sort/N_iter << " ms." << std::endl
+                  << "Time for computing deltas:         " << std::setw(7)
+                  << t_deltas/N_iter << " ms." << std::endl
+                  << "Time for building leaves:          " << std::setw(7)
+                  << t_leaves/N_iter << " ms." << std::endl
+                  << "Time for computing leaf deltas:    " << std::setw(7)
+                  << t_leaf_deltas/N_iter << " ms." << std::endl
+                  << "Time for building nodes:           " << std::setw(7)
+                  << t_nodes/N_iter << " ms." << std::endl
+                  << "Time for total (inc. memory ops):  " << std::setw(7)
+                  << t_all/N_iter << " ms." << std::endl
                   << std::endl;
-        std::cout << std::endl;
-
-        std::cout << "Time for Morton key generation:    ";
-        std::cout.width(7);
-        std::cout << morton_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for sort-by-key:              ";
-        std::cout.width(7);
-        std::cout << sort_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for computing deltas:         ";
-        std::cout.width(7);
-        std::cout << deltas_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for building leaves:          ";
-        std::cout.width(7);
-        std::cout << leaves_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for computing leaf deltas:    ";
-        std::cout.width(7);
-        std::cout << leaf_deltas_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for building nodes:           ";
-        std::cout.width(7);
-        std::cout << nodes_tot/N_iter << " ms." << std::endl;
-
-        std::cout << "Time for total (inc. memory ops):  ";
-        std::cout.width(7);
-        std::cout << all_tot/N_iter << " ms." << std::endl;
-        std::cout << std::endl << std::endl;
     }
+} // End device code.
 
-    // Exit cleanly to ensure a full profiler trace.
+    // Exit cleanly to ensure full profiler (nvprof/nvvp) trace.
     cudaDeviceReset();
-    return 0;
+    return EXIT_SUCCESS;
 }

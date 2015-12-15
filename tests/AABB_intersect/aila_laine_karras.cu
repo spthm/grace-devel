@@ -2,6 +2,8 @@
 
 #include "device/intrinsics.cuh"
 
+#include <math.h>
+
 __device__ int aila_laine_karras(const Ray& ray, const AABB& box)
 {
     using namespace grace; // for maxf_vminf etc.

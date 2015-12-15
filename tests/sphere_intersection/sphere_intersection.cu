@@ -4,22 +4,22 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include <cstdlib>
-#include <iostream>
-#include <gmpxx.h>
-
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-#include <thrust/sort.h>
-#include <thrust/transform.h>
-
 #include "intersection.cuh"
 
 #include "ray.h"
-#include "utils.cuh"
 #include "device/bits.cuh"
 #include "device/intersect.cuh"
 #include "kernels/gen_rays.cuh"
+#include "helper/random.cuh"
+
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/transform.h>
+
+#include <cstdlib>
+#include <iostream>
+#include <gmpxx.h>
 
 struct expand_functor
 {
@@ -38,66 +38,55 @@ struct expand_functor
     }
 };
 
-int main(int argc, char* argv[]) {
-
-    /* Initialize run parameters. */
-
+int main(int argc, char* argv[])
+{
     size_t N = 2000000;
     size_t N_rays = 32 * 1000; // = 32,000
+    // Error tolerance as fractional error in the square of the normalized
+    // impact parameter, measured against reference value from GMP library.
     double tolerance = 1E-8;
+    // Defaults to true because it may take hours to re-run in the case of a
+    // failure.
+    bool verbose = true;
 
     if (argc > 1) {
-        N = (size_t) std::strtol(argv[1], NULL, 10);
+        N = (size_t)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        N_rays = 32 * (size_t) std::strtol(argv[2], NULL, 10);
+        N_rays = 32 * (size_t)std::strtol(argv[2], NULL, 10);
     }
     if (argc > 3) {
         tolerance = std::atof(argv[3]);
     }
+    if (argc > 4) {
+        verbose = (std::string(argv[4]) == "true") ? true : false;
+    }
 
-    std::cout << "Testing " << N << " random points and " << N_rays
-              << " random rays." << std::endl;
-    std::cout << "Error tolerance of " << tolerance
-              << " in square of normalized impact parameter." << std::endl;
-    std::cout << std::endl;
+    std::cout << "Number of particles: " << N << std::endl
+              << "Number of rays:      " << N_rays << std::endl
+              << "Error tolerance:     " << tolerance << std::endl
+              << std::endl;
 
 
-    /* Generate random points. */
-
-    float min_radius = 80.f;
-    float max_radius = 400.f;
+    float4 low = make_float4(-1E4f, -1E4f, -1E4f, 80.f);
+    float4 high = make_float4(1E4f, 1E4f, 1E4f, 400.f);
     thrust::host_vector<float4> h_spheres(N);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       h_spheres.begin(),
-                      grace::random_float4_functor(-1E4f, 1E4f,
-                                                   min_radius, max_radius));
+                      random_real4_functor<float4>(low, high));
 
     // Reference intersection function does not discriminate around start
     // (and end) points of the ray, but GRACE's sphere intersection function
-    // does. To avoid this inconsistency, ensure no particles contain the ray's
-    // origin.
-    thrust::transform(h_spheres.begin(), h_spheres.end(),
-                      h_spheres.begin(),
-                      expand_functor(max_radius));
-
-
-    /* Generate the rays (emitted from box centre and of length 2E4). */
-
-    float ox, oy, oz, length;
-    ox = oy = oz = 0.0f;
-    length = 2E4f;
+    // does. To avoid this inconsistency, we ensure no particles contain the
+    // rays' common origin (0, 0).
+    thrust::transform(h_spheres.begin(), h_spheres.end(), h_spheres.begin(),
+                      expand_functor(high.w));
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, ox, oy, oz, length);
+    grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 2E4f);
     thrust::host_vector<grace::Ray> h_rays = d_rays;
     d_rays.clear(); d_rays.shrink_to_fit();
-
-    /* Loop through all rays and test for interestion with all particles
-     * directly. When reference intersection test does not agree with GRACE's
-     * intersection test (subject to tolerance), print as a failure.
-     */
 
     size_t failures = 0;
     #pragma omp parallel for
@@ -117,21 +106,27 @@ int main(int argc, char* argv[]) {
                 double ref_b2 = impact_parameter2(ray, sphere);
                 double R2 = static_cast<double>(sphere.w) * sphere.w;
 
-                if (std::abs(1.0 - ref_b2 / R2) > tolerance) {
+                if (std::abs(1.0 - ref_b2 / R2) > tolerance)
+                {
                     ++failures;
+
+                    if (!verbose) {
+                      continue;
+                    }
+
                     std::cout << "FAILED intersection for ray " << ri
-                              << " and sphere " << si << ":" << std::endl;
-                    std::cout << "  Reference result: "
-                              << (ref_hit ? "TRUE" : "FALSE") << std::endl;
-                    std::cout << "  GRACE result:     "
-                              << (hit ? "TRUE" : "FALSE") << std::endl;
-                    std::cout << "  Reference squared impact parameter: "
-                              << ref_b2 << std::endl;
-                    std::cout << "  GRACE squared impact parameter:     "
-                              << b2 << std::endl;
-                    std::cout << "  Sphere squared radius:              "
-                              << R2 << std::endl;
-                    std::cout << std::endl;
+                              << " and sphere " << si << ":" << std::endl
+                              << "  Reference result: "
+                              << (ref_hit ? "TRUE" : "FALSE") << std::endl
+                              << "  GRACE result:     "
+                              << (hit ? "TRUE" : "FALSE") << std::endl
+                              << "  Reference squared impact parameter: "
+                              << ref_b2 << std::endl
+                              << "  GRACE squared impact parameter:     "
+                              << b2 << std::endl
+                              << "  Sphere squared radius:              "
+                              << R2 << std::endl
+                              << std::endl;
                 }
             }
         }
@@ -139,16 +134,14 @@ int main(int argc, char* argv[]) {
 
     if (failures == 0)
     {
-        std::cout << "PASSED"
-                  << std::endl
-                  << "All GRACE ray-sphere intersection tests agree with "
-                  << "reference implementation." << std::endl;
+        std::cout << "PASSED" << std::endl;
     }
     else
     {
-        std::cout << "FAILED for " << failures << " intersection(s)."
-                  << std::endl;
+        std::cout << "FAILED" << std::endl
+                  << failures << " intersection" << (failures > 1 ? "s " : " ")
+                  << "tests did not agree with host results" << std::endl;
     }
 
-    return EXIT_SUCCESS;
+    return failures == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

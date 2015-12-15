@@ -1,88 +1,104 @@
+#include <cstdlib>
 #include <iostream>
 #include <bitset>
 #include <iomanip>
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-#include <thrust/random.h>
+#include <thrust/iterator/counting_iterator.h>
+#include <thrust/transform.h>
 
 #include "device/morton.cuh"
 #include "kernels/build_sph.cuh"
 
-int main(int argc, char* argv[]) {
+#include "helper/random.cuh"
+
+int main(int argc, char* argv[])
+{
+    typedef grace::uinteger32 KeyT;
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+    std::cout.precision(6);
+    std::cout.fill('0');
 
     /*************************************************************/
-    /* Compare morton_key_kernel to a CPU loop, for 30-bit keys. */
+    /* Compare morton_key_kernel to a CPU loop, for 63-bit keys. */
     /*************************************************************/
 
-    typedef grace::uinteger32 Key;
+    size_t N = 10000;
+    bool verbose = false;
+    if (argc > 1) {
+        N = (size_t)std::strtol(argv[1], NULL, 10);
+    }
+    if (argc > 2) {
+        verbose = (std::string(argv[2]) == "true") ? true : false;
+    }
 
-    /* Generate random floats in [0,1) on CPU and find the keys. */
-
-    unsigned int N = 10000;
-    if (argc > 1)
-        N = (unsigned int) std::strtol(argv[1], NULL, 10);
-
+    // Generate N random points with single precision co-ordinates in [0, 1).
     thrust::host_vector<float4> h_points(N);
-    thrust::host_vector<grace::uinteger32> h_keys(N);
-
-    thrust::transform(thrust::counting_iterator<unsigned int>(0),
-                      thrust::counting_iterator<unsigned int>(N),
+    thrust::transform(thrust::counting_iterator<size_t>(0),
+                      thrust::counting_iterator<size_t>(N),
                       h_points.begin(),
-                      grace::random_float4_functor());
+                      random_real4_functor<float4>());
+    thrust::device_vector<float4> d_points = h_points;
 
-    for (int i=0; i<N; i++) {
-        Key ux = (Key) (h_points[i].x * 1023);
-        Key uy = (Key) (h_points[i].y * 1023);
-        Key uz = (Key) (h_points[i].z * 1023);
+    // Compute keys on host.
+    thrust::host_vector<KeyT> h_keys(N);
+    const KeyT MAX_KEY = 1023u;
+    for (size_t i = 0; i < N; ++i) {
+        KeyT ux = static_cast<KeyT>(h_points[i].x * MAX_KEY);
+        KeyT uy = static_cast<KeyT>(h_points[i].y * MAX_KEY);
+        KeyT uz = static_cast<KeyT>(h_points[i].z * MAX_KEY);
 
         h_keys[i] = grace::morton::morton_key(ux, uy, uz);
     }
 
-
-    /* Calculate morton keys on GPU from the same floats. */
-
-    // Generating morton keys requires AABB information.
+    // Compute keys on device.
     float3 top = make_float3(1., 1., 1.);
     float3 bot = make_float3(0., 0., 0.);
-
-    thrust::device_vector<float4> d_points = h_points;
-    thrust::device_vector<Key> d_keys(N);
-
+    thrust::device_vector<KeyT> d_keys(N);
     grace::morton_keys_sph(d_points, top, bot, d_keys);
 
+    // Check device keys against host keys.
+    int errors = 0;
+    thrust::host_vector<KeyT> h_d_keys = d_keys;
+    for (size_t i = 0; i < N; ++i)
+    {
+        KeyT h_key = h_keys[i];
+        KeyT d_key = h_d_keys[i];
+        if (h_key != d_key)
+        {
+            ++errors;
 
-    /* Verify results are the same. */
+            if (!verbose) {
+                continue;
+            }
 
-    unsigned int err_count = 0;
-    thrust::host_vector<Key> h_d_keys = d_keys;
-    for (unsigned int i=0; i<N; i++) {
-        if (h_keys[i] != h_d_keys[i]) {
-            std::cout << "Device morton key != host morton key!" << std::endl;
-            std::cout << "Host floats: x: " << std::fixed << std::setw(6)
-                      << std::setprecision(6) << std::setfill('0')
-                      << h_points[i].x << std::endl;
-            std::cout << "             y: " << std::fixed << std::setw(6)
-                      << std::setprecision(6) << std::setfill('0')
-                      << h_points[i].y << std::endl;
-            std::cout << "             z: " << std::fixed << std::setw(6)
-                      << std::setprecision(6) << std::setfill('0')
-                      << h_points[i].z << std::endl;
-            std::cout << "Host key:   " << (std::bitset<32>) h_keys[i]
-                      << std::endl;
-            std::cout << "Device key: " << (std::bitset<32>) h_d_keys[i]
-                      << std::endl;
-            err_count++;
+            std::cout << "host morton key != device morton key" << std::endl
+                      << "(x, y, z): " << " ("
+                      << std::setw(8) << h_points[i].x << ", "
+                      << std::setw(8) << h_points[i].y << ", "
+                      << std::setw(8) << h_points[i].z << ")" << std::endl
+                      << "Host key:   " << std::bitset<64>(h_key)
+                      << std::endl
+                      << "Device key: " << std::bitset<64>(d_key)
+                      << std::endl
+                      << "Diff bits:  " << std::bitset<64>(h_key ^ d_key)
+                      << std::endl << std::endl;
         }
     }
 
-    if (err_count == 0) {
-        std::cout << "All " << N << " GPU and host keys match!" << std::endl;
-    }
-    else{
-        std::cout << err_count << " keys were incorrect, out of " << N
-                  << std::endl;
+    if (errors != 0 && verbose) {
+        std::cout << std::endl;
     }
 
-    return 0;
+    if (errors == 0) {
+        std::cout << "PASSED" << std::endl;
+    }
+    else {
+        std::cout << errors << " of " << N << " keys did not match host"
+                  << std::endl
+                  << "FAILED" << std::endl;
+    }
+
+    return errors == 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }

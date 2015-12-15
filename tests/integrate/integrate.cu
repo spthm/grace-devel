@@ -1,154 +1,102 @@
-#include <cmath>
-#include <sstream>
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
+
+#include "nodes.h"
+#include "ray.h"
+#include "kernels/trace_sph.cuh"
+#include "helper/tree.cuh"
+#include "helper/rays.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-#include "nodes.h"
-#include "ray.h"
-#include "utils.cuh"
-#include "device/morton.cuh"
-#include "kernels/build_sph.cuh"
-#include "kernels/trace_sph.cuh"
+#include <cmath>
+#include <cstdlib>
+#include <iostream>
 
-int main(int argc, char* argv[]) {
+void two_spheres(const float4 mins, const float4 maxs,
+                 thrust::device_vector<float4>& d_spheres)
+{
+    thrust::host_vector<float4> h_spheres(2);
 
-    /* Initialize run parameters. */
+    float radius = (mins.w + maxs.w) / 2.0;
+    float3 mid;
+    mid.x = (mins.x + maxs.x) / 2.0;
+    mid.y = (mins.y + maxs.y) / 2.0;
+    mid.z = (mins.z + maxs.z) / 2.0;
 
-    unsigned int N_rays = 512*512;
+    h_spheres[0].x = (mins.x + mid.x) / 2.0;
+    h_spheres[0].y = (mins.y + mid.y) / 2.0;
+    h_spheres[0].z = (mins.z + mid.z) / 2.0;
+    h_spheres[0].w = radius;
+
+    h_spheres[1].x = (maxs.x + mid.x) / 2.0;
+    h_spheres[1].y = (maxs.y + mid.y) / 2.0;
+    h_spheres[1].z = (maxs.z + mid.z) / 2.0;
+    h_spheres[1].w = radius;
+
+    d_spheres = h_spheres;
+}
+
+int main(int argc, char* argv[])
+{
+    // Tree does not work for N < 2 objects.
+    const size_t N = 2;
     // DO NOT CHANGE. There are only two spheres.
-    const int max_per_leaf = 1;
+    const int maxs_per_leaf = 1;
 
-    if (argc > 1)
-        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
+    size_t N_rays = 512 * 512;
+    float tolerance = 5e-4;
 
-    unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
-
-
-    /* Generate two spheres (tree does not work for N < 2 objects). */
-
-    unsigned int N = 2;
-    thrust::host_vector<float4> h_spheres_xyzr(N);
-
-    float radius = 0.2f;
-    h_spheres_xyzr[0].x = -0.5f;
-    h_spheres_xyzr[0].y = 0.0f;
-    h_spheres_xyzr[0].z = 0.0f;
-    h_spheres_xyzr[0].w = radius;
-
-    h_spheres_xyzr[1].x = +0.5f;
-    h_spheres_xyzr[1].y = 0.0f;
-    h_spheres_xyzr[1].z = 0.0f;
-    h_spheres_xyzr[1].w = radius;
-
-    // Set both (pseudo)masses equal to .5, so the total sum is one.
-    thrust::host_vector<float> h_pmasses(N);
-    for (int i=0; i<N; i++) {
-        h_pmasses[i] = 0.5f;
+    if (argc > 1) {
+        N_rays = 32 * (size_t)std::strtol(argv[1], NULL, 10);
+    }
+    if (argc > 2) {
+        tolerance = (float)std::strtod(argv[2], NULL);
     }
 
-    std::cout << "Will trace " << N_rays << " rays through " << N
-              << " particles." << std::endl;
-    std::cout << std::endl;
+    size_t N_per_side = floor(pow(N_rays, 0.500001));
+    // N_rays must be a multiple of 32.
+    N_per_side = ((N_per_side + 32 - 1) / 32) * 32;
+    N_rays = N_per_side * N_per_side;
 
-{ // Device code.
-
-
-    /* Build the tree. */
-
-    thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-
-    float max_x, max_y, max_z, min_x, min_y, min_z;
-    max_x = max_y = max_z = 1.f;
-    min_x = min_y = min_z = -1.f;
-    float3 top = make_float3(max_x, max_y, max_z);
-    float3 bot = make_float3(min_x, min_y, min_z);
+    std::cout << "Number of particles:       " << N << std::endl
+              << "Number of rays:            " << N_rays << std::endl
+              << "Intergral error tolerance: " << tolerance << std::endl
+              << std::endl;
 
     // Allocate permanent vectors before temporaries.
-    grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N + 1);
+    thrust::device_vector<float4> d_spheres(N);
+    thrust::device_vector<grace::Ray> d_rays(N_rays);
+    thrust::device_vector<float> d_integrals(N_rays);
+    grace::Tree d_tree(N, maxs_per_leaf);
 
-    grace::morton_keys30_sort_sph(d_spheres_xyzr, top, bot);
-    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
-    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
+    float area_per_ray;
+    float4 mins, maxs;
+    maxs.x = maxs.y = maxs.z = 1.f;
+    mins.x = mins.y = mins.z = -1.f;
+    maxs.w = mins.w = 0.2f; // Sphere radii
 
-    // Deltas no longer needed.
-    d_deltas.clear(); d_deltas.shrink_to_fit();
-
-    /* Generate the rays, all emitted in +z direction from a box side. */
-
-    // Rays emitted from box side (x, y, min_z - max_r) and of length
-    // (max_z + max_r) - (min_z - max_r).  Since we want to fully include all
-    // particles, the ray (ox, oy) limits are set by:
-    // [min_x - max_r, max_x + max_r] and [min_y - max_r, max_y + max_r].
-    // Rays at the edges are likely to have no hits!
-    float max_r = radius;
-    float span_x = 2*max_r + max_x - min_x;
-    float span_y = 2*max_r + max_y - min_y;
-    float span_z = 2*max_r + max_z - min_z;
-    float spacer_x = span_x / (N_rays_side-1);
-    float spacer_y = span_y / (N_rays_side-1);
-
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<unsigned int> h_keys(N_rays);
-
-    int i, j;
-    float ox, oy;
-    for (i=0, ox=min_x-max_r; i<N_rays_side; ox+=spacer_x, i++)
-    {
-        for (j=0, oy=min_y-max_r; j<N_rays_side; oy+=spacer_y, j++)
-        {
-            h_rays[i*N_rays_side +j].dx = 0.0f;
-            h_rays[i*N_rays_side +j].dy = 0.0f;
-            h_rays[i*N_rays_side +j].dz = 1.0f;
-
-            h_rays[i*N_rays_side +j].ox = ox;
-            h_rays[i*N_rays_side +j].oy = oy;
-            h_rays[i*N_rays_side +j].oz = min_z - max_r;
-
-            h_rays[i*N_rays_side +j].length = span_z;
-
-            // Since all rays are PPP, base key on origin instead.
-            // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j]
-                = grace::morton::morton_key((ox-min_x)/span_x,
-                                            (oy-min_y)/span_y,
-                                            0.0f);
-        }
-    }
-
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
-
-
-    /* Trace and accumulate pseudomass through the two spheres. */
-
-    thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<float> d_traced_integrals(N_rays);
-
-    grace::trace_cumulative_sph(d_rays,
-                                d_spheres_xyzr,
-                                d_tree,
-                                d_traced_integrals);
+    two_spheres(mins, maxs, d_spheres);
+    build_tree(d_spheres, mins, maxs, d_tree);
+    orthogonal_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
+    grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
 
     // ~ Integrate over x and y.
-    float integrated_total = thrust::reduce(d_traced_integrals.begin(),
-                                            d_traced_integrals.end(),
-                                            0.0f,
-                                            thrust::plus<float>());
+    float integrated_sum = thrust::reduce(d_integrals.begin(),
+                                          d_integrals.end(),
+                                          0.0f, thrust::plus<float>());
     // Multiply by the pixel area to complete the x-y integration.
-    integrated_total *= (spacer_x * spacer_y);
-    // Correct integration implies integrated_total == N_particles.
-    integrated_total /= static_cast<float>(N);
+    integrated_sum *= area_per_ray;
+    // Correct integration implies integrated_sum == N_particles.
+    integrated_sum /= static_cast<float>(N);
 
-    std::cout << "Number of rays:             " << N_rays << std::endl;
-    std::cout << "Number of particles:        " << N << std::endl;
-    std::cout << "Normalized volume integral: " << integrated_total
+    std::cout << "Normalized volume integral: " << integrated_sum
               << std::endl;
-    std::cout << std::endl;
-} // End device code.
 
-    // Exit cleanly to ensure full profiler trace.
-    cudaDeviceReset();
-    return 0;
+    return abs(1.0 - integrated_sum) < tolerance ? EXIT_SUCCESS : EXIT_FAILURE;
 }

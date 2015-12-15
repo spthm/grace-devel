@@ -1,256 +1,116 @@
-#include <cmath>
-#include <sstream>
-#include <fstream>
+#include "nodes.h"
+#include "ray.h"
+#include "util/extrema.cuh"
+#include "kernels/build_sph.cuh"
+#include "kernels/trace_sph.cuh"
+#include "helper/images.hpp"
+#include "helper/tree.cuh"
+#include "helper/rays.cuh"
+#include "helper/read_gadget.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <thrust/reduce.h>
 #include <thrust/sort.h>
 
-#include "nodes.h"
-#include "ray.h"
-#include "utils.cuh"
-#include "device/morton.cuh"
-#include "kernels/build_sph.cuh"
-#include "kernels/sort.cuh"
-#include "kernels/trace_sph.cuh"
+#include <cmath>
+#include <iostream>
 
-int main(int argc, char* argv[]) {
-
-    /* Initialize run parameters. */
-
-    unsigned int N_rays = 512*512;
-    unsigned int max_per_leaf = 32;
+int main(int argc, char* argv[])
+{
+    size_t N_rays = 512 * 512;
+    int max_per_leaf = 32;
+    std::string fname = "../data/gadget/0128/Data_025";
 
     if (argc > 1)
-        N_rays = 32 * (unsigned int) std::strtol(argv[1], NULL, 10);
+        N_rays = 32 * (size_t)std::strtol(argv[1], NULL, 10);
     if (argc > 2)
-        max_per_leaf = (unsigned int) std::strtol(argv[2], NULL, 10);
+        max_per_leaf = (int)std::strtol(argv[2], NULL, 10);
+    if (argc > 3) {
+        fname = std::string(argv[3]);
+    }
 
-    unsigned int N_rays_side = floor(pow(N_rays, 0.500001));
+    size_t N_per_side = std::floor(std::pow(N_rays, 0.500001));
+    // N_rays must be a multiple of 32.
+    N_per_side = ((N_per_side + 32 - 1) / 32) * 32;
+    N_rays = N_per_side * N_per_side;
 
+    std::cout << "Gadget file:             " << fname << std::endl;
+    // Vector is resized in read_gadget().
+    thrust::device_vector<float4> d_spheres;
+    read_gadget(fname, d_spheres);
+    const size_t N = d_spheres.size();
 
-    /* Read in Gadget file. */
-
-    std::ifstream file;
-    std::string fname = "Data_025";
-    std::cout << "Reading in data from Gadget file " << fname << "..."
+    std::cout << "Number of particles:     " << N << std::endl
+              << "Number of rays:          " << N_rays << std::endl
+              << "Number of rays per side: " << N_per_side << std::endl
+              << "Max particles per leaf:  " << max_per_leaf << std::endl
               << std::endl;
 
-    // Arrays are resized in read_gadget_gas().
-    thrust::host_vector<float4> h_spheres_xyzr(1);
-    thrust::host_vector<unsigned int> h_gadget_IDs(1);
-    thrust::host_vector<float> h_masses(1);
-    thrust::host_vector<float> h_rho(1);
 
-    file.open(fname.c_str(), std::ios::binary);
-    grace::read_gadget_gas(file, h_spheres_xyzr,
-                                 h_gadget_IDs,
-                                 h_masses,
-                                 h_rho);
-    file.close();
-
-    size_t N = h_spheres_xyzr.size();
-    std::cout << "Will trace " << N_rays << " rays through " << N
-              << " particles, with up to " << max_per_leaf << " particle(s)"
-              << std::endl
-              << "per leaf..." << std::endl;
-    std::cout << std::endl;
-
-    // Gadget IDs, masses and densities unused.
-    h_gadget_IDs.clear(); h_gadget_IDs.shrink_to_fit();
-    h_masses.clear(); h_masses.shrink_to_fit();
-    h_rho.clear(); h_rho.shrink_to_fit();
-
-
-{ // Device code.
-
-
-    /* Build the tree. */
-
-    thrust::device_vector<float4> d_spheres_xyzr = h_spheres_xyzr;
-
-    // Calculate limits here explicity since we need them later (i.e. do not
-    // get morton_keys() to do it for us).
-    float min_x, max_x;
-    grace::min_max_x(d_spheres_xyzr, &min_x, &max_x);
-
-    float min_y, max_y;
-    grace::min_max_y(d_spheres_xyzr, &min_y, &max_y);
-
-    float min_z, max_z;
-    grace::min_max_z(d_spheres_xyzr, &min_z, &max_z);
-
-    float min_r, max_r;
-    grace::min_max_w(d_spheres_xyzr, &min_r, &max_r);
-
-    float3 top = make_float3(max_x, max_y, max_z);
-    float3 bot = make_float3(min_x, min_y, min_z);
-
+    thrust::device_vector<grace::Ray> d_rays(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
-    thrust::device_vector<float> d_deltas(N + 1);
 
-    grace::morton_keys30_sort_sph(d_spheres_xyzr, top, bot);
-    grace::euclidean_deltas_sph(d_spheres_xyzr, d_deltas);
-    grace::ALBVH_sph(d_spheres_xyzr, d_deltas, d_tree);
+    // build_tree can compute the x/y/z limits for us, but we compute them
+    // explicitly as we also need them for othogonal_rays_z.
+    float4 mins, maxs;
+    grace::min_vec4(d_spheres, &mins);
+    grace::max_vec4(d_spheres, &maxs);
+    // orthogonal_rays_z() takes the maximum and minimum particle radii into
+    // account - useful when integrating over the entire SPH field, but not
+    // useful when creating images, as it leads to rays with zero integral-
+    // values, and hence requires introduces a huge dynamic range.
+    mins.w = maxs.w = 0;
 
-    // Deltas no longer needed.
-    d_deltas.clear(); d_deltas.shrink_to_fit();
+    build_tree(d_spheres, mins, maxs, d_tree);
+    orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 
-
-    /* Generate the rays, all emitted in +z direction from a box side. */
-
-    // Rays emitted from box side (x, y, min_z - max_r) and of length
-    // (max_z + max_r) - (min_z - max_r).  For simplicity, the ray (ox, oy)
-    // limits are determined only by the particle min(x, y) / max(x, y) limits
-    // and smoothing lengths are ignored.  This ensures that rays at the edge
-    // will hit something!
-    float span_x = max_x - min_x;
-    float span_y = max_y - min_y;
-    float span_z = 2*max_r + max_z - min_z;
-    float spacer_x = span_x / (N_rays_side-1);
-    float spacer_y = span_y / (N_rays_side-1);
-
-    thrust::host_vector<grace::Ray> h_rays(N_rays);
-    thrust::host_vector<unsigned int> h_keys(N_rays);
-
-    int i, j;
-    float ox, oy;
-    for (i=0, ox=min_x; i<N_rays_side; ox+=spacer_x, i++)
-    {
-        for (j=0, oy=min_y; j<N_rays_side; oy+=spacer_y, j++)
-        {
-            h_rays[i*N_rays_side + j].dx = 0.0f;
-            h_rays[i*N_rays_side + j].dy = 0.0f;
-            h_rays[i*N_rays_side + j].dz = 1.0f;
-
-            h_rays[i*N_rays_side + j].ox = ox;
-            h_rays[i*N_rays_side + j].oy = oy;
-            h_rays[i*N_rays_side + j].oz = min_z - max_r;
-
-            h_rays[i*N_rays_side + j].length = span_z;
-
-            // Since all rays are PPP, base key on origin instead.
-            // Floats must be in (0, 1) for morton_key().
-            h_keys[i*N_rays_side + j]
-                = grace::morton::morton_key((ox-min_x)/span_x,
-                                            (oy-min_y)/span_y,
-                                            0.0f);
-        }
-    }
-
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_rays.begin());
-
-
-    /* Trace and accumulate density through the similation data. */
-
-    thrust::device_vector<grace::Ray> d_rays = h_rays;
-    thrust::device_vector<float> d_traced_integrals(N_rays);
-
+    thrust::device_vector<float> d_integrals(N_rays);
     grace::trace_cumulative_sph(d_rays,
-                                d_spheres_xyzr,
+                                d_spheres,
                                 d_tree,
-                                d_traced_integrals);
+                                d_integrals);
 
-    float max_integral = thrust::reduce(d_traced_integrals.begin(),
-                                        d_traced_integrals.end(),
+    float max_integral = thrust::reduce(d_integrals.begin(),
+                                        d_integrals.end(),
                                         0.0f, thrust::maximum<float>());
-    float min_integral = thrust::reduce(d_traced_integrals.begin(),
-                                        d_traced_integrals.end(),
+    float min_integral = thrust::reduce(d_integrals.begin(),
+                                        d_integrals.end(),
                                         1E20, thrust::minimum<float>());
-    float mean_integral = thrust::reduce(d_traced_integrals.begin(),
-                                         d_traced_integrals.end(),
+    float mean_integral = thrust::reduce(d_integrals.begin(),
+                                         d_integrals.end(),
                                          0.0f, thrust::plus<float>());
-    mean_integral /= static_cast<float>(d_traced_integrals.size());
+    mean_integral /= static_cast<float>(d_integrals.size());
 
-    std::cout << "Number of rays:         " << N_rays << std::endl;
-    std::cout << "Number of particles:    " << N << std::endl;
-    std::cout << "Mean output             " << mean_integral << std::endl;
-    std::cout << "Max output:             " << max_integral << std::endl;
-    std::cout << "Min output:             " << min_integral << std::endl;
-    std::cout << std::endl;
+    std::cout << "Mean output " << mean_integral << std::endl
+              << "Max output: " << max_integral << std::endl
+              << "Min output: " << min_integral << std::endl
+              << std::endl;
 
-
-    /* Generate an image of the projected density of the simulation volume. */
-
-    // Sort ray hit and ray data such that increasing the index moves us along
-    // x first, then y.
-    thrust::host_vector<float> h_pos_keys(N_rays);
-    for (int i=0; i<N_rays; i++) {
-        h_pos_keys[i] = h_rays[i].ox + (2*span_x)*h_rays[i].oy;
+    // Sort ray data such that increasing the index moves us along x first,
+    // then y.
+    thrust::host_vector<grace::Ray> h_rays = d_rays;
+    thrust::host_vector<float> h_keys(N_rays);
+    thrust::host_vector<float> h_integrals = d_integrals;
+    for (size_t i = 0; i < N_rays; ++i) {
+        h_keys[i] = h_rays[i].ox + (2 * (maxs.x - mins.x)) * h_rays[i].oy;
     }
-    thrust::host_vector<float> h_traced_integrals = d_traced_integrals;
-    thrust::host_vector<int> h_indices(N_rays);
-
-    grace::sort_by_key(h_pos_keys, h_traced_integrals, h_rays);
+    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_integrals.begin());
 
     // Increase the dynamic range.
-    for (int i=0; i<N_rays; i++) {
-        h_traced_integrals[i] = log10(h_traced_integrals[i]);
+    // Avoid zero so that max_integral - min_integral is a useful range
+    // (required for the make_bitmap function).
+    min_integral = std::max(1E-20f, min_integral);
+    for (size_t i = 0; i < N_rays; ++i) {
+        h_integrals[i] = std::log10(h_integrals[i]);
     }
-    min_integral = log10(min_integral);
-    max_integral = log10(max_integral);
+    min_integral = std::log10(min_integral);
+    max_integral = std::log10(max_integral);
 
-    // See http://stackoverflow.com/questions/2654480
-    FILE *f;
-    unsigned char *img = NULL;
-    int w = N_rays_side;
-    int h = N_rays_side;
-    int filesize = 54 + 3*w*h;
+    make_bitmap(thrust::raw_pointer_cast(h_integrals.data()),
+                N_per_side, N_per_side,
+                min_integral, max_integral,
+                "density.bmp");
 
-    img = (unsigned char *)malloc(3*w*h);
-    memset(img,0,sizeof(img));
-
-    int r, g, b, x, y;
-    float r_max = 150.0f;
-    float g_max = 210.0f;
-    float b_max = 255.0f;
-    for(int i=0; i<w; i++)
-    {
-        for(int j=0; j<h; j++)
-    {
-        x = i; y = (h-1) - j;
-        r = (int)( (h_traced_integrals[i+w*j] - min_integral) * r_max/(max_integral - min_integral) );
-        g = (int)( (h_traced_integrals[i+w*j] - min_integral) * g_max/(max_integral - min_integral) );
-        b = (int)( (h_traced_integrals[i+w*j] - min_integral) * b_max/(max_integral - min_integral) );
-        if (r > r_max) r = r_max;
-        if (g > g_max) g = g_max;
-        if (b > b_max) b = b_max;
-        img[(x+y*w)*3+2] = (unsigned char)(r);
-        img[(x+y*w)*3+1] = (unsigned char)(g);
-        img[(x+y*w)*3+0] = (unsigned char)(b);
-    }
-    }
-
-    unsigned char bmpfileheader[14] = {'B','M', 0,0,0,0, 0,0, 0,0, 54,0,0,0};
-    unsigned char bmpinfoheader[40] = {40,0,0,0, 0,0,0,0, 0,0,0,0, 1,0, 24,0};
-    unsigned char bmppad[3] = {0,0,0};
-
-    bmpfileheader[2] = (unsigned char)(filesize);
-    bmpfileheader[3] = (unsigned char)(filesize >> 8);
-    bmpfileheader[4] = (unsigned char)(filesize >> 16);
-    bmpfileheader[5] = (unsigned char)(filesize >> 24);
-
-    bmpinfoheader[4] =  (unsigned char)(w);
-    bmpinfoheader[5] =  (unsigned char)(w >> 8);
-    bmpinfoheader[6] =  (unsigned char)(w >> 16);
-    bmpinfoheader[7] =  (unsigned char)(w >> 24);
-    bmpinfoheader[8] =  (unsigned char)(h);
-    bmpinfoheader[9] =  (unsigned char)(h >> 8);
-    bmpinfoheader[10] = (unsigned char)(h >> 16);
-    bmpinfoheader[11] = (unsigned char)(h >> 24);
-
-    f = fopen("density.bmp", "wb");
-    fwrite(bmpfileheader, 1, 14, f);
-    fwrite(bmpinfoheader, 1, 40, f);
-    for(i=0; i<h; i++)
-    {
-        fwrite(img+(w*(h-i-1)*3),3,w,f);
-        fwrite(bmppad,1,(4-(w*3)%4)%4,f);
-    }
-    fclose(f);
-} // End device code.
-
-    // Exit cleanly to ensure a full profiler trace.
-    cudaDeviceReset();
-    return 0;
+    return EXIT_SUCCESS;
 }

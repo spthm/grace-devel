@@ -114,6 +114,5 @@ float profile_cpu(const thrust::host_vector<Ray>& rays,
     // Elapsed time in ms to match cudaEventElapsedTime().
     float elapsed = 1e3 * (end.tv_sec - start.tv_sec)
                       + 1e-6 * (end.tv_nsec - start.tv_nsec);
-
     return elapsed;
 }
