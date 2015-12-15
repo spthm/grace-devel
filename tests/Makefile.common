@@ -31,6 +31,7 @@ NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.h))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.h))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.hpp))
 NVCCDEPS += $(MGPU_OBJS)
 
 NVCCINCLUDES = -I$(GRACE_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
