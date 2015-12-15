@@ -12,6 +12,12 @@
     #define GRACE_HOST __host__ inline
     #define GRACE_DEVICE __device__ inline
     #define GRACE_HOST_DEVICE __host__ __device__ inline
+#else
+    // Only GRACE_HOST makes sense as an identifier when compiling non-CUDA
+    // source files. The others should (and will) cause the compiler to balk.
+    #define GRACE_HOST inline
+    #define GRACE_DEVICE __device__ inline
+    #define GRACE_HOST_DEVICE __host__ __device__ inline
 #endif
 
 namespace grace {
