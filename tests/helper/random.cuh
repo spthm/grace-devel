@@ -1,3 +1,5 @@
+#pragma once
+
 #include "util/meta.h"
 
 #include <thrust/random.h>
