@@ -109,13 +109,22 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
 } // unnamed namespace
 
 /* This is a const iterator. Texture references are not writeable!
+ *
  * The iterator may only be dereferenced (*iter, iter[] and iter->) in device
  * code.
- * The iterator's bind() and unbind() methods may only be called in host code.
- * UID should be >= 0. UIDs < 0 are reserved for GRACE internals.
  *
+ * The iterator's bind() and unbind() methods may only be called in host code.
  * Calling unbind() is not required. bind() automatically unbinds a texture
  * reference first, if necessary.
+ *
+ * For multiple TexRefIters which point to different data to be used
+ * concurrently, each one _must_ have a different <T, UID> pair for its template
+ * arguments.
+ * That is, if two TexRefIters have the same <T, UID> pair, they will both point
+ * to the _same_ data!
+ * The UID template argument should be >= 0. UIDs < 0 are reserved for GRACE
+ * internals.
+ *
  *
  * MULTI-GPU USAGE
  * ----------------
@@ -125,12 +134,13 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
  * However, this does not apply to the TexRefIter itself - its member variables
  * are NOT per-device, they are per-instance.
  * So, in general, each device requires its own TexRefIter instance, but these
- * instances may have identical <T, UID> values.
+ * instances may have identical <T, UID> values, subject to the constaints
+ * above.
  *
  * One thread per GPU:
  *     Each thread should have its own, private TexRefIter instance.
  *     Each thread's TexRefIter may use the same type and UID pair.
- *     That is, though it may run correctly, the below is UNSAFE:
+ *     That is, though it may run correctly, the below is _not safe_:
  *
  *         TexRefIter<float, 0> texref;
  *         omp_set_num_threads(cudaGetDeviceCount());
@@ -149,7 +159,7 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
  *     texture use (passing to a kernel), it is likely that threads will
  *     interfere with one another's textures.
  *
- *     The below is SAFE (TexRefIter private to thread):
+ *     The below is _safe_ (TexRefIter private to thread):
  *
  *         omp_set_num_threads(cudaGetDeviceCount());
  *         #pragma omp parallel
@@ -169,8 +179,9 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
  *     have the same type and UID.
  *     The texture-binding API call is blocking, but as CUDA generates a
  *     separate texture reference for each device at runtime, no blocking will
- *     occur *between* devices.
- *     That is, the below is SAFE and asynchronous:
+ *     occur between devices.
+ *     That is, the below is _safe_ and asynchronous (in that the for loop may
+ *     complete before any of the kernels):
  *
  *         for (int d = 0; d < cudaGetDeviceCount(); ++d)
  *         {
@@ -190,16 +201,17 @@ typename TypedTexRef<T>:: template UniqueTexRef<UID>::TexRef
  * bound once and passed to each kernel, regardless of that kernel's stream.
  *
  * In the general case, where each stream may access a different array in
- * global memory:
- * CUDA does NOT generate a separate texture reference for each stream.
- * As a result, each stream requires its own TexRefIter with a UNIQUE UID.
+ * global memory, each stream requires a unique <T, UID> pair.
+ * That is, CUDA does _not_ generate a separate texture reference for each
+ * stream.
  * This then implies that the number of streams (or at least the maximum
  * number of streams) be known at compile time, and that a sufficient number of
  * unique TexRefIters be instantiated.
- * E.g. with 2 streams, the below will run asynchronously and correctly:
+ * E.g. with 2 streams, working on arrays of the same type, but different data,
+ * the below will run asynchronously and correctly:
  *
  *     cudaStream streams[2];
- *     // The below TexRefIters refer to DIFFERENT texture references.
+ *     // The below TexRefIters refer to _different_ texture references.
  *     TexRefIter<float, 1> texref_s1; // Instantiate for stream 1.
  *     TexRefIter<float, 2> texref_s2; // Instantiate for stream 2.
  *     texref_s1.bind(d_ptr_s1, ... ); // Bind to stream 1's data.

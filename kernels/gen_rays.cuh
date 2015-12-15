@@ -11,7 +11,6 @@
 #include "../kernel_config.h"
 #include "../ray.h"
 #include "../types.h"
-#include "../utils.cuh"
 
 namespace grace {
 
@@ -304,27 +303,5 @@ GRACE_HOST void uniform_random_rays_single_octant(
                                       seed, octant);
 
 }
-
-// template <typename Float4>
-// GRACE_HOST void square_grid_rays_z(
-//     thrust::device_vector<Ray>& d_rays,
-//     const thrust::device_vector<Float4>& d_spheres,
-//     const unsigned int N_rays_side)
-// {
-//     float min_x, max_x;
-//     min_max_x(d_spheres, &min_x, &max_x);
-
-//     float min_y, max_y;
-//     min_max_y(d_spheres, &min_y, &max_y);
-
-//     float min_z, max_z;
-//     min_max_z(d_spheres, &min_z, &max_z);
-
-//     float min_r, max_r;
-//     min_max_w(d_spheres, &min_r, &max_r);
-
-//     random::gen_grid_rays(thrust::raw_pointer_cast(d_rays.data()),
-//                        N_rays_side);
-// }
 
 } // namespace grace

@@ -8,24 +8,25 @@
 #include "../error.h"
 #include "../kernel_config.h"
 #include "../types.h"
-#include "../utils.cuh"
 #include "../device/aabb.cuh"
 #include "../device/bits.cuh"
 #include "../device/morton.cuh"
+#include "../util/extrema.cuh"
 
 namespace grace {
 
 namespace morton {
 
 //-----------------------------------------------------------------------------
-// CUDA kernels for generating morton keys
+// CUDA kernel for generating morton keys
 //-----------------------------------------------------------------------------
 
-template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+template <typename PrimitiveIter, typename Real3, typename KeyIter,
+          typename AABBFunc>
 __global__ void morton_keys_kernel(
     PrimitiveIter primitives,
     const size_t N_primitives,
-    const float3 norm_scale,
+    const Real3 norm_scale,
     KeyIter keys,
     const AABBFunc AABB)
 {
@@ -54,11 +55,12 @@ __global__ void morton_keys_kernel(
 
 // This functions signature is unlike the morton_key() functions below, which
 // is why it has been moved into the 'internal', morton:: namespace
-template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+template <typename PrimitiveIter, typename Real3, typename KeyIter,
+          typename AABBFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
-    const float3 normalizing_scale,
+    const Real3 normalizing_scale,
     KeyIter d_keys_iter,
     const AABBFunc AABB)
 {
@@ -83,18 +85,21 @@ GRACE_HOST void morton_keys(
 
 // Wrappers to compute morton keys given the AABB containing all primitives.
 // KeyIter's value_type must be an unsigned integer type of at least 32 bits.
-template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+template <typename PrimitiveIter, typename Real3, typename KeyIter,
+          typename AABBFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
-    const float3 AABB_top,
-    const float3 AABB_bot,
+    const Real3 AABB_top,
+    const Real3 AABB_bot,
     KeyIter d_keys_iter,
     const AABBFunc AABB)
 {
     typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
 
-    int span = CHAR_BIT * sizeof(KeyType) > 32 ? ((1u << 21) - 1) : ((1u << 10) - 1);
+    const int MAX_KEY_63 = (1u << 21) - 1;
+    const int MAX_KEY_30 = (1u << 10) - 1;
+    const int span = CHAR_BIT * sizeof(KeyType) > 32 ? MAX_KEY_63 : MAX_KEY_30;
     float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
                                span / (AABB_top.y - AABB_bot.y),
                                span / (AABB_top.z - AABB_bot.z));
@@ -102,11 +107,12 @@ GRACE_HOST void morton_keys(
     morton::morton_keys(d_prims_iter, N_primitives, scale, d_keys_iter, AABB);
 }
 
-template <typename KeyType, typename TPrimitive, typename AABBFunc>
+template <typename TPrimitive, typename Real3, typename KeyType,
+          typename AABBFunc>
 GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
-    const float3 AABB_top,
-    const float3 AABB_bot,
+    const Real3 AABB_top,
+    const Real3 AABB_bot,
     thrust::device_vector<KeyType>& d_keys,
     const AABBFunc AABB)
 {
@@ -141,17 +147,11 @@ GRACE_HOST void morton_keys(
 
     AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr, AABB);
 
-    float min_x, max_x;
-    float min_y, max_y;
-    float min_z, max_z;
-    grace::min_max_x(d_centroids_ptr, N_primitives, &min_x, &max_x);
-    grace::min_max_y(d_centroids_ptr, N_primitives, &min_y, &max_y);
-    grace::min_max_z(d_centroids_ptr, N_primitives, &min_z, &max_z);
+    float3 mins, maxs;
+    min_vec3(d_centroids_ptr, N_primitives, &mins);
+    max_vec3(d_centroids_ptr, N_primitives, &maxs);
 
-    float3 top = make_float3(max_x, max_y, max_z);
-    float3 bot = make_float3(min_x, min_y, min_z);
-
-    morton_keys(d_prims_iter, N_primitives, top, bot, d_keys_iter, AABB);
+    morton_keys(d_prims_iter, N_primitives, maxs, mins, d_keys_iter, AABB);
 }
 
 template <typename TPrimitive, typename KeyType, typename AABBFunc>

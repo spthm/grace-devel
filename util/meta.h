@@ -48,6 +48,48 @@ struct Real4ToRealMapper<double4> {
     typedef double type;
 };
 
+// Usage:  typedef typename RealToReal{2,3,4}Mapper<Real>::type Real{2,3,4}
+// Result: Real == float  -> Real{2,3,4} == float{2,3,4}
+//         Real == double -> Real{2,3,4} == double{2,3,4}
+template <typename>
+struct RealToReal2Mapper;
+
+template <>
+struct RealToReal2Mapper<float> {
+    typedef float2 type;
+};
+
+template <>
+struct RealToReal2Mapper<double> {
+    typedef double2 type;
+};
+
+template <typename>
+struct RealToReal3Mapper;
+
+template <>
+struct RealToReal3Mapper<float> {
+    typedef float3 type;
+};
+
+template <>
+struct RealToReal3Mapper<double> {
+    typedef double3 type;
+};
+
+template <typename>
+struct RealToReal4Mapper;
+
+template <>
+struct RealToReal4Mapper<float> {
+    typedef float4 type;
+};
+
+template <>
+struct RealToReal4Mapper<double> {
+    typedef double4 type;
+};
+
 
 template <typename T, typename U>
 struct are_same

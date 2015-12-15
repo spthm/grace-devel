@@ -3,6 +3,9 @@
 #include "../error.h"
 #include "../types.h"
 
+// CUDA math constants.
+#include <math_constants.h>
+
 namespace grace {
 
 //-----------------------------------------------------------------------------
