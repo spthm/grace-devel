@@ -11,7 +11,7 @@ INTEGRATION_TEST_DIRS = segmented_scan \
 	sphere_intersection \
 	tree_traversal
 
-DUMP_DIRS = project_gadget hitcounts tree
+DUMP_DIRS = project_gadget hitcounts
 
 PROFILE_DIRS = AABB_intersect \
 	profile_project_gadget \
