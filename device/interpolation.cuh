@@ -15,10 +15,14 @@ GRACE_DEVICE Real lerp(Real x, TableIter table, int N_table)
         x = static_cast<TableReal>(N_table - 1);
         x_idx = N_table - 2;
     }
-    Real integral = fma(table[x_idx + 1] - table[x_idx],
-                        static_cast<TableReal>(x - x_idx),
-                        table[x_idx]);
-    return integral;
+
+    TableReal y0 = table[x_idx];
+    TableReal y1 = table[x_idx + 1];
+    TableReal t = static_cast<TableReal>(x) - x_idx;
+
+    // y = (y1 - y0) * t + y0 = t * y1 - t * y0 + y0
+    Real y = fma(t, y1, fma(-t, y0, y0));
+    return y;
 }
 
 } // namespace interp
