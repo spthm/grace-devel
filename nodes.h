@@ -178,6 +178,27 @@ GRACE_HOST_DEVICE void get_right_AABB(int index, const int4* nodes,
     get_right_AABB(index, reinterpret_cast<const float4*>(nodes), bottom, top);
 }
 
+GRACE_HOST_DEVICE void set_inner(int4 node, int index, int4* nodes)
+{
+    nodes[4 * index] = node;
+}
+GRACE_HOST_DEVICE void set_inner(int4 node, int index, float4* nodes)
+{
+    set_inner(node, index, reinterpret_cast<int4*>(nodes));
+}
+
+GRACE_HOST_DEVICE void set_leaf(int4 leaf, int index, int4* leaves)
+{
+    leaves[index] = leaf;
+}
+
+GRACE_HOST_DEVICE void set_node(int4 node, int index, int4* nodes, int4* leaves,
+                                size_t n_nodes)
+{
+    if (is_leaf(index, n_nodes)) set_leaf(node, index - n_nodes, leaves);
+    else                         set_inner(node, index, nodes);
+}
+
 GRACE_HOST_DEVICE void set_left_node(int left_child, int left_leaf,
                                      int index, int4* nodes)
 {

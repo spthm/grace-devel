@@ -609,9 +609,9 @@ __global__ void fill_output_queue(
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
-    while (tid < n_nodes)
+    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
     {
-        int4 node = nodes[4 * tid + 0];
+        int4 node = get_inner(tid, nodes);
 
         // The left/right values are negative IFF they were written in this
         // iteration.  A negative index represents a logical/compacted index.
@@ -619,8 +619,9 @@ __global__ void fill_output_queue(
         bool right_written = (node.w < 0);
 
         // Undo the -ve encoding.
-        int left = -1 * node.z - 1;
-        int right = -1 * node.w - 1;
+        node = decode_node(node);
+        int left = node.z;
+        int right = node.w;
 
         if (left_written != right_written) {
             // Only one child was written; it must be placed in the output queue
@@ -635,14 +636,12 @@ __global__ void fill_output_queue(
             // is such that it would have caused the thread to end its tree
             // climb.
             // Again, the location we write to must be unique.
-            int size = right - left + 1;
+            int size = node_size(node);
             if (size > max_per_node) {
                 GRACE_ASSERT(new_base_indices[left] == -1);
                 new_base_indices[left] = tid;
             }
         }
-
-        tid += blockDim.x * gridDim.x;
     }
 }
 
@@ -654,16 +653,17 @@ __global__ void fix_node_ranges(
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
-    while (tid < n_nodes)
+    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
     {
-        int4 node = nodes[4 * tid + 0];
+        int4 node = get_inner(tid, nodes);
 
         // We only need to fix nodes whose ranges were written, *in full*, this
         // iteration.
         if (node.z < 0 && node.w < 0)
         {
-            int left = node.z < 0 ? (-1 * node.z - 1) : node.z;
-            int right = node.w < 0 ? (-1 * node.w - 1) : node.w;
+            node = decode_node(node);
+            int left = node.z;
+            int right = node.w;
 
             // All base nodes have correct range indices.  If we know our
             // left/right-most base node, we can therefore find our
@@ -671,10 +671,16 @@ __global__ void fix_node_ranges(
             // Note that for leaves, the left and right ranges are simply the
             // (corrected) index of the leaf.
             int index = old_base_indices[left];
-            left = index < n_nodes ? nodes[4 * index + 0].z : index - n_nodes;
+            if (is_leaf(index, n_nodes))
+                left = index - n_nodes;
+            else
+                left = get_inner(index, nodes).z;
 
             index = old_base_indices[right];
-            right = index < n_nodes ? nodes[4 * index + 0].w : index - n_nodes;
+            if (is_leaf(index, n_nodes))
+                right = index - n_nodes;
+            else
+                right = get_inner(index, nodes).w;
 
             // Only the left-most leaf can have index 0.
             GRACE_ASSERT(left >= 0);
@@ -685,10 +691,8 @@ __global__ void fix_node_ranges(
 
             node.z = left;
             node.w = right;
-            nodes[4 * tid + 0] = node;
+            set_inner(node, tid, nodes);
         }
-
-        tid += blockDim.x * gridDim.x;
     }
 }
 
