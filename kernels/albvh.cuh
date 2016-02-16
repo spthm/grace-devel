@@ -3,7 +3,6 @@
 // CUDA math constants.
 #include <math_constants.h>
 
-#include <climits>
 #include <stdexcept>
 #include <string>
 
@@ -234,7 +233,7 @@ __global__ void build_leaves_kernel(
 
         __syncthreads();
         for (int i = threadIdx.x;
-             i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf;
+             i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf - 1;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
             SMEM[i] = 0;
@@ -244,7 +243,7 @@ __global__ void build_leaves_kernel(
         // [low, high) leaf indices covered by this block, including the
         // max_per_leaf buffer.
         int low = bid * grace::BUILD_THREADS_PER_BLOCK;
-        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_leaf,
+        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_leaf - 1,
                        (int)n_leaves);
         // So flags can be accessed directly with a node index.
         int* flags = SMEM - low;
@@ -266,8 +265,8 @@ __global__ void build_leaves_kernel(
                 GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
                 GRACE_ASSERT(node.y < n_leaves);
 
-                if (node_size(node) > max_per_leaf) {
-                    // Both children will become wide leaves.
+                if (node_size(node) >= max_per_leaf) {
+                    // This node, or both its children, will become wide leaves.
                     break;
                 }
 
@@ -312,39 +311,40 @@ __global__ void write_leaves_kernel(
         int left = node.x;
         int right = node.y;
 
+        // node.x or node.y may be zero if they were unwritten, resulting in
+        // incorrect ranges. However, we are guaranteed to have reached all
+        // nodes spanning <= max_per_leaf primitives. Any node.x == 0 which is
+        // incorrect will therefore result in left_size > max_per_leaf.
+        // Any node.y == 0 is certain to have been unwritten.
+        // Hence left_size and right_size are correct when <= max_per_leaf.
         int2 lchild = make_int2(left, tid);
         int2 rchild = make_int2(tid + 1, right);
-
-        // If left or right are 0, size may be incorrect.
-        int size = node_size(node);
-
-        // left == 0 may have been written as node.x = 0, or node.x may be
-        // unwritten.
-        // right == 0 means node.y was unwritten, and the right child is
-        // therefore not a leaf, so its size is set accordingly.
         int left_size = node_size(lchild);
-        int right_size = (right > 0 ? node_size(rchild) : INT_MAX);
+        int right_size = (right > 0 ? node_size(rchild) : max_per_leaf + 1);
+        int size = left_size + right_size;
 
-        // These are both guarranteed to be correct:
-        // If left_size was computed incorrectly, then the true value of
-        // node.x is not zero, and thus node.x was unwritten.  This requires
-        // that the left child not be a leaf, and hence the node index (tid)
-        // must be > max_per_leaf, resulting in left_is_leaf = false.
-        //
-        // right_is_leaf follows from the correctness of right_size.
+        // From the above, these are guaranteed correct.
         bool left_is_leaf = (left_size <= max_per_leaf);
         bool right_is_leaf = (right_size <= max_per_leaf);
-
-        bool write_check =
-            (left_is_leaf != right_is_leaf) ? true : (size > max_per_leaf);
+        bool single_child = (left_is_leaf != right_is_leaf);
 
         int4 leaf;
-        if (left_is_leaf && write_check) {
+        if (single_child) {
+            leaf.x    = left_is_leaf ? lchild.x  : rchild.x;
+            leaf.y    = left_is_leaf ? left_size : right_size;
+            int index = left_is_leaf ? left      : right;
+            big_leaves[index] = leaf;
+        }
+        else if (size == max_per_leaf) {
+            leaf.x = left;
+            leaf.y = max_per_leaf;
+            big_leaves[left] = leaf;
+        }
+        else if (size > max_per_leaf && left_is_leaf && right_is_leaf) {
             leaf.x = lchild.x;
             leaf.y = left_size;
             big_leaves[left] = leaf;
-        }
-        if (right_is_leaf && write_check) {
+
             leaf.x = rchild.x;
             leaf.y = right_size;
             big_leaves[right] = leaf;
@@ -391,7 +391,7 @@ __global__ void build_nodes_slice_kernel(
 
     int* sm_flags = SMEM;
     volatile int2* sm_nodes
-        = (int2*)&sm_flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
+        = (int2*)&sm_flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node - 1];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
@@ -403,7 +403,7 @@ __global__ void build_nodes_slice_kernel(
 
         __syncthreads();
         for (int i = threadIdx.x;
-             i < grace::BUILD_THREADS_PER_BLOCK + max_per_node;
+             i < grace::BUILD_THREADS_PER_BLOCK + max_per_node - 1;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
             sm_flags[i] = 0;
@@ -415,7 +415,7 @@ __global__ void build_nodes_slice_kernel(
         // The base-node indices for this block cover the range [low, high),
         // including the max_per_node buffer.
         int low = bid * grace::BUILD_THREADS_PER_BLOCK;
-        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_node,
+        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_node - 1,
                        (int)n_base_nodes);
         // So g_nodes and flags can be accessed directly with a (logical) node
         // index.
@@ -438,7 +438,7 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(g_cur_index < n_nodes + n_leaves);
 
             int4 node = get_node(g_cur_index, nodes, leaves, n_nodes);
-            // g_node left- and right-most leaf node incides.
+            // g_node left- and right-most leaf node indices.
             int2 g_node = make_int2(node.z, node.w);
             // node contains left- and right-most base node indices.
             node.z = node.w = cur_index;
@@ -546,17 +546,14 @@ __global__ void build_nodes_slice_kernel(
                 g_parent_index = node_parent(g_node, deltas, delta_comp);
                 parent_index = logical_parent(node, g_node, g_parent_index);
 
-                // Even if this is true, the following compacted/logical size
-                // test can be false.
+                // Even if this is true, the following size test can be false.
                 if (node_size(g_node) == n_leaves) {
                     *root_index = g_cur_index;
                 }
 
-                // Check our compacted/logical size, and exit the loop if we are
-                // large enough to become a base layer in the next iteration.
-                if (node_size(node) > max_per_node) {
-                    // Both children of the current node must be leaves.  Stop
-                    // travelling up the tree and continue with the outer loop.
+                // Exit the loop if we are large enough to become a base node
+                // for the next iteration.
+                if (node_size(node) >= max_per_node) {
                     break;
                 }
 
@@ -625,22 +622,15 @@ __global__ void fill_output_queue(
 
         if (left_written != right_written) {
             // Only one child was written; it must be placed in the output queue
-            // at a *unique* location.
+            // at a unique location.
             int index = left_written ? left : right;
+            int base_index = left_written ? node.x : node.y;
             GRACE_ASSERT(new_base_indices[index] == -1);
-            new_base_indices[index] = left_written ? node.x : node.y;
+            new_base_indices[index] = base_index;
         }
-        else if (left_written) {
-            // Both were written, so the current node must be added to the
-            // output queue IFF it is sufficiently large; that is, if its size
-            // is such that it would have caused the thread to end its tree
-            // climb.
-            // Again, the location we write to must be unique.
-            int size = node_size(node);
-            if (size > max_per_node) {
-                GRACE_ASSERT(new_base_indices[left] == -1);
-                new_base_indices[left] = tid;
-            }
+        else if (left_written && node_size(node) >= max_per_node) {
+            GRACE_ASSERT(new_base_indices[left] == -1);
+            new_base_indices[left] = tid;
         }
     }
 }
@@ -737,7 +727,7 @@ GRACE_HOST void build_leaves(
     int blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
                              / grace::BUILD_THREADS_PER_BLOCK));
-    int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
+    int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf - 1);
 
     build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
