@@ -25,8 +25,8 @@ namespace grace {
 namespace ALBVH {
 
 // Compute the union of the two AABBs packed into a node (as three float4s).
-GRACE_DEVICE void AABB_union(const float4 AABB1, const float4 AABB2,
-                        const float4 AABB3, float3 *bottom, float3 *top)
+GRACE_DEVICE void AABB_union(float4 AABB1, float4 AABB2, float4 AABB3,
+                             float3 *bottom, float3 *top)
 {
     bottom->x = min(AABB1.x, AABB2.x);
     top->x    = max(AABB1.y, AABB2.y);
@@ -39,9 +39,8 @@ GRACE_DEVICE void AABB_union(const float4 AABB1, const float4 AABB2,
 }
 
 // Compute the union of the two AABBs packed into a node (as three float4s).
-GRACE_DEVICE void AABB_union(const float4 AABB1, const float4 AABB2,
-                        const float4 AABB3,
-                        float2 *AABBx, float2 *AABBy, float2 *AABBz)
+GRACE_DEVICE void AABB_union(float4 AABB1, float4 AABB2, float4 AABB3,
+                             float2 *AABBx, float2 *AABBy, float2 *AABBz)
 {
     AABBx->x = min(AABB1.x, AABB2.x);
     AABBx->y = max(AABB1.y, AABB2.y);
@@ -54,9 +53,9 @@ GRACE_DEVICE void AABB_union(const float4 AABB1, const float4 AABB2,
 }
 
 // Compute the union of two unpacked AABBs.
-GRACE_DEVICE void AABB_union(const float3 bottom1, const float3 top1,
-                        const float3 bottom2, const float3 top2,
-                        float3* bottom, float3* top)
+GRACE_DEVICE void AABB_union(float3 bottom1, float3 top1,
+                             float3 bottom2, float3 top2,
+                             float3* bottom, float3* top)
 {
     bottom->x = min(bottom1.x, bottom2.x);
     top->x    = max(top1.x, top2.x);
@@ -68,42 +67,48 @@ GRACE_DEVICE void AABB_union(const float3 bottom1, const float3 top1,
     top->z    = max(top1.z, top2.z);
 }
 
-GRACE_DEVICE bool is_left_child(int4 node, int parent_index) {
-    return node.w == parent_index;
+GRACE_DEVICE int2 decode_node(int2 node) {
+    int l = node.x;
+    int r = node.y;
+    return make_int2(-1 * l - 1, -1 * r - 1);
+}
+
+GRACE_DEVICE int4 decode_node(int4 node) {
+    int2 dec = decode_node(make_int2(node.z, node.w));
+    return make_int4(node.x, node.y, dec.x, dec.y);
+}
+
+GRACE_DEVICE int2 encode_node(int2 node) {
+    int l = node.x;
+    int r = node.y;
+    return make_int2(-1 * (l + 1), -1 * (r + 1));
+}
+
+GRACE_DEVICE int4 encode_node(int4 node) {
+    int2 enc = encode_node(make_int2(node.z, node.w));
+    return make_int4(node.x, node.y, enc.x, enc.y);
 }
 
 GRACE_DEVICE bool is_left_child(int2 node, int parent_index) {
     return node.y == parent_index;
 }
 
-// Find the parent index of a node.
-// node contains the left- and right-most primitives it spans.
-// deltas is an array of per-primitive delta values.
-template <typename DeltaIter, typename DeltaComp>
-GRACE_DEVICE int node_parent(const int4 node, DeltaIter deltas,
-                             const DeltaComp comp)
+GRACE_DEVICE bool is_left_child(int4 node, int parent_index) {
+    return node.w == parent_index;
+}
+
+// Return the parent index in terms of the base nodes, given the actual parent
+// index and the base nodes covered by the current node.
+GRACE_DEVICE int logical_parent(int4 node, int2 g_node, int g_parent_index)
 {
-    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
-    DeltaType deltaL = deltas[node.z - 1];
-    DeltaType deltaR = deltas[node.w];
-
-    int parent_index;
-    if (comp(deltaL, deltaR)) {
-        parent_index = node.x - 1;
-    }
-    else {
-        parent_index = node.y;
-    }
-
-    return parent_index;
+    return is_left_child(g_node, g_parent_index) ? node.w : node.z - 1;
 }
 
 // Find the parent index of a node.
 // node contains the left- and right-most primitives it spans.
 // deltas is an array of per-primitive delta values.
 template <typename DeltaIter, typename DeltaComp>
-GRACE_DEVICE int node_parent(const int2 node, DeltaIter deltas,
-                             const DeltaComp comp)
+GRACE_DEVICE int node_parent(int2 node, DeltaIter deltas, DeltaComp comp)
 {
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     DeltaType deltaL = deltas[node.x - 1];
@@ -120,13 +125,43 @@ GRACE_DEVICE int node_parent(const int2 node, DeltaIter deltas,
     return parent_index;
 }
 
+// Find the parent index of a node.
+// node contains the left- and right-most primitives it spans.
+// deltas is an array of per-leaf delta values.
+template <typename DeltaIter, typename DeltaComp>
+GRACE_DEVICE int node_parent(int4 node, DeltaIter deltas, DeltaComp comp)
+{
+    return node_parent(make_int2(node.z, node.w), deltas, comp);
+}
+
 GRACE_DEVICE int node_size(int2 node)
 {
     return node.y - node.x + 1;
 }
 
+GRACE_DEVICE int node_size(int4 node)
+{
+    return node_size(make_int2(node.z, node.w));
+}
+
 GRACE_DEVICE bool out_of_block(int index, int low, int high) {
     return (index < low || index >= high);
+}
+
+// Write hierarchy and AABB data to the left of the parent node.
+GRACE_DEVICE void propagate_left(int4 node, float3 bottom, float3 top,
+                                 int node_index, int parent_index, int4* nodes)
+{
+    set_left_node(node_index, node.z, parent_index, nodes);
+    set_left_AABB(bottom, top, parent_index, nodes);
+}
+
+// Write hierarchy and AABB data to the right of the parent node.
+GRACE_DEVICE void propagate_right(int4 node, float3 bottom, float3 top,
+                                  int node_index, int parent_index, int4* nodes)
+{
+    set_right_node(node_index, node.w, parent_index, nodes);
+    set_right_AABB(bottom, top, parent_index, nodes);
 }
 
 //-----------------------------------------------------------------------------
@@ -185,7 +220,7 @@ __global__ void build_leaves_kernel(
     const int max_per_leaf,
     const DeltaComp delta_comp)
 {
-    extern __shared__ int flags[];
+    extern __shared__ int SMEM[];
 
     const size_t n_leaves = n_nodes + 1;
 
@@ -193,19 +228,16 @@ __global__ void build_leaves_kernel(
     ++deltas;
 
     int bid = blockIdx.x;
-    int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-    // while() and an inner for() to ensure all threads in a block hit the
-    // __syncthreads() and wipe the flags.
-    while (bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves)
+    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves; bid += gridDim.x)
     {
-        // Zero all SMEM flags at start of first loop and at end of subsequent
-        // loops.
+        int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+
         __syncthreads();
         for (int i = threadIdx.x;
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            flags[i] = 0;
+            SMEM[i] = 0;
         }
         __syncthreads();
 
@@ -214,16 +246,18 @@ __global__ void build_leaves_kernel(
         int low = bid * grace::BUILD_THREADS_PER_BLOCK;
         int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_leaf,
                        (int)n_leaves);
+        // So flags can be accessed directly with a node index.
+        int* flags = SMEM - low;
 
         for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
             // First node is a leaf at idx.
             int2 node = make_int2(idx, idx);
             int2* parent_ptr = &node;
-            bool first_arrival = false;
 
+            bool first_arrival;
             // Climb tree.
-            while (!first_arrival)
+            do
             {
                 node = *parent_ptr;
 
@@ -244,9 +278,6 @@ __global__ void build_leaves_kernel(
                     break;
                 }
 
-                GRACE_ASSERT(parent_index - low >= 0);
-                GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
-
                 // Propagate left- or right-most primitive up the tree.
                 if (is_left_child(node, parent_index)) {
                     tmp_nodes[parent_index].x = node.x;
@@ -257,16 +288,14 @@ __global__ void build_leaves_kernel(
 
                 __threadfence_block();
 
-                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-                first_arrival = (flag == 0);
+                unsigned int count = atomicAdd(flags + parent_index, 1);
+                first_arrival = (count == 0);
 
-                GRACE_ASSERT(flag < 2);
-            } // while (!first_arrival)
-        } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_leaf)
-        bid += gridDim.x;
-        tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-    } // while (bid * BUILD_THREADS_PER_BLOCK < n_leaves)
-    return;
+                GRACE_ASSERT(count < 2);
+            } while (!first_arrival);
+
+        } // for idx < high
+    } // for bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves
 }
 
 __global__ void write_leaves_kernel(
@@ -277,24 +306,24 @@ __global__ void write_leaves_kernel(
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (tid < n_nodes)
+    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
     {
-        const int2 node = nodes[tid];
-        const int left = node.x;
-        const int right = node.y;
+        int2 node = nodes[tid];
+        int left = node.x;
+        int right = node.y;
 
-        const int2 lchild = make_int2(left, tid);
-        const int2 rchild = make_int2(tid + 1, right);
+        int2 lchild = make_int2(left, tid);
+        int2 rchild = make_int2(tid + 1, right);
 
         // If left or right are 0, size may be incorrect.
-        const int size = node_size(node);
+        int size = node_size(node);
 
         // left == 0 may have been written as node.x = 0, or node.x may be
         // unwritten.
         // right == 0 means node.y was unwritten, and the right child is
         // therefore not a leaf, so its size is set accordingly.
-        const int left_size = node_size(lchild);
-        const int right_size = (right > 0 ? node_size(rchild) : INT_MAX);
+        int left_size = node_size(lchild);
+        int right_size = (right > 0 ? node_size(rchild) : INT_MAX);
 
         // These are both guarranteed to be correct:
         // If left_size was computed incorrectly, then the true value of
@@ -303,10 +332,10 @@ __global__ void write_leaves_kernel(
         // must be > max_per_leaf, resulting in left_is_leaf = false.
         //
         // right_is_leaf follows from the correctness of right_size.
-        const bool left_is_leaf = (left_size <= max_per_leaf);
-        const bool right_is_leaf = (right_size <= max_per_leaf);
+        bool left_is_leaf = (left_size <= max_per_leaf);
+        bool right_is_leaf = (right_size <= max_per_leaf);
 
-        const bool write_check =
+        bool write_check =
             (left_is_leaf != right_is_leaf) ? true : (size > max_per_leaf);
 
         int4 leaf;
@@ -320,8 +349,6 @@ __global__ void write_leaves_kernel(
             leaf.y = right_size;
             big_leaves[right] = leaf;
         }
-
-        tid += blockDim.x * gridDim.x;
     }
 }
 
@@ -329,13 +356,11 @@ __global__ void fix_leaf_ranges(int4* leaves, const size_t n_leaves)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    while (tid < n_leaves)
+    for ( ; tid < n_leaves; tid += blockDim.x * gridDim.x)
     {
         int4 leaf = leaves[tid];
         leaf.z = leaf.w = tid;
         leaves[tid] = leaf;
-
-        tid += blockDim.x * gridDim.x;
     }
 }
 
@@ -362,30 +387,26 @@ __global__ void build_nodes_slice_kernel(
     const AABBFunc AABB)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
-
     extern __shared__ int SMEM[];
 
-    int* flags = SMEM;
+    int* sm_flags = SMEM;
     volatile int2* sm_nodes
-        = (int2*)&flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
+        = (int2*)&sm_flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
 
     int bid = blockIdx.x;
-    int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-
-    // while() and inner for() loops to ensure all threads in a block hit the
-    // __syncthreads().
-    while (bid * grace::BUILD_THREADS_PER_BLOCK < n_base_nodes)
+    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_base_nodes; bid += gridDim.x)
     {
+        int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+
         __syncthreads();
         for (int i = threadIdx.x;
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_node;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            flags[i] = 0;
+            sm_flags[i] = 0;
             sm_nodes[i].x = 0;
             sm_nodes[i].y = 0;
         }
@@ -396,6 +417,10 @@ __global__ void build_nodes_slice_kernel(
         int low = bid * grace::BUILD_THREADS_PER_BLOCK;
         int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_node,
                        (int)n_base_nodes);
+        // So g_nodes and flags can be accessed directly with a (logical) node
+        // index.
+        int* flags = sm_flags - low;
+        volatile int2* g_nodes = sm_nodes - low;
 
         for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
@@ -403,30 +428,39 @@ __global__ void build_nodes_slice_kernel(
             // leaves.  The left/right values refer to the left- and right-most
             // *base nodes* covered by the current node.  (g_left and g_right
             // contain the left- and right-most *actual* leaf indices.)
-            // The current index (i.e. the idx-th base node) is thus a logical,
-            // or compressed node index, and is used for writing to shared
-            // memory.
+            // The current index (i.e. the idx-th base node) is thus a logical
+            // node index, and is used for writing to shared memory.
             int cur_index = idx;
-            int parent_index;
-
             // These are real node indices (for writing to global memory).
             int g_cur_index = base_indices[cur_index];
-            int g_parent_index;
 
             // Node index can be >= n_nodes if a leaf.
             GRACE_ASSERT(g_cur_index < n_nodes + n_leaves);
 
-            int4 node;
-            if (g_cur_index < n_nodes)
-                node = nodes[4 * g_cur_index + 0];
-            else
-                node = leaves[g_cur_index - n_nodes];
+            int4 node = get_node(g_cur_index, nodes, leaves, n_nodes);
+            // g_node left- and right-most leaf node incides.
+            int2 g_node = make_int2(node.z, node.w);
+            // node contains left- and right-most base node indices.
+            node.z = node.w = cur_index;
+
+            // Base nodes can be inner nodes or leaves.
+            GRACE_ASSERT(g_node.x >= 0);
+            GRACE_ASSERT(g_node.y > 0 || (g_node.x == g_node.y && g_node.y == 0));
+            GRACE_ASSERT(g_node.x < n_leaves - 1 || (g_node.x == g_node.y && g_node.x == n_leaves - 1));
+            GRACE_ASSERT(g_node.y < n_leaves);
+
+            int g_parent_index = node_parent(g_node, deltas, delta_comp);
+            int parent_index = logical_parent(node, g_node, g_parent_index);
+
+            if (out_of_block(parent_index, low, high)) {
+                continue;
+            }
 
             float3 bot, top;
             if (g_cur_index < n_nodes) {
-                float4 AABB1 = f4_nodes[4 * g_cur_index + 1];
-                float4 AABB2 = f4_nodes[4 * g_cur_index + 2];
-                float4 AABB3 = f4_nodes[4 * g_cur_index + 3];
+                float4 AABB1 = get_AABB1(g_cur_index, f4_nodes);
+                float4 AABB2 = get_AABB2(g_cur_index, f4_nodes);
+                float4 AABB3 = get_AABB3(g_cur_index, f4_nodes);
 
                 AABB_union(AABB1, AABB2, AABB3, &bot, &top);
             }
@@ -450,109 +484,29 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
 
-            // Recall that leaf left/right limits are equal to the leaf index,
-            // minus the leaf-identifying offset.
-            int g_left = (g_cur_index < n_nodes ? node.z :
-                                                  g_cur_index - n_nodes);
-            int g_right = (g_cur_index < n_nodes ? node.w :
-                                                   g_cur_index - n_nodes);
-
-            // Only the left-most leaf can have an index of 0, and only the
-            // right-most leaf can have an index of n_leaves - 1.
-            if (g_cur_index < n_nodes) {
-                GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_right > 0);
-                GRACE_ASSERT(g_left < n_leaves - 1);
-                GRACE_ASSERT(g_right < n_leaves);
-            }
-            else {
-                GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_right >= 0);
-                GRACE_ASSERT(g_left < n_leaves);
-                GRACE_ASSERT(g_right < n_leaves);
-            }
-
-            int left = cur_index;
-            int right = cur_index;
-
-            DeltaType delta_L = deltas[g_left - 1];
-            DeltaType delta_R = deltas[g_right];
-            int* child_addr;
-            int* end_addr;
-            volatile int* sm_addr;
-            float2* AABB_f2_addr;
-            float4* AABB_f4_addr;
-            int end, sm_end;
-            // Compute the current node's parent index and write-to locations.
-            if (delta_comp(delta_L, delta_R))
+            // Encoding identifies that the node was written this iteration.
+            node = encode_node(node);
+            if (is_left_child(g_node, g_parent_index))
             {
-                // Leftward node is parent.
-                parent_index = left - 1;
-                g_parent_index = g_left - 1;
-
-                // Current node is a right child.
-                // The -ve end index encodes the fact that the node was written
-                // this iteration.
-                child_addr = &(nodes[4 * g_parent_index + 0].y);
-                end_addr = &(nodes[4 * g_parent_index + 0].w);
-                end = -1 * (right + 1);
-
-                // Right-most global node index.
-                sm_addr = &(sm_nodes[parent_index - low].y);
-                sm_end = g_right;
-
-                // Right child AABB.
-                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
-                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
+                propagate_left(node, bot, top, g_cur_index, g_parent_index,
+                               nodes);
+                g_nodes[parent_index].x = g_node.x;
             }
-            else {
-                // Rightward node is parent.
-                parent_index = right;
-                g_parent_index = g_right;
-
-                // Current node is a left child.
-                // The -ve end index encodes the fact that the node was written
-                // this iteration.
-                child_addr = &(nodes[4 * g_parent_index + 0].x);
-                end_addr = &(nodes[4 * g_parent_index + 0].z);
-                end = -1 * (left + 1);
-
-                // Left-most global node index.
-                sm_addr = &(sm_nodes[parent_index - low].x);
-                sm_end = g_left;
-
-                // Left child AABB.
-                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
-                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
+            else
+            {
+                propagate_right(node, bot, top, g_cur_index, g_parent_index,
+                                nodes);
+                g_nodes[parent_index].y = g_node.y;
             }
-
-            // If the leaf's parent is outside this block do not write anything;
-            // an adjacent block will follow this path.
-            if (parent_index < low || parent_index >= high)
-                continue;
-
-            // Parent index must be at a valid location for writing to sm_nodes
-            // and the SMEM flags.
-            GRACE_ASSERT(parent_index - low >= 0);
-            GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
-
-            // Normal stores.  Other threads in this block can read from L1 if
-            // they get a cache hit, i.e. there is no requirement for global
-            // coherency.
-            *child_addr = g_cur_index;
-            *end_addr = end;
-            *AABB_f4_addr = make_float4(bot.x, top.x, bot.y, top.y);
-            *AABB_f2_addr = make_float2(bot.z, top.z);
-            *sm_addr = sm_end;
 
             // Travel up the tree.  The second thread to reach a node writes its
             // logical/compressed left or right end to its parent; the first
             // exits the loop.
             __threadfence_block();
-            unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-            GRACE_ASSERT(flag < 2);
-            bool first_arrival = (flag == 0);
+            unsigned int count = atomicAdd(flags + parent_index, 1);
+            GRACE_ASSERT(count < 2);
 
+            bool first_arrival = (count == 0);
             while (!first_arrival)
             {
                 cur_index = parent_index;
@@ -565,125 +519,85 @@ __global__ void build_nodes_slice_kernel(
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
                 // int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
-                int4 node = nodes[4 * g_cur_index + 0];
+                int4 node = get_inner(g_cur_index, nodes);
 
                 // 'error: class "int2" has no suitable copy constructor'
-                // int2 left_right = sm_nodes[cur_index - low];
+                // int2 left_right = g_nodes[cur_index];
                 // int g_left = left_right.x;
                 // int g_right = left_right.y;
-                int g_left = sm_nodes[cur_index - low].x;
-                int g_right = sm_nodes[cur_index - low].y;
-                GRACE_ASSERT(g_left >= 0);
-                GRACE_ASSERT(g_right > 0);
-                GRACE_ASSERT(g_left < n_leaves - 1);
-                GRACE_ASSERT(g_right < n_leaves);
+                int g_left = g_nodes[cur_index].x;
+                int g_right = g_nodes[cur_index].y;
+                int2 g_node = make_int2(g_left, g_right);
+                GRACE_ASSERT(g_node.x >= 0);
+                GRACE_ASSERT(g_node.y > 0);
+                GRACE_ASSERT(g_node.x < n_leaves - 1);
+                GRACE_ASSERT(g_node.y < n_leaves);
 
                 // Undo the -ve sign encoding.
-                int left = -1 * node.z - 1;
-                int right = -1 * node.w - 1;
+                node = decode_node(node);
                 // We are the second thread in this block to reach this node.
                 // Both of its logical/compressed end-indices must also be in
                 // this block.
-                GRACE_ASSERT(left >= low);
-                GRACE_ASSERT(right > low);
-                GRACE_ASSERT(left < high - 1);
-                GRACE_ASSERT(right < high);
+                GRACE_ASSERT(node.z >= low);
+                GRACE_ASSERT(node.w > low);
+                GRACE_ASSERT(node.z < high - 1);
+                GRACE_ASSERT(node.w < high);
+
+                g_parent_index = node_parent(g_node, deltas, delta_comp);
+                parent_index = logical_parent(node, g_node, g_parent_index);
 
                 // Even if this is true, the following compacted/logical size
                 // test can be false.
-                if (g_right - g_left == n_leaves - 1)
+                if (node_size(g_node) == n_leaves) {
                     *root_index = g_cur_index;
+                }
 
                 // Check our compacted/logical size, and exit the loop if we are
                 // large enough to become a base layer in the next iteration.
-                if (right - left + 1 > max_per_node) {
+                if (node_size(node) > max_per_node) {
                     // Both children of the current node must be leaves.  Stop
                     // travelling up the tree and continue with the outer loop.
                     break;
                 }
 
-                // Again, L1 data will be accurate.
-                float4 AABB1 = f4_nodes[4 * g_cur_index + 1];
-                float4 AABB2 = f4_nodes[4 * g_cur_index + 2];
-                float4 AABB3 = f4_nodes[4 * g_cur_index + 3];
-
-                float3 bot, top;
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
-
-                GRACE_ASSERT(bot.x < top.x);
-                GRACE_ASSERT(bot.y < top.y);
-                GRACE_ASSERT(bot.z < top.z);
-
-                DeltaType delta_L = deltas[g_left - 1];
-                DeltaType delta_R = deltas[g_right];
-                int* child_addr;
-                int* end_addr;
-                volatile int* sm_addr;
-                float2* AABB_f2_addr;
-                float4* AABB_f4_addr;
-                int end, sm_end;
-                if (delta_comp(delta_L, delta_R))
-                {
-                    // Leftward node is parent.
-                    parent_index = left - 1;
-                    g_parent_index = g_left - 1;
-
-                    // Current node is a right child.
-                    child_addr = &(nodes[4 * g_parent_index + 0].y);
-                    end_addr = &(nodes[4 * g_parent_index + 0].w);
-                    end = -1 * (right + 1);
-
-                    sm_addr = &(sm_nodes[parent_index - low].y);
-                    sm_end = g_right;
-
-                    // Right child AABB.
-                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
-                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
-
-                }
-                else {
-                    // Rightward node is parent.
-                    parent_index = right;
-                    g_parent_index = g_right;
-
-                    // Current node is a left child.
-                    child_addr = &(nodes[4 * g_parent_index + 0].x);
-                    end_addr = &(nodes[4 * g_parent_index + 0].z);
-                    end = -1 * (left + 1);
-
-                    sm_addr = &(sm_nodes[parent_index - low].x);
-                    sm_end = g_left;
-
-                    // Left child AABB.
-                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
-                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
-                }
-
-                if (parent_index < low || parent_index >= high) {
+                if (out_of_block(parent_index, low, high)) {
                     // Parent node outside this block's boundaries.  Either a
                     // thread in an adjacent block will follow this path, or the
                     // current node will be a base node in the next iteration.
                     break;
                 }
 
-                *child_addr = g_cur_index;
-                *end_addr = end;
-                *AABB_f4_addr = make_float4(bot.x, top.x, bot.y, top.y);
-                *AABB_f2_addr = make_float2(bot.z, top.z);
-                *sm_addr = sm_end;
+                float4 AABB1 = get_AABB1(g_cur_index, f4_nodes);
+                float4 AABB2 = get_AABB2(g_cur_index, f4_nodes);
+                float4 AABB3 = get_AABB3(g_cur_index, f4_nodes);
+
+                float3 bot, top;
+                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                GRACE_ASSERT(bot.x < top.x);
+                GRACE_ASSERT(bot.y < top.y);
+                GRACE_ASSERT(bot.z < top.z);
+
+                node = encode_node(node);
+                if (is_left_child(g_node, g_parent_index))
+                {
+                    propagate_left(node, bot, top, g_cur_index, g_parent_index,
+                                   nodes);
+                    g_nodes[parent_index].x = g_node.x;
+                }
+                else
+                {
+                    propagate_right(node, bot, top, g_cur_index, g_parent_index,
+                                    nodes);
+                    g_nodes[parent_index].y = g_node.y;
+                }
 
                 __threadfence_block();
-                GRACE_ASSERT(parent_index - low >= 0);
-                GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
-                unsigned int flag = atomicAdd(&flags[parent_index - low], 1);
-                GRACE_ASSERT(flag < 2);
-                first_arrival = (flag == 0);
+                unsigned int count = atomicAdd(flags + parent_index, 1);
+                GRACE_ASSERT(count < 2);
+                first_arrival = (count == 0);
             } // while (!first_arrival)
-        } // for idx = [threadIdx.x, BUILD_THREADS_PER_BLOCK + max_per_node)
-
-        bid += gridDim.x;
-        tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-    } // while (bid * BUILD_THREADS_PER_BLOCK < n_base_nodes)
+        } // for idx < high
+    } // for bid * BUILD_THREADS_PER_BLOCK < n_base_nodes
     return;
 }
 
