@@ -297,57 +297,68 @@ __global__ void build_leaves_kernel(
     } // for bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves
 }
 
+template <typename DeltaIter, typename DeltaComp>
 __global__ void write_leaves_kernel(
+    DeltaIter deltas,
     const int2* nodes,
-    const size_t n_nodes,
     int4* big_leaves,
-    const int max_per_leaf)
+    const size_t n_leaves,
+    const int max_per_leaf,
+    const DeltaComp delta_comp)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
+    // So deltas[-1] is a valid index.
+    ++deltas;
+
+    for ( ; tid < n_leaves; tid += blockDim.x * gridDim.x)
     {
-        int2 node = nodes[tid];
-        int left = node.x;
-        int right = node.y;
+        int start_index = tid;
+        int2 child = make_int2(start_index, start_index);
+        bool climb = true;
 
-        // node.x or node.y may be zero if they were unwritten, resulting in
-        // incorrect ranges. However, we are guaranteed to have reached all
-        // nodes spanning <= max_per_leaf primitives. Any node.x == 0 which is
-        // incorrect will therefore result in left_size > max_per_leaf.
-        // Any node.y == 0 is certain to have been unwritten.
-        // Hence left_size and right_size are correct when <= max_per_leaf.
-        int2 lchild = make_int2(left, tid);
-        int2 rchild = make_int2(tid + 1, right);
-        int left_size = node_size(lchild);
-        int right_size = (right > 0 ? node_size(rchild) : max_per_leaf + 1);
-        int size = left_size + right_size;
+        while (climb)
+        {
+            int parent_index = node_parent(child, deltas, delta_comp);
+            int2 node = nodes[parent_index];
 
-        // From the above, these are guaranteed correct.
-        bool left_is_leaf = (left_size <= max_per_leaf);
-        bool right_is_leaf = (right_size <= max_per_leaf);
-        bool single_child = (left_is_leaf != right_is_leaf);
+            GRACE_ASSERT(start_index >= node.x || start_index <= node.y);
 
-        int4 leaf;
-        if (single_child) {
-            leaf.x    = left_is_leaf ? lchild.x  : rchild.x;
-            leaf.y    = left_is_leaf ? left_size : right_size;
-            int index = left_is_leaf ? left      : right;
-            big_leaves[index] = leaf;
-        }
-        else if (size == max_per_leaf) {
-            leaf.x = left;
-            leaf.y = max_per_leaf;
-            big_leaves[left] = leaf;
-        }
-        else if (size > max_per_leaf && left_is_leaf && right_is_leaf) {
-            leaf.x = lchild.x;
-            leaf.y = left_size;
-            big_leaves[left] = leaf;
+            // node.x or node.y may be zero if they were unwritten, resulting in
+            // incorrect ranges. However, we are guaranteed to have reached all
+            // nodes spanning <= max_per_leaf primitives.
+            // Any node.x == 0 which is incorrect will therefore result in
+            // size > max_per_leaf.
+            // Any node.y == 0 is certain to have been unwritten, and results in
+            // size > max_per_leaf.
+            int size = node.y > 0 ? node_size(node) : max_per_leaf + 1;
 
-            leaf.x = rchild.x;
-            leaf.y = right_size;
-            big_leaves[right] = leaf;
+            int4 leaf;
+            if (size == max_per_leaf) {
+                GRACE_ASSERT(child.x == node.x || child.y == node.y);
+                GRACE_ASSERT(node.y > 0);
+                // Write this node.
+                // Two threads will reach this point...
+                leaf.x = child.x;
+                leaf.y = max_per_leaf;
+                // ... but only the thread coming from the left should write.
+                if (child.x == node.x) big_leaves[child.x] = leaf;
+                climb = false;
+            }
+            else if (size > max_per_leaf) {
+                GRACE_ASSERT(child.x == node.x || child.y == node.y)
+                // Write child node.
+                // One (two) thread(s) may reach this point, writing its (their
+                // respective) child (children).
+                leaf.x = child.x;
+                leaf.y = node_size(child);
+                big_leaves[child.x] = leaf;
+                climb = false;
+            }
+
+            // Only left-hand threads are permitted to continue the tree climb.
+            climb = climb && (child.x == node.x);
+            child = node;
         }
     }
 }
@@ -742,10 +753,12 @@ GRACE_HOST void build_leaves(
                          / grace::BUILD_THREADS_PER_BLOCK));
 
     write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        d_deltas_iter,
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
-        n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
-        max_per_leaf);
+        n_leaves,
+        max_per_leaf,
+        delta_comp);
     GRACE_KERNEL_CHECK();
 }
 
