@@ -315,8 +315,8 @@ __global__ void write_leaves_kernel(
     {
         int start_index = tid;
         int2 child = make_int2(start_index, start_index);
-        bool climb = true;
 
+        bool climb = true;
         while (climb)
         {
             int parent_index = node_parent(child, deltas, delta_comp);
@@ -609,90 +609,81 @@ __global__ void build_nodes_slice_kernel(
     return;
 }
 
+template <typename DeltaIter, typename DeltaComp>
 __global__ void fill_output_queue(
-    const int4* nodes,
-    const size_t n_nodes,
-    const int max_per_node,
-    int* new_base_indices)
-{
-    int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
-
-    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
-    {
-        int4 node = get_inner(tid, nodes);
-
-        // The left/right values are negative IFF they were written in this
-        // iteration.  A negative index represents a logical/compacted index.
-        bool left_written = (node.z < 0);
-        bool right_written = (node.w < 0);
-
-        // Undo the -ve encoding.
-        node = decode_node(node);
-        int left = node.z;
-        int right = node.w;
-
-        if (left_written != right_written) {
-            // Only one child was written; it must be placed in the output queue
-            // at a unique location.
-            int index = left_written ? left : right;
-            int base_index = left_written ? node.x : node.y;
-            GRACE_ASSERT(new_base_indices[index] == -1);
-            new_base_indices[index] = base_index;
-        }
-        else if (left_written && node_size(node) >= max_per_node) {
-            GRACE_ASSERT(new_base_indices[left] == -1);
-            new_base_indices[left] = tid;
-        }
-    }
-}
-
-__global__ void fix_node_ranges(
     int4* nodes,
-    const size_t n_nodes,
     const int4* leaves,
-    const int* old_base_indices)
+    const size_t n_nodes,
+    DeltaIter deltas,
+    const int max_per_node,
+    const int* old_base_indices,
+    const size_t n_base_indices,
+    int* new_base_indices,
+    DeltaComp delta_comp)
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
-    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
+    // So deltas[-1] is a valid index.
+    ++deltas;
+
+    for ( ; tid < n_base_indices; tid += blockDim.x * gridDim.x)
     {
-        int4 node = get_inner(tid, nodes);
+        int child_index = old_base_indices[tid];
+        int4 child = get_node(child_index, nodes, leaves, n_nodes);
 
-        // We only need to fix nodes whose ranges were written, *in full*, this
-        // iteration.
-        if (node.z < 0 && node.w < 0)
+        bool climb = true;
+        while (climb)
         {
+            int node_index = node_parent(child, deltas, delta_comp);
+            int4 node = get_inner(node_index, nodes);
+
+            // Nodes written this iteration have negative left- and right-most
+            // base-node ranges.
+            bool left_written = (node.z < 0);
+            bool right_written = (node.w < 0);
+
             node = decode_node(node);
-            int left = node.z;
-            int right = node.w;
 
-            // All base nodes have correct range indices.  If we know our
-            // left/right-most base node, we can therefore find our
-            // left/right-most leaf indices.
-            // Note that for leaves, the left and right ranges are simply the
-            // (corrected) index of the leaf.
-            int index = old_base_indices[left];
-            if (is_leaf(index, n_nodes))
-                left = index - n_nodes;
-            else
-                left = get_inner(index, nodes).z;
+            if (left_written != right_written) {
+                int index = left_written ? node.z : node.w;
+                GRACE_ASSERT(new_base_indices[index] == -1);
+                // Write child node.
+                // Only one thread may reach this point, and writes its child.
+                new_base_indices[index] = child_index;
+                climb = false;
+            }
+            else if (left_written && node_size(node) >= max_per_node) {
+                // Write this node.
+                // Two threads will reach this point, but only the thread coming
+                // from the left should write.
+                if (child_index == node.x) {
+                    GRACE_ASSERT(new_base_indices[node.z] == -1);
+                    new_base_indices[node.z] = node_index;
+                }
 
-            index = old_base_indices[right];
-            if (is_leaf(index, n_nodes))
-                right = index - n_nodes;
-            else
-                right = get_inner(index, nodes).w;
+                climb = false;
+            }
 
-            // Only the left-most leaf can have index 0.
-            GRACE_ASSERT(left >= 0);
-            GRACE_ASSERT(left < n_nodes);
-            GRACE_ASSERT(right > 0);
-            // Only the right-most leaf can have index n_leaves - 1 == n_nodes.
-            GRACE_ASSERT(right <= n_nodes);
+            // Thread reaching this node from the left child is the only one
+            // which may continue, but it needs the correct node range.
+            // It is therefore also the thread to update this node's range.
+            bool is_left = (child_index == node.x);
+            if (left_written && right_written && is_left)
+            {
+                node.z = child.z;
 
-            node.z = left;
-            node.w = right;
-            set_inner(node, tid, nodes);
+                int right_child_index = old_base_indices[node.w];
+                if (is_leaf(right_child_index, n_nodes))
+                    node.w = right_child_index - n_nodes;
+                else
+                    node.w = get_inner(right_child_index, nodes).w;
+
+                set_inner(node, node_index, nodes);
+            }
+
+            climb = climb && is_left;
+            child = node;
+            child_index = node_index;
         }
     }
 }
@@ -862,16 +853,14 @@ GRACE_HOST void build_nodes(
                              / grace::BUILD_THREADS_PER_BLOCK));
         fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
-            n_nodes,
-            d_tree.max_per_leaf,
-            d_out_ptr);
-        GRACE_KERNEL_CHECK();
-
-        fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_tree.nodes.data()),
-            n_nodes,
             thrust::raw_pointer_cast(d_tree.leaves.data()),
-            d_in_ptr);
+            n_nodes,
+            d_deltas_iter,
+            d_tree.max_per_leaf,
+            d_in_ptr,
+            n_in,
+            d_out_ptr,
+            delta_comp);
         GRACE_KERNEL_CHECK();
 
         QIter end = thrust::remove(out_q_begin, out_q_end, -1);
