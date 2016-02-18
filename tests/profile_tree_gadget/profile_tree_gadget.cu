@@ -99,10 +99,10 @@ int main(int argc, char* argv[])
             d_tree.max_per_leaf,
             thrust::raw_pointer_cast(d_deltas.data()),
             thrust::less<float>());
-        grace::ALBVH::remove_empty_leaves(d_tree);
         if (i >= 0) t_leaves += timer.split();
 
         const size_t n_new_leaves = d_tree.leaves.size();
+        d_tree.nodes.resize(4 * (n_new_leaves - 1));
         thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
         // Don't include above memory allocation in t_leaf_deltas.
         timer.split();

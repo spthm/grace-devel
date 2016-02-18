@@ -70,22 +70,6 @@ public:
         max_per_leaf(max_per_leaf) {}
 };
 
-
-//-----------------------------------------------------------------------------
-// Helper functors for tree build kernels.
-//-----------------------------------------------------------------------------
-
-struct is_empty_node : public thrust::unary_function<int4, bool>
-{
-    GRACE_HOST_DEVICE
-    bool operator()(const int4 node) const
-    {
-        // Note: a node's right child can never be node 0, and a leaf can never
-        // cover zero elements.
-        return (node.y == 0);
-    }
-};
-
 //-----------------------------------------------------------------------------
 // Helper functions for node accesses.
 //-----------------------------------------------------------------------------
