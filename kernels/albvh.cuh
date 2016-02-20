@@ -290,7 +290,7 @@ GRACE_DEVICE int warp_scan_pred(bool pred, const int lane, int* total)
     *total = __popc(bitfield);
 
     const unsigned int ones = -1;
-    const unsigned int lane_mask = ones << (warpSize - lane);
+    const unsigned int lane_mask = ones >> (warpSize - lane);
     const int ex_scan = __popc(bitfield & lane_mask);
 
     return ex_scan;
@@ -301,22 +301,23 @@ __global__ void build_leaves_kernel(
     const int4* inq,
     const size_t n_in,
     DeltaIter deltas,
+    const size_t n_primitives,
     const int max_per_leaf,
     int* node_ends,
     int4* outq,
-    unsigned int* pool,
+    int* pool,
     int4* wide_leaves,
     const DeltaComp delta_comp)
 {
     GRACE_ASSERT(warpSize == 32);
 
-    __shared__ int sm_warp_offsets[grace::BUILD_THREADS_PER_BLOCK / 32];
+    __shared__ unsigned int sm_warp_offsets[grace::BUILD_THREADS_PER_BLOCK / 32];
 
     const int lane = threadIdx.x % warpSize;
     const int wid = threadIdx.x / warpSize;
     const int bid = blockIdx.x;
 
-    volatile int* const warp_offset = &sm_warp_offsets[wid];
+    volatile unsigned int* const warp_offset = &sm_warp_offsets[wid];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
@@ -326,30 +327,34 @@ __global__ void build_leaves_kernel(
     {
         const int4 node = inq[tid];
         const int node_index = node.x;
+        GRACE_ASSERT(node.x >= 0);
+        GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
+        GRACE_ASSERT(node.z >= 0);
+        GRACE_ASSERT(node.z < n_primitives - 1 || node.z == node.w);
+        GRACE_ASSERT(node.w > 0 || node.z == node.w);
+        GRACE_ASSERT(node.w < n_primitives);
 
-        if (node_size(node) == max_per_leaf) {
-            const int4 leaf = make_int4(node.z, node_size(node), -1, -1);
-            wide_leaves[node_index] = leaf;
-
-            continue;
-        }
-        else if (node_size(node) > max_per_leaf) {
+        if (node_size(node) > max_per_leaf) {
             const int2 lchild = make_int2(node.z, node_index);
             const int2 rchild = make_int2(node_index + 1, node.w);
 
             const int4 lleaf = make_int4(lchild.x, node_size(lchild), -1, -1);
             const int4 rleaf = make_int4(rchild.x, node_size(rchild), -1, -1);
 
-            wide_leaves[node_index]     = lleaf;
-            wide_leaves[node_index + 1] = rleaf;
-
-            continue;
+            GRACE_ASSERT(wide_leaves[node_index].x     == -1 || lleaf.y > max_per_leaf);
+            GRACE_ASSERT(wide_leaves[node_index + 1].x == -1 || rleaf.y > max_per_leaf);
+            if (lleaf.y <= max_per_leaf) wide_leaves[node_index]     = lleaf;
+            if (rleaf.y <= max_per_leaf) wide_leaves[node_index + 1] = rleaf;
         }
 
+        if (node_size(node) == n_primitives) return;
+
         const int parent_index = node_parent(node, deltas, delta_comp);
+        GRACE_ASSERT(parent_index != node_index || node.z == node.w);
 
         const int this_end = is_left_child(node, parent_index) ? node.z : node.w;
         const int other_end = atomicExch(&node_ends[parent_index], this_end);
+        GRACE_ASSERT(other_end != this_end);
 
         const bool join = (other_end != -1);
         const int4 join_node = make_int4(parent_index, -1,
@@ -739,7 +744,7 @@ struct int4_functor
 
 template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
-    Tree d_tree,
+    Tree& d_tree,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
 {
@@ -755,7 +760,7 @@ GRACE_HOST void build_leaves(
     thrust::device_vector<int> d_node_ends(n_leaves - 1);
     thrust::device_vector<int4> d_queue1(n_leaves);
     thrust::device_vector<int4> d_queue2(n_leaves / 2);
-    thrust::device_vector<unsigned int> d_pool(1);
+    thrust::device_vector<int> d_pool(1);
 
     thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(),
                  invalid<int4>::node);
@@ -768,7 +773,7 @@ GRACE_HOST void build_leaves(
     size_t n_in = n_leaves;
     while (n_in != 0)
     {
-        d_pool[0] = 0;
+        d_pool[0] = 0u;
 
         int blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -777,10 +782,11 @@ GRACE_HOST void build_leaves(
             d_in_queue,
             n_in,
             d_deltas_iter,
+            n_leaves,
             max_per_leaf,
             thrust::raw_pointer_cast(d_node_ends.data()),
             d_out_queue,
-            thrust::raw_pointer_cast(d_pool.data()) + 1,
+            thrust::raw_pointer_cast(d_pool.data()),
             thrust::raw_pointer_cast(d_tree.leaves.data()),
             delta_comp);
 
@@ -799,7 +805,6 @@ GRACE_HOST void build_leaves(
                           is_invalid_node<int4>()),
         d_tree.leaves.end());
     const size_t n_wide_leaves = d_tree.leaves.size();
-
     d_tree.nodes.resize(4 * n_wide_leaves);
 
     int blocks = min(grace::MAX_BLOCKS,
