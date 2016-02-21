@@ -254,38 +254,52 @@ __global__ void copy_leaf_deltas_kernel(
     }
 }
 
-// datum is the per-thread value for the scan.
-// sm_data is a pointer to a block of >= 2 * warpSize elements of type T.
-// The pointer value should be identical for all threads in the warp.
+// value is the per-thread value for the reduction.
 // lane is threadIdx.x % warpSize.
-// Op is a binary operator. Must be commutative and associative. Defaults to
-// thrust::plus<T>.
-// Identity is the identity value for Op. Defaults to (T)0.
-template <typename T, typename Op>
-GRACE_DEVICE T warp_scan(T datum, volatile T* sm_data, const int lane,
-                         Op op = thrust::plus<T>(), const T identity = (T)0)
+// shared is a pointer to a block of >= warpSize elements of type int.
+// The pointer value should be identical for all threads in the warp, and no
+// two warps should have overlapping ranges.
+// On SM_30+ hardware, shared may have the size of a single int.
+// After warp_reduction returns, the reduction is located in *shared, and is
+// also returned to lane == 0.
+GRACE_DEVICE int warp_reduce(int value, const int lane, volatile int* shared)
 {
-    sm_data[lane] = identity;
+    GRACE_ASSERT(warpSize == grace::WARP_SIZE);
 
-    sm_data += warpSize;
-    sm_data[lane] = datum;
+#if __CUDA_ARCH__ < 300
 
-    #pragma unroll
-    for (int i = warpSize / 2; i > 0; i /= 2) {
-        sm_data[lane] += sm_data[lane - i];
+    shared[lane] = value;
+
+    // if (lane < grace::WARP_SIZE / 2) {
+    //     #pragma unroll
+    //     for (int i = grace::WARP_SIZE / 2; i > -; i /= 2) {
+    //         value += shared[lane + i]; shared[lane] = value;
+    //     }
+    // }
+
+    if (lane < 16) {
+        value += shared[lane + 16]; shared[lane] = value;
+        value += shared[lane +  8]; shared[lane] = value;
+        value += shared[lane +  4]; shared[lane] = value;
+        value += shared[lane +  2]; shared[lane] = value;
+        value += shared[lane +  1]; shared[lane] = value;
     }
 
-    // sm_data[lane] += sm_data[lane - 16];
-    // sm_data[lane] += sm_data[lane -  8];
-    // sm_data[lane] += sm_data[lane -  4];
-    // sm_data[lane] += sm_data[lane -  2];
-    // sm_data[lane] += sm_data[lane -  1];
+#else
 
-    return sm_data[lane];
+    #pragma unroll
+    for (int i = grace::WARP_SIZE / 2; i > 0; i /= 2)
+        value += __shfl_down(value, i);
+
+#endif
+
+    return value;
 }
 
 GRACE_DEVICE int warp_scan_pred(bool pred, const int lane, int* total)
 {
+    GRACE_ASSERT(warpSize == grace::WARP_SIZE);
+
     const unsigned int bitfield = __ballot(pred);
     *total = __popc(bitfield);
 
@@ -307,17 +321,17 @@ __global__ void build_leaves_kernel(
     int4* outq,
     int* pool,
     int4* wide_leaves,
+    int* spanned_primitives,
     const DeltaComp delta_comp)
 {
-    GRACE_ASSERT(warpSize == 32);
+    __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
 
-    __shared__ unsigned int sm_warp_offsets[grace::BUILD_THREADS_PER_BLOCK / 32];
-
-    const int lane = threadIdx.x % warpSize;
-    const int wid = threadIdx.x / warpSize;
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+    const int wid = threadIdx.x / grace::WARP_SIZE;
     const int bid = blockIdx.x;
 
-    volatile unsigned int* const warp_offset = &sm_warp_offsets[wid];
+    int* const warp_offset = &shared[wid * grace::WARP_SIZE];
+    volatile int* const warp_reduction = warp_offset;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
@@ -334,6 +348,7 @@ __global__ void build_leaves_kernel(
         GRACE_ASSERT(node.w > 0 || node.z == node.w);
         GRACE_ASSERT(node.w < n_primitives);
 
+        int total = 0;
         if (node_size(node) > max_per_leaf) {
             const int2 lchild = make_int2(node.z, node_index);
             const int2 rchild = make_int2(node_index + 1, node.w);
@@ -343,10 +358,21 @@ __global__ void build_leaves_kernel(
 
             GRACE_ASSERT(wide_leaves[node_index].x     == -1 || lleaf.y > max_per_leaf);
             GRACE_ASSERT(wide_leaves[node_index + 1].x == -1 || rleaf.y > max_per_leaf);
-            if (lleaf.y <= max_per_leaf) wide_leaves[node_index]     = lleaf;
-            if (rleaf.y <= max_per_leaf) wide_leaves[node_index + 1] = rleaf;
+            if (lleaf.y <= max_per_leaf) {
+                wide_leaves[node_index]     = lleaf;
+                total += lleaf.y;
+            }
+            if (rleaf.y <= max_per_leaf) {
+                wide_leaves[node_index + 1] = rleaf;
+                total += rleaf.y;
+            }
         }
 
+        total = warp_reduce(total, lane, warp_reduction);
+        if (lane == 0 && total) atomicAdd(spanned_primitives, total);
+
+        // If we just processed the root node, there is no valid parent index,
+        // so we better exit now.
         if (node_size(node) == n_primitives) return;
 
         const int parent_index = node_parent(node, deltas, delta_comp);
@@ -361,11 +387,10 @@ __global__ void build_leaves_kernel(
                                          min(this_end, other_end),
                                          max(this_end, other_end));
 
-        int total;
-        const int thread_offset = warp_scan_pred(join, lane, &total);
+        const int lane_offset = warp_scan_pred(join, lane, &total);
 
         if (lane == 0) *warp_offset = atomicAdd(pool, total);
-        if (join)      outq[*warp_offset + thread_offset] = join_node;
+        if (join)      outq[*warp_offset + lane_offset] = join_node;
     } // for tid < n_in
 }
 
@@ -748,30 +773,33 @@ GRACE_HOST void build_leaves(
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
 {
-    const size_t n_leaves = d_tree.leaves.size();
+    const size_t n_primitives = d_tree.leaves.size();
     const int max_per_leaf = d_tree.max_per_leaf;
 
-    if (n_leaves <= max_per_leaf) {
+    if (n_primitives <= max_per_leaf) {
         const std::string msg
             = "max_per_leaf must be less than the total number of primitives.";
         throw std::invalid_argument(msg);
     }
 
-    thrust::device_vector<int> d_node_ends(n_leaves - 1);
-    thrust::device_vector<int4> d_queue1(n_leaves);
-    thrust::device_vector<int4> d_queue2(n_leaves / 2);
+    thrust::device_vector<int> d_node_ends(n_primitives - 1);
+    thrust::device_vector<int4> d_queue1(n_primitives);
+    thrust::device_vector<int4> d_queue2(n_primitives / 2);
     thrust::device_vector<int> d_pool(1);
+    thrust::device_vector<int> d_completed(1);
 
     thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(),
                  invalid<int4>::node);
     thrust::fill(d_node_ends.begin(), d_node_ends.end(), -1);
     thrust::tabulate(d_queue1.begin(), d_queue1.end(), int4_functor());
+    d_completed[0] = 0;
 
     int4* d_in_queue  = thrust::raw_pointer_cast(d_queue1.data());
     int4* d_out_queue = thrust::raw_pointer_cast(d_queue2.data());
 
-    size_t n_in = n_leaves;
-    while (n_in != 0)
+    size_t n_in = n_primitives;
+    int n_completed = 0;
+    while (n_completed < n_primitives)
     {
         d_pool[0] = 0u;
 
@@ -782,15 +810,18 @@ GRACE_HOST void build_leaves(
             d_in_queue,
             n_in,
             d_deltas_iter,
-            n_leaves,
+            n_primitives,
             max_per_leaf,
             thrust::raw_pointer_cast(d_node_ends.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
             thrust::raw_pointer_cast(d_tree.leaves.data()),
+            thrust::raw_pointer_cast(d_completed.data()),
             delta_comp);
 
         n_in = d_pool[0];
+        n_completed = d_completed[0];
+
         std::swap(d_in_queue, d_out_queue);
     }
 
