@@ -270,19 +270,11 @@ GRACE_DEVICE int warp_reduce(int value, const int lane, volatile int* shared)
 
     shared[lane] = value;
 
-    // if (lane < grace::WARP_SIZE / 2) {
-    //     #pragma unroll
-    //     for (int i = grace::WARP_SIZE / 2; i > -; i /= 2) {
-    //         value += shared[lane + i]; shared[lane] = value;
-    //     }
-    // }
-
-    if (lane < 16) {
-        value += shared[lane + 16]; shared[lane] = value;
-        value += shared[lane +  8]; shared[lane] = value;
-        value += shared[lane +  4]; shared[lane] = value;
-        value += shared[lane +  2]; shared[lane] = value;
-        value += shared[lane +  1]; shared[lane] = value;
+    if (lane < grace::WARP_SIZE / 2) {
+        #pragma unroll
+        for (int i = grace::WARP_SIZE / 2; i > 0; i /= 2) {
+            value += shared[lane + i]; shared[lane] = value;
+        }
     }
 
 #else
@@ -291,12 +283,91 @@ GRACE_DEVICE int warp_reduce(int value, const int lane, volatile int* shared)
     for (int i = grace::WARP_SIZE / 2; i > 0; i /= 2)
         value += __shfl_down(value, i);
 
+    if (lane == 0) *shared = value;
+
 #endif
 
     return value;
 }
 
-GRACE_DEVICE int warp_scan_pred(bool pred, const int lane, int* total)
+// value is the per-thread value for the reduction.
+// lane is threadIdx.x % warpSize.
+// wid is threadIdx.x / warpSize.
+// shared is a pointer to a block of >= blockDim.x elements of type int.
+// The pointer value should be identical for all threads in the block
+// On SM_30+ hardware, shared may have the size of warpSize ints.
+// After block_reduce returns, the reduction is located in *shared, and is
+// also returned to lane == 0.
+GRACE_DEVICE int block_reduce(int value, const int lane, const int wid,
+                              const int n_warps, volatile int* shared)
+{
+    GRACE_ASSERT(n_warps <= grace::WARP_SIZE);
+
+# if __CUDA_ARCH__ < 300
+
+    value = warp_reduce(value, lane, shared + grace::WARP_SIZE * wid);
+    __syncthreads();
+
+    if (wid == 0) {
+        // TODO: Bank conflicts here.
+        value = (lane < n_warps) ? shared[grace::WARP_SIZE * lane] : 0;
+        value = warp_reduce(value, lane, shared);
+    }
+    __syncthreads(); // so *shared == reduction for all threads.
+
+#else
+
+    value = warp_reduce(value, lane, shared + wid);
+    __syncthreads();
+
+    if (wid == 0) {
+        value = (lane < n_warps) ? shared[lane] : 0;
+        value = warp_reduce(value, lane, shared);
+    }
+    __syncthreads(); // so *shared == reduction for all threads.
+
+#endif
+
+    return value;
+}
+
+// value is the per-thread value for the scan.
+// shared is a pointer to a block of >= 2 * warpSize ints.
+// The pointer value should be identical for all threads in the warp.
+// SM_30+ devices may provide a pointer to a single int for *shared.
+// lane is threadIdx.x % warpSize.
+// Returns to each thread the inclusive scan over values.
+GRACE_DEVICE int warp_inc_scan(int value, const int lane, volatile int* shared)
+{
+    GRACE_ASSERT(grace::WARP_SIZE == warpSize);
+
+#if __CUDA_ARCH__ < 300
+
+    shared[lane] = 0;
+
+    shared += grace::WARP_SIZE;
+    shared[lane] = value;
+
+    // ~ Hillis-Steele.
+    #pragma unroll
+    for (int i = grace::WARP_SIZE / 2; i > 0; i /= 2) {
+        value += shared[lane - i]; shared[lane] = value;
+    }
+
+#else
+
+    #pragma unroll
+    for (int i = 1; i < grace::WARP_SIZE; i *= 2) {
+        int red = __shfl_up(value, i);
+        if (lane >= i) value += red;
+    }
+
+#endif
+
+    return value;
+}
+
+GRACE_DEVICE int warp_ex_scan_pred(bool pred, const int lane, int* total)
 {
     GRACE_ASSERT(warpSize == grace::WARP_SIZE);
 
@@ -308,6 +379,34 @@ GRACE_DEVICE int warp_scan_pred(bool pred, const int lane, int* total)
     const int ex_scan = __popc(bitfield & lane_mask);
 
     return ex_scan;
+}
+
+// pred is the per-thread predicate to scan.
+// lane is threadIdx.x % warpSize.
+// wid is threadIdx.x / warpSize.
+// shared is a pointer to a block of >= 2 * warpSize ints.
+// SM_30+ devices may provide a pointer to only warpSize ints.
+// The pointer value should be identical for all threads in the warp.
+// lane is threadIdx.x % warpSize.
+GRACE_DEVICE int block_ex_scan_pred(bool pred, const int lane, const int wid,
+                                    const int n_warps, volatile int* shared)
+{
+    GRACE_ASSERT(n_warps <= grace::WARP_SIZE);
+
+    int warp_total = 0;
+    int lane_offset = warp_ex_scan_pred(pred, lane, &warp_total);
+
+    if (lane == 0) shared[wid] = warp_total;
+    __syncthreads();
+
+    if (wid == 0) {
+        int value = (lane < n_warps) ? shared[lane] : 0;
+        shared[lane] = warp_inc_scan(value, lane, shared);
+    }
+    __syncthreads();
+
+    // Exclusive scan.
+    return shared[wid] - warp_total + lane_offset;
 }
 
 template <typename DeltaIter, typename DeltaComp>
@@ -325,72 +424,107 @@ __global__ void build_leaves_kernel(
     const DeltaComp delta_comp)
 {
     __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ int block_offset;
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid = threadIdx.x / grace::WARP_SIZE;
-    const int bid = blockIdx.x;
+    const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
 
-    int* const warp_offset = &shared[wid * grace::WARP_SIZE];
-    volatile int* const warp_reduction = warp_offset;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
 
-    int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-    for ( ; tid < n_in; tid += blockDim.x * gridDim.x)
+    int bid = blockIdx.x;
+    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
-        const int4 node = inq[tid];
-        const int node_index = node.x;
-        GRACE_ASSERT(node.x >= 0);
-        GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
-        GRACE_ASSERT(node.z >= 0);
-        GRACE_ASSERT(node.z < n_primitives - 1 || node.z == node.w);
-        GRACE_ASSERT(node.w > 0 || node.z == node.w);
-        GRACE_ASSERT(node.w < n_primitives);
+        const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
 
         int total = 0;
-        if (node_size(node) > max_per_leaf) {
-            const int2 lchild = make_int2(node.z, node_index);
-            const int2 rchild = make_int2(node_index + 1, node.w);
+        bool join = false;
+        int4 join_node;
 
-            const int4 lleaf = make_int4(lchild.x, node_size(lchild), -1, -1);
-            const int4 rleaf = make_int4(rchild.x, node_size(rchild), -1, -1);
+        if (tid < n_in)
+        {
+            const int4 node = inq[tid];
+            const int node_index = node.x;
+            GRACE_ASSERT(node.x >= 0 || node.x == node.z);
+            GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
+            GRACE_ASSERT(node.z >= 0 || node.x == node.z);
+            GRACE_ASSERT(node.z < n_primitives - 1 || node.z == node.w);
+            GRACE_ASSERT(node.w > 0 || node.z == node.w);
+            GRACE_ASSERT(node.w < n_primitives);
 
-            GRACE_ASSERT(wide_leaves[node_index].x     == -1 || lleaf.y > max_per_leaf);
-            GRACE_ASSERT(wide_leaves[node_index + 1].x == -1 || rleaf.y > max_per_leaf);
-            if (lleaf.y <= max_per_leaf) {
-                wide_leaves[node_index]     = lleaf;
-                total += lleaf.y;
+            if (node_size(node) > max_per_leaf) {
+                const int2 lchild = make_int2(node.z, node_index);
+                const int2 rchild = make_int2(node_index + 1, node.w);
+
+                const int4 lleaf = make_int4(lchild.x, node_size(lchild),
+                                             -1, -1);
+                const int4 rleaf = make_int4(rchild.x, node_size(rchild),
+                                             -1, -1);
+
+                GRACE_ASSERT(wide_leaves[node_index].x     == -1 || lleaf.y > max_per_leaf);
+                GRACE_ASSERT(wide_leaves[node_index + 1].x == -1 || rleaf.y > max_per_leaf);
+                if (lleaf.y <= max_per_leaf) {
+                    wide_leaves[node_index]     = lleaf;
+                    total += lleaf.y;
+                }
+                if (rleaf.y <= max_per_leaf) {
+                    wide_leaves[node_index + 1] = rleaf;
+                    total += rleaf.y;
+                }
             }
-            if (rleaf.y <= max_per_leaf) {
-                wide_leaves[node_index + 1] = rleaf;
-                total += rleaf.y;
-            }
-        }
 
-        total = warp_reduce(total, lane, warp_reduction);
+            // If we just processed the root node, there is no valid parent
+            // index. But we still need to hit the __syncthreads below, because
+            // CUDA.
+            if (node_size(node) < n_primitives)
+            {
+                const int parent_index = node_parent(node, deltas, delta_comp);
+                GRACE_ASSERT(parent_index != node_index || node.z == node.w);
+
+                const int this_end = is_left_child(node, parent_index) ? node.z : node.w;
+                const int other_end = atomicExch(&node_ends[parent_index], this_end);
+                GRACE_ASSERT(other_end != this_end);
+
+                join = (other_end != -1);
+                join_node = make_int4(parent_index, -1,
+                                      min(this_end, other_end),
+                                      max(this_end, other_end));
+            }
+        } // (if tid < n_in)
+
+        // Make sure we can safely use shared.
+        // __syncthreads();
+
+        // Per-block update of spanned_primitives.
+        // total = block_reduce(total, lane, wid, n_warps, shared);
+        // if (threadIdx.x == 0 && total) atomicAdd(spanned_primitives, total);
+
+        // Per-warp update of spanned_primitives.
+        // On Kepler, this is fastest.
+        total = __ballot(total != 0) ? warp_reduce(total, lane, shared) : 0;
         if (lane == 0 && total) atomicAdd(spanned_primitives, total);
 
-        // If we just processed the root node, there is no valid parent index,
-        // so we better exit now.
-        if (node_size(node) == n_primitives) return;
+        // Per-thread update of spanned_primitives.
+        // if (total) atomicAdd(spanned_primitives, total);
 
-        const int parent_index = node_parent(node, deltas, delta_comp);
-        GRACE_ASSERT(parent_index != node_index || node.z == node.w);
+        // Per-block update of work-queue pool.
+        // On Kepler, this is fastest.
+        // Make sure we're done with shared before we use it again.
+        total = __syncthreads_count(join);
+        const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
+                                                     shared);
 
-        const int this_end = is_left_child(node, parent_index) ? node.z : node.w;
-        const int other_end = atomicExch(&node_ends[parent_index], this_end);
-        GRACE_ASSERT(other_end != this_end);
+        if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
+        __syncthreads();
 
-        const bool join = (other_end != -1);
-        const int4 join_node = make_int4(parent_index, -1,
-                                         min(this_end, other_end),
-                                         max(this_end, other_end));
+        if (join) outq[block_offset + thread_offset] = join_node;
 
-        const int lane_offset = warp_scan_pred(join, lane, &total);
-
-        if (lane == 0) *warp_offset = atomicAdd(pool, total);
-        if (join)      outq[*warp_offset + lane_offset] = join_node;
+        // Per-warp update of work-queue pool.
+        // int lane_offset = warp_ex_scan_pred(join, lane, &total);
+        // if (lane == 0) shared[wid] = atomicAdd(pool, total);
+        // if (join) outq[shared[wid] + lane_offset] = join_node;
     } // for tid < n_in
 }
 
