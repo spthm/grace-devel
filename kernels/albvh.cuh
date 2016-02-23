@@ -423,6 +423,8 @@ __global__ void build_leaves_kernel(
     int* spanned_primitives,
     const DeltaComp delta_comp)
 {
+    GRACE_ASSERT(grace::WARP_SIZE == warpSize);
+
     __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
     __shared__ int block_offset;
 
@@ -495,7 +497,7 @@ __global__ void build_leaves_kernel(
         } // (if tid < n_in)
 
         // Make sure we can safely use shared.
-        // __syncthreads();
+        __syncthreads();
 
         // Per-block update of spanned_primitives.
         // total = block_reduce(total, lane, wid, n_warps, shared);
@@ -503,7 +505,9 @@ __global__ void build_leaves_kernel(
 
         // Per-warp update of spanned_primitives.
         // On Kepler, this is fastest.
-        total = __ballot(total != 0) ? warp_reduce(total, lane, shared) : 0;
+        if (__ballot(total != 0)) {
+            total = warp_reduce(total, lane, shared + wid * grace::WARP_SIZE);
+        }
         if (lane == 0 && total) atomicAdd(spanned_primitives, total);
 
         // Per-thread update of spanned_primitives.
@@ -515,17 +519,19 @@ __global__ void build_leaves_kernel(
         total = __syncthreads_count(join);
         const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
                                                      shared);
-
         if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
         __syncthreads();
-
         if (join) outq[block_offset + thread_offset] = join_node;
 
         // Per-warp update of work-queue pool.
         // int lane_offset = warp_ex_scan_pred(join, lane, &total);
         // if (lane == 0) shared[wid] = atomicAdd(pool, total);
         // if (join) outq[shared[wid] + lane_offset] = join_node;
-    } // for tid < n_in
+
+        // Per-thread update of work-queue pool.
+        // int offset = atomicAdd(pool, (int)join);
+        // if (join) outq[offset] = join_node;
+    } // for bid * BUILD_THREADS_PER_BLOCK < n_in
 }
 
 __global__ void fix_leaf_ranges(int4* leaves, const size_t n_leaves)
