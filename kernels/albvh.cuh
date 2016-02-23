@@ -416,6 +416,7 @@ __global__ void build_leaves_kernel(
     DeltaIter deltas,
     const size_t n_primitives,
     const int max_per_leaf,
+    const int climb_levels,
     int* node_ends,
     int4* outq,
     int* pool,
@@ -440,15 +441,19 @@ __global__ void build_leaves_kernel(
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+        const bool active = (tid < n_in);
+
+        int4 node;
+        int node_index;
+        if (active) {
+            node = inq[tid];
+            node_index = node.x;
+        }
 
         int total = 0;
-        bool join = false;
-        int4 join_node;
-
-        if (tid < n_in)
+        bool climb = active;
+        for (int level = 0; level < climb_levels && climb; ++level)
         {
-            const int4 node = inq[tid];
-            const int node_index = node.x;
             GRACE_ASSERT(node.x >= 0 || node.x == node.z);
             GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
             GRACE_ASSERT(node.z >= 0 || node.x == node.z);
@@ -456,7 +461,8 @@ __global__ void build_leaves_kernel(
             GRACE_ASSERT(node.w > 0 || node.z == node.w);
             GRACE_ASSERT(node.w < n_primitives);
 
-            if (node_size(node) > max_per_leaf) {
+            if (node_size(node) > max_per_leaf)
+            {
                 const int2 lchild = make_int2(node.z, node_index);
                 const int2 rchild = make_int2(node_index + 1, node.w);
 
@@ -475,11 +481,13 @@ __global__ void build_leaves_kernel(
                     wide_leaves[node_index + 1] = rleaf;
                     total += rleaf.y;
                 }
+
+                // We do not set climb to false, because our parent may still
+                // need to be written to the out queue if our sibling is to
+                // become a wide leaf.
             }
 
-            // If we just processed the root node, there is no valid parent
-            // index. But we still need to hit the __syncthreads below, because
-            // CUDA.
+            // Root node has no valid parent index.
             if (node_size(node) < n_primitives)
             {
                 const int parent_index = node_parent(node, deltas, delta_comp);
@@ -489,12 +497,25 @@ __global__ void build_leaves_kernel(
                 const int other_end = atomicExch(&node_ends[parent_index], this_end);
                 GRACE_ASSERT(other_end != this_end);
 
-                join = (other_end != -1);
-                join_node = make_int4(parent_index, -1,
-                                      min(this_end, other_end),
-                                      max(this_end, other_end));
+                // Second thread to reach the parent is the one which continues.
+                climb = (other_end != -1);
+                node = make_int4(parent_index, -1,
+                                 min(this_end, other_end),
+                                 max(this_end, other_end));
+                node_index = parent_index;
             }
-        } // (if tid < n_in)
+            else {
+                // Can't climb further than the root.
+                // Can't simply return; need to reach the __syncthreads() below
+                // to avoid deadlock.
+                climb = false;
+            }
+        } // for (level < climb_levels && climb)
+
+        // Any thread wishing to continue the climb beyond climb_levels should
+        // output its parent to the queue.
+        const bool join = climb;
+        const int4 join_node = node;
 
         // Make sure we can safely use shared.
         __syncthreads();
@@ -846,6 +867,7 @@ GRACE_HOST void build_leaves(
             d_deltas_iter,
             n_primitives,
             max_per_leaf,
+            10, // On Kepler, this is optimal for max_per_leaf = 32, 64 and 128.
             thrust::raw_pointer_cast(d_node_ends.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
