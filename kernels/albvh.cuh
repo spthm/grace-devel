@@ -692,6 +692,7 @@ __global__ void join_nodes_kernel(
     int* root_index,
     PrimitiveIter primitives,
     DeltaIter deltas,
+    const int climb_levels,
     int* counters,
     int* outq,
     int* pool,
@@ -716,18 +717,23 @@ __global__ void join_nodes_kernel(
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+        const bool active = (tid < n_in);
 
-        int parent_index;
-        bool join = false;
-        if (tid < n_in)
-        {
-            int node_index = inq[tid];
+        int node_index;
+        if (active) {
+            node_index = inq[tid];
             GRACE_ASSERT(atomicExch(counters + node_index, 2) == 2);
+        }
 
-            int4 node = get_inner(node_index, nodes);
-            float4 AABB1 = get_AABB1(node_index, nodes);
-            float4 AABB2 = get_AABB2(node_index, nodes);
-            float4 AABB3 = get_AABB3(node_index, nodes);
+        int4 node;
+        float4 AABB1, AABB2, AABB3;
+        bool climb = active;
+        for (int level = 0; level < climb_levels && climb; ++level)
+        {
+            node = get_inner(node_index, nodes);
+            AABB1 = get_AABB1(node_index, nodes);
+            AABB2 = get_AABB2(node_index, nodes);
+            AABB3 = get_AABB3(node_index, nodes);
 
             GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
             GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
@@ -743,9 +749,10 @@ __global__ void join_nodes_kernel(
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
 
+            // Root node has no valid parent index.
             if (node_size(node) < n_leaves)
             {
-                parent_index = node_parent(node, deltas, delta_comp);
+                const int parent_index = node_parent(node, deltas, delta_comp);
 
                 if (is_left_child(node, parent_index)) {
                     propagate_left(node, bot, top, node_index, parent_index,
@@ -756,20 +763,30 @@ __global__ void join_nodes_kernel(
                                     nodes);
                 }
 
-                // The second thread to reach a (parent) node will write that
-                // node's index to the work queue.
+                // If another thread sees count == 1 for the current parent, it
+                // must also be able to see our writes to the parent node.
+                __threadfence();
+
                 int count = atomicAdd(counters + parent_index, 1);
                 GRACE_ASSERT(count < 2);
-                join = (count == 1);
+                // Second thread to reach the parent is the one which continues.
+                climb = (count == 1);
+
+                node_index = parent_index;
             }
-            else
-            {
-                // If we just processed the root node, there is no valid parent
-                // index.
+            else {
+                // Can't climb further than the root.
+                // Can't simply return; need to reach the __syncthreads() below
+                // to avoid deadlock.
                 *root_index = node_index;
-                join = false;
+                climb = false;
             }
-        } // if (tid < n_in);
+        } // for (level < climb_levels && climb);
+
+        // Any thread wishing to climb beyond climb_levels should output its
+        // current parent index to the queue.
+        const bool join = climb;
+        const int join_node_index = node_index;
 
         // Per-block update of work-queue pool.
         // On Kepler, this is fastest.
@@ -781,8 +798,8 @@ __global__ void join_nodes_kernel(
         __syncthreads();
 
         if (join) {
-            GRACE_ASSERT(atomicExch(counters + parent_index, 2) == 2);
-            outq[block_offset + thread_offset] = parent_index;
+            GRACE_ASSERT(atomicExch(counters + join_node_index, 2) == 2);
+            outq[block_offset + thread_offset] = join_node_index;
         }
 
         // Per-warp update of work-queue pool.
@@ -963,6 +980,7 @@ GRACE_HOST void build_nodes(
             d_tree.root_index_ptr,
             d_prims_iter,
             d_deltas_iter,
+            10, // TODO: Choose optimal value, or find suitable heuristic.
             thrust::raw_pointer_cast(d_counters.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
