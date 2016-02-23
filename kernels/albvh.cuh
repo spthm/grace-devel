@@ -504,13 +504,13 @@ __global__ void build_leaves_kernel(
         // if (threadIdx.x == 0 && total) atomicAdd(spanned_primitives, total);
 
         // Per-warp update of spanned_primitives.
-        // On Kepler, this is fastest.
         if (__ballot(total != 0)) {
             total = warp_reduce(total, lane, shared + wid * grace::WARP_SIZE);
         }
         if (lane == 0 && total) atomicAdd(spanned_primitives, total);
 
         // Per-thread update of spanned_primitives.
+        // On Kepler, this seems marginally faster.
         // if (total) atomicAdd(spanned_primitives, total);
 
         // Per-block update of work-queue pool.
@@ -649,8 +649,9 @@ __global__ void join_leaves_kernel(
         }
 
         // Per-warp update of work-queue pool.
+        // int total = 0;
         // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0) shared[wid] = atomicAdd(pool, total);
+        // if (lane == 0 && total) shared[wid] = atomicAdd(pool, total);
         // if (join) outq[shared[wid] + lane_offset] = parent_index;
 
     } // for bid * BUILD_THREADS_PER_BLOCK < n_leaves
@@ -764,8 +765,9 @@ __global__ void join_nodes_kernel(
         }
 
         // Per-warp update of work-queue pool.
+        // int total = 0;
         // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0) shared[wid] = atomicAdd(pool, total);
+        // if (lane == 0 && total) shared[wid] = atomicAdd(pool, total);
         // if (join) outq[shared[wid] + lane_offset] = parent_index;
     } // for bid * BUILD_THREADS_PER_BLOCK < n_in
 }
