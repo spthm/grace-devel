@@ -334,7 +334,7 @@ GRACE_DEVICE int block_reduce(int value, const int lane, const int wid,
 // value is the per-thread value for the scan.
 // shared is a pointer to a block of >= 2 * warpSize ints.
 // The pointer value should be identical for all threads in the warp.
-// SM_30+ devices may provide a pointer to a single int for *shared.
+// SM_30+ devices may provide null for *shared.
 // lane is threadIdx.x % warpSize.
 // Returns to each thread the inclusive scan over values.
 GRACE_DEVICE int warp_inc_scan(int value, const int lane, volatile int* shared)
@@ -386,7 +386,7 @@ GRACE_DEVICE int warp_ex_scan_pred(bool pred, const int lane, int* total)
 // wid is threadIdx.x / warpSize.
 // shared is a pointer to a block of >= 2 * warpSize ints.
 // SM_30+ devices may provide a pointer to only warpSize ints.
-// The pointer value should be identical for all threads in the warp.
+// The pointer value should be identical for all threads in the block.
 // lane is threadIdx.x % warpSize.
 GRACE_DEVICE int block_ex_scan_pred(bool pred, const int lane, const int wid,
                                     const int n_warps, volatile int* shared)
@@ -426,45 +426,62 @@ __global__ void build_leaves_kernel(
 {
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
 
-    __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
+    union Shared {
+        int3 nodes[grace::BUILD_THREADS_PER_BLOCK];
+        int warp_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_scan[2 * grace::WARP_SIZE];
+        int warp_offsets[grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE];
+    };
+    __shared__ Shared shared;
     __shared__ int block_offset;
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid = threadIdx.x / grace::WARP_SIZE;
     const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
 
-
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
 
+    // Outer gridSize-stride loop over virtual blocks.
     int bid = blockIdx.x;
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-        const bool active = (tid < n_in);
+        bool climbing = (tid < n_in);
 
-        int4 node;
-        int node_index;
-        if (active) {
-            node = inq[tid];
-            node_index = node.x;
+        // Required because of the outer for loop over bid.
+        __syncthreads();
+        if (climbing) {
+            const int4 node = inq[tid];
+            shared.nodes[threadIdx.x] = make_int3(node.x, node.z, node.w);
         }
+        // __syncthreads() unnecessary here - each thread begins by reading data
+        // at shared.nodes[threadIdx.x]
 
-        int total = 0;
-        bool climb = active;
-        for (int level = 0; level < climb_levels && climb; ++level)
+        int total_spanned = 0;
+        bool block_active = true;
+        for (int level = 0; level < climb_levels && block_active; ++level)
         {
-            GRACE_ASSERT(node.x >= 0 || node.x == node.z);
-            GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
-            GRACE_ASSERT(node.z >= 0 || node.x == node.z);
-            GRACE_ASSERT(node.z < n_primitives - 1 || node.z == node.w);
-            GRACE_ASSERT(node.w > 0 || node.z == node.w);
-            GRACE_ASSERT(node.w < n_primitives);
+            int node_index;
+            int2 node;
+            if (climbing) {
+                const int3 node3 = shared.nodes[threadIdx.x];
+                node_index = node3.x;
+                node = make_int2(node3.y, node3.z);
 
-            if (node_size(node) > max_per_leaf)
+                GRACE_ASSERT(node_index >= 0);
+                GRACE_ASSERT(node_index < n_primitives - 1 || (node_index == n_primitives - 1 && node.x == node_index && node.y == node_index));
+                GRACE_ASSERT(node.x >= 0);
+                GRACE_ASSERT(node.x < n_primitives - 1 || (node.x == n_primitives - 1 && node.x == node.y));
+                GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
+                GRACE_ASSERT(node.y < n_primitives);
+            }
+
+            if (climbing && node_size(node) > max_per_leaf)
             {
-                const int2 lchild = make_int2(node.z, node_index);
-                const int2 rchild = make_int2(node_index + 1, node.w);
+                const int2 lchild = make_int2(node.x, node_index);
+                const int2 rchild = make_int2(node_index + 1, node.y);
 
                 const int4 lleaf = make_int4(lchild.x, node_size(lchild),
                                              -1, -1);
@@ -475,79 +492,110 @@ __global__ void build_leaves_kernel(
                 GRACE_ASSERT(wide_leaves[node_index + 1].x == -1 || rleaf.y > max_per_leaf);
                 if (lleaf.y <= max_per_leaf) {
                     wide_leaves[node_index]     = lleaf;
-                    total += lleaf.y;
+                    total_spanned += lleaf.y;
                 }
                 if (rleaf.y <= max_per_leaf) {
                     wide_leaves[node_index + 1] = rleaf;
-                    total += rleaf.y;
+                    total_spanned += rleaf.y;
                 }
 
-                // We do not set climb to false, because our parent may still
+                // We do not set climbing to false, because our parent may still
                 // need to be written to the out queue if our sibling is to
                 // become a wide leaf.
             }
 
             // Root node has no valid parent index.
-            if (node_size(node) < n_primitives)
+            if (climbing && node_size(node) < n_primitives)
             {
                 const int parent_index = node_parent(node, deltas, delta_comp);
-                GRACE_ASSERT(parent_index != node_index || node.z == node.w);
+                GRACE_ASSERT(parent_index != node_index || node.x == node.y);
 
-                const int this_end = is_left_child(node, parent_index) ? node.z : node.w;
+                const int this_end = is_left_child(node, parent_index) ? node.x : node.y;
                 const int other_end = atomicExch(&node_ends[parent_index], this_end);
                 GRACE_ASSERT(other_end != this_end);
 
-                // Second thread to reach the parent is the one which continues.
-                climb = (other_end != -1);
-                node = make_int4(parent_index, -1,
-                                 min(this_end, other_end),
-                                 max(this_end, other_end));
+                // Second thread to reach the parent is the one which writes it
+                // to shared.
+                climbing = (other_end != -1);
                 node_index = parent_index;
+                node = make_int2(min(this_end, other_end),
+                                 max(this_end, other_end));
             }
             else {
                 // Can't climb further than the root.
-                // Can't simply return; need to reach the __syncthreads() below
-                // to avoid deadlock.
-                climb = false;
+                // Can't simply return; need to reach __syncthreads() below to
+                // avoid deadlock.
+                climbing = false;
             }
-        } // for (level < climb_levels && climb)
+
+            const int total_climbing = __syncthreads_count(climbing);
+            if (total_climbing)
+            {
+                const int thread_offset = block_ex_scan_pred(climbing,
+                                                             lane, wid, n_warps,
+                                                             shared.block_scan);
+                __syncthreads();
+
+                const int3 node3 = make_int3(node_index, node.x, node.y);
+                if (climbing) shared.nodes[thread_offset] = node3;
+                __syncthreads();
+
+                // Next iteration of for loop, first total_climbing threads in
+                // the block will be active.
+                climbing = (threadIdx.x < total_climbing);
+            }
+            else {
+                // All threads in block done climbing.
+                block_active = false;
+            }
+        } // for (level < climb_levels && block_active)
 
         // Any thread wishing to continue the climb beyond climb_levels should
-        // output its parent to the queue.
-        const bool join = climb;
-        const int4 join_node = node;
+        // output its node to the queue.
+        const bool joining = climbing;
 
-        // Make sure we can safely use shared.
+        int3 node3;
+        if (joining) node3 = shared.nodes[threadIdx.x];
         __syncthreads();
 
+        const int4 join_node = make_int4(node3.x, -1, node3.y, node3.z);
+
         // Per-block update of spanned_primitives.
-        // total = block_reduce(total, lane, wid, n_warps, shared);
-        // if (threadIdx.x == 0 && total) atomicAdd(spanned_primitives, total);
+        // total_spanned = block_reduce(total_spanned, lane, wid, n_warps, shared.block_reduce);
+        // if (threadIdx.x == 0 && total_spanned) atomicAdd(spanned_primitives,
+        //                                                  total_spanned);
 
         // Per-warp update of spanned_primitives.
-        if (__ballot(total != 0)) {
-            total = warp_reduce(total, lane, shared + wid * grace::WARP_SIZE);
+        if (__ballot(total_spanned != 0)) {
+            total_spanned = warp_reduce(total_spanned, lane,
+                                        shared.warp_reduce + wid * grace::WARP_SIZE);
         }
-        if (lane == 0 && total) atomicAdd(spanned_primitives, total);
+        if (lane == 0 && total_spanned) atomicAdd(spanned_primitives,
+                                                  total_spanned);
 
         // Per-thread update of spanned_primitives.
         // On Kepler, this seems marginally faster.
-        // if (total) atomicAdd(spanned_primitives, total);
+        // if (total_spanned) atomicAdd(spanned_primitives, total_spanned);
 
         // Per-block update of work-queue pool.
         // On Kepler, this is fastest.
         // Make sure we're done with shared before we use it again.
-        total = __syncthreads_count(join);
-        const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
-                                                     shared);
-        if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
+        const int total_joining = __syncthreads_count(joining);
+
+        const int thread_offset = block_ex_scan_pred(joining,
+                                                     lane, wid, n_warps,
+                                                     shared.block_scan);
+        if (threadIdx.x == 0) block_offset = atomicAdd(pool, total_joining);
         __syncthreads();
-        if (join) outq[block_offset + thread_offset] = join_node;
+
+        if (joining) outq[block_offset + thread_offset] = join_node;
 
         // Per-warp update of work-queue pool.
-        // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0) shared[wid] = atomicAdd(pool, total);
-        // if (join) outq[shared[wid] + lane_offset] = join_node;
+        // __syncthreads();
+        // int total_joining;
+        // int lane_offset = warp_ex_scan_pred(join, lane, &total_joining);
+        // if (lane == 0) shared.warp_offsets[wid] = atomicAdd(pool, total);
+        // if (joining) outq[shared.warp_offsets[wid] + lane_offset] = join_node;
 
         // Per-thread update of work-queue pool.
         // int offset = atomicAdd(pool, (int)join);
@@ -884,7 +932,7 @@ GRACE_HOST void build_leaves(
             d_deltas_iter,
             n_primitives,
             max_per_leaf,
-            10, // On Kepler, this is optimal for max_per_leaf = 32, 64 and 128.
+            3, // TODO: Find optimal value.
             thrust::raw_pointer_cast(d_node_ends.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
