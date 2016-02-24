@@ -932,7 +932,7 @@ GRACE_HOST void build_leaves(
             d_deltas_iter,
             n_primitives,
             max_per_leaf,
-            3, // TODO: Find optimal value.
+            3, // Optimal on Kepler for max_per_leaf = 32.
             thrust::raw_pointer_cast(d_node_ends.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
