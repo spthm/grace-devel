@@ -844,7 +844,7 @@ GRACE_HOST void build_nodes(
         GRACE_KERNEL_CHECK();
 
         blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
+                     (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
                              / grace::BUILD_THREADS_PER_BLOCK));
         fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
