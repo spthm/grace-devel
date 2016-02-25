@@ -252,6 +252,84 @@ __global__ void copy_leaf_deltas_kernel(
     }
 }
 
+// value is the per-thread value for the scan.
+// shared is a pointer to a block of >= 2 * warpSize ints.
+// The pointer value should be identical for all threads in the warp.
+// SM_30+ devices may provide null for *shared.
+// lane is threadIdx.x % warpSize.
+// Returns to each thread the inclusive scan over values.
+GRACE_DEVICE int warp_inc_scan(int value, const int lane, volatile int* shared)
+{
+    GRACE_ASSERT(grace::WARP_SIZE == warpSize);
+
+#if __CUDA_ARCH__ < 300
+
+    shared[lane] = 0;
+
+    shared += grace::WARP_SIZE;
+    shared[lane] = value;
+
+    // ~ Hillis-Steele.
+    #pragma unroll
+    for (int i = grace::WARP_SIZE / 2; i > 0; i /= 2) {
+        value += shared[lane - i]; shared[lane] = value;
+    }
+
+#else
+
+    #pragma unroll
+    for (int i = 1; i < grace::WARP_SIZE; i *= 2) {
+        int red = __shfl_up(value, i);
+        if (lane >= i) value += red;
+    }
+
+#endif
+
+    return value;
+}
+
+GRACE_DEVICE int warp_ex_scan_pred(bool pred, const int lane, int* total)
+{
+    GRACE_ASSERT(warpSize == grace::WARP_SIZE);
+
+    const unsigned int bitfield = __ballot(pred);
+    *total = __popc(bitfield);
+
+    const unsigned int ones = -1;
+    const unsigned int lane_mask = ones >> (warpSize - lane);
+    const int ex_scan = __popc(bitfield & lane_mask);
+
+    return ex_scan;
+}
+
+// pred is the per-thread predicate to scan.
+// lane is threadIdx.x % warpSize.
+// wid is threadIdx.x / warpSize.
+// shared is a pointer to a block of >= 2 * warpSize ints.
+// SM_30+ devices may provide a pointer to only warpSize ints.
+// The pointer value should be identical for all threads in the block.
+// lane is threadIdx.x % warpSize.
+GRACE_DEVICE int block_ex_scan_pred(bool pred, const int lane, const int wid,
+                                    const int n_warps, volatile int* shared)
+{
+    GRACE_ASSERT(n_warps <= grace::WARP_SIZE);
+
+    int warp_total = 0;
+    int lane_offset = warp_ex_scan_pred(pred, lane, &warp_total);
+
+    if (lane == 0) shared[wid] = warp_total;
+    __syncthreads();
+
+    if (wid == 0) {
+        int value = (lane < n_warps) ? shared[lane] : 0;
+        shared[lane] = warp_inc_scan(value, lane, shared);
+    }
+    __syncthreads();
+
+    // Exclusive scan.
+    return shared[wid] - warp_total + lane_offset;
+}
+
 template <typename DeltaIter, typename DeltaComp>
 __global__ void build_leaves_kernel(
     int2* tmp_nodes,
@@ -260,8 +338,23 @@ __global__ void build_leaves_kernel(
     const int max_per_leaf,
     const DeltaComp delta_comp)
 {
-    extern __shared__ int SMEM[];
+    GRACE_ASSERT(grace::WARP_SIZE == warpSize);
 
+    union Shared {
+        int2 nodes[grace::BUILD_THREADS_PER_BLOCK];
+        int warp_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_scan[2 * grace::WARP_SIZE];
+        int warp_offsets[grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE];
+    };
+    __shared__ Shared shared;
+
+    // extern __shared__ int SMEM[];
+    __shared__ int SMEM[grace::BUILD_THREADS_PER_BLOCK + 32];
+
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+    const int wid = threadIdx.x / grace::WARP_SIZE;
+    const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t n_leaves = n_nodes + 1;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
@@ -270,14 +363,12 @@ __global__ void build_leaves_kernel(
     int bid = blockIdx.x;
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves; bid += gridDim.x)
     {
-        int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-
         __syncthreads();
         for (int i = threadIdx.x;
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            SMEM[i] = 0;
+            SMEM[i] = -1;
         }
         __syncthreads();
 
@@ -289,52 +380,88 @@ __global__ void build_leaves_kernel(
         // So flags can be accessed directly with a node index.
         int* flags = SMEM - low;
 
-        for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
+        int bid2 = bid;
+        for ( ;  bid2 * grace::BUILD_THREADS_PER_BLOCK < high; ++bid2)
         {
-            // First node is a leaf at idx.
-            int2 node = make_int2(idx, idx);
-            int2* parent_ptr = &node;
+            const int idx = threadIdx.x + bid2 * grace::BUILD_THREADS_PER_BLOCK;
+            bool active = idx < high;
 
-            bool first_arrival;
+            if (active) {
+                // First node is a leaf at idx.
+                shared.nodes[threadIdx.x] = make_int2(idx, idx);
+            }
+
             // Climb tree.
-            do
+            bool block_active = true;
+            while (block_active)
             {
-                node = *parent_ptr;
+                int2 node;
+                if (active) {
+                    node = shared.nodes[threadIdx.x];
+                    GRACE_ASSERT(node.x >= 0);
+                    GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
+                    GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
+                    GRACE_ASSERT(node.y < n_leaves);
+                }
 
-                GRACE_ASSERT(node.x >= 0);
-                GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
-                GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
-                GRACE_ASSERT(node.y < n_leaves);
-
-                if (node_size(node) > max_per_leaf) {
+                if (active && node_size(node) > max_per_leaf) {
                     // Both of this node's children will become wide leaves.
-                    break;
+                    active = false;
                 }
 
-                int parent_index = node_parent(node, deltas, delta_comp);
-                parent_ptr = tmp_nodes + parent_index;
-
-                if (out_of_block(parent_index, low, high)) {
-                    break;
+                int parent_index;
+                if (active) {
+                    parent_index = node_parent(node, deltas, delta_comp);
                 }
 
-                // Propagate left- or right-most primitive up the tree.
-                if (is_left_child(node, parent_index)) {
-                    tmp_nodes[parent_index].x = node.x;
+                if (active && out_of_block(parent_index, low, high)) {
+                    active = false;
+                }
+
+                if (active)
+                {
+                    int this_end;
+                    // Propagate left- or right-most primitive up the tree.
+                    if (is_left_child(node, parent_index)) {
+                        tmp_nodes[parent_index].x = node.x;
+                        this_end = node.x;
+                    }
+                    else {
+                        tmp_nodes[parent_index].y = node.y;
+                        this_end = node.y;
+                    }
+
+                    int other_end = atomicExch(flags + parent_index, this_end);
+                    active = (other_end != -1);
+                    node = make_int2(min(this_end, other_end),
+                                     max(this_end, other_end));
+
+                    GRACE_ASSERT(this_end != other_end);
+                }
+
+                const int total_active = __syncthreads_count(active);
+                // if (!total_active) block_active = false;
+                if (total_active)
+                {
+                    const int thread_offset = block_ex_scan_pred(active,
+                                                                 lane, wid, n_warps,
+                                                                 shared.block_scan);
+                    __syncthreads();
+
+                    if (active) shared.nodes[thread_offset] = node;
+                    __syncthreads();
+
+                    // Next iteration of for loop, first total_active threads in
+                    // the block will be active.
+                    active = (threadIdx.x < total_active);
                 }
                 else {
-                    tmp_nodes[parent_index].y = node.y;
+                    // All threads in block done climbing.
+                    block_active = false;
                 }
+            }
 
-                __threadfence_block();
-
-                unsigned int count = atomicAdd(flags + parent_index, 1);
-                first_arrival = (count == 0);
-
-                GRACE_ASSERT(count < 2);
-            } while (!first_arrival);
-
-        } // for idx < high
+        } // for bid2 * grace::BUILD_THREADS_PER_BLOCK < high
     } // for bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves
 }
 
