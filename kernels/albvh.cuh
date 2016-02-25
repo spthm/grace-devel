@@ -750,7 +750,13 @@ __global__ void join_nodes_kernel(
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
 
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
+
+    union Shared {
+        int indices[grace::BUILD_THREADS_PER_BLOCK];
+        int reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int scan[2 * grace::WARP_SIZE];
+    };
+    __shared__ Shared shared;
     __shared__ int block_offset;
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
@@ -765,40 +771,47 @@ __global__ void join_nodes_kernel(
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-        const bool active = (tid < n_in);
+        bool climbing = (tid < n_in);
 
-        int node_index;
-        if (active) {
-            node_index = inq[tid];
+        __syncthreads();
+        if (climbing) {
+            const int node_index = inq[tid];
+            shared.indices[threadIdx.x] = node_index;
             GRACE_ASSERT(atomicExch(counters + node_index, 2) == 2);
         }
 
         int4 node;
         float4 AABB1, AABB2, AABB3;
-        bool climb = active;
-        for (int level = 0; level < climb_levels && climb; ++level)
+        bool block_active = true;
+        for (int level = 0; level < climb_levels && block_active; ++level)
         {
-            node = get_inner(node_index, nodes);
-            AABB1 = get_AABB1(node_index, nodes);
-            AABB2 = get_AABB2(node_index, nodes);
-            AABB3 = get_AABB3(node_index, nodes);
+            int node_index;
+            if (climbing) {
+                node_index = shared.indices[threadIdx.x];
+                node = get_inner(node_index, nodes);
+                AABB1 = get_AABB1(node_index, nodes);
+                AABB2 = get_AABB2(node_index, nodes);
+                AABB3 = get_AABB3(node_index, nodes);
 
-            GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
-            GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
-            GRACE_ASSERT(node.y > 0 && node.w <= n_nodes + n_leaves - 1);
-            GRACE_ASSERT(node.z >= 0 && node.z < n_leaves - 1);
-            GRACE_ASSERT(node.w > 0 && node.w <= n_leaves - 1);
+                GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
+                GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
+                GRACE_ASSERT(node.y > 0 && node.w <= n_nodes + n_leaves - 1);
+                GRACE_ASSERT(node.z >= 0 && node.z < n_leaves - 1);
+                GRACE_ASSERT(node.w > 0 && node.w <= n_leaves - 1);
+            }
 
             float3 bot, top;
-            AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+            if (climbing) {
+                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
 
-            // Note, they should never be equal.
-            GRACE_ASSERT(bot.x < top.x);
-            GRACE_ASSERT(bot.y < top.y);
-            GRACE_ASSERT(bot.z < top.z);
+                // Note, they should never be equal.
+                GRACE_ASSERT(bot.x < top.x);
+                GRACE_ASSERT(bot.y < top.y);
+                GRACE_ASSERT(bot.z < top.z);
+            }
 
             // Root node has no valid parent index.
-            if (node_size(node) < n_leaves)
+            if (climbing && node_size(node) < n_leaves)
             {
                 const int parent_index = node_parent(node, deltas, delta_comp);
 
@@ -818,34 +831,52 @@ __global__ void join_nodes_kernel(
                 int count = atomicAdd(counters + parent_index, 1);
                 GRACE_ASSERT(count < 2);
                 // Second thread to reach the parent is the one which continues.
-                climb = (count == 1);
+                climbing = (count == 1);
 
                 node_index = parent_index;
             }
-            else {
+            else if (climbing) {
                 // Can't climb further than the root.
                 // Can't simply return; need to reach the __syncthreads() below
                 // to avoid deadlock.
                 *root_index = node_index;
-                climb = false;
+                climbing = false;
+            }
+
+            const int total_climbing = __syncthreads_count(climbing);
+            if (total_climbing)
+            {
+                const int thread_offset = block_ex_scan_pred(climbing,
+                                                             lane, wid, n_warps,
+                                                             shared.scan);
+                __syncthreads();
+
+                if (climbing) shared.indices[thread_offset] = node_index;
+                __syncthreads();
+
+                climbing = (threadIdx.x < total_climbing);
+            }
+            else {
+                block_active = false;
             }
         } // for (level < climb_levels && climb);
 
         // Any thread wishing to climb beyond climb_levels should output its
         // current parent index to the queue.
-        const bool join = climb;
-        const int join_node_index = node_index;
+        const bool joining = climbing;
+        int join_node_index;
+        if (joining) join_node_index = shared.indices[threadIdx.x];
 
         // Per-block update of work-queue pool.
         // On Kepler, this is fastest.
-        int total = __syncthreads_count(join);
-        const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
-                                                     shared);
+        int total = __syncthreads_count(joining);
+        const int thread_offset = block_ex_scan_pred(joining, lane, wid, n_warps,
+                                                     shared.scan);
 
         if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
         __syncthreads();
 
-        if (join) {
+        if (joining) {
             GRACE_ASSERT(atomicExch(counters + join_node_index, 2) == 2);
             outq[block_offset + thread_offset] = join_node_index;
         }
@@ -1028,7 +1059,7 @@ GRACE_HOST void build_nodes(
             d_tree.root_index_ptr,
             d_prims_iter,
             d_deltas_iter,
-            10, // TODO: Choose optimal value, or find suitable heuristic.
+            4, // TODO: Choose optimal value, or find suitable heuristic.
             thrust::raw_pointer_cast(d_counters.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
