@@ -236,7 +236,7 @@ __global__ void build_leaves_kernel(
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf - 1;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            SMEM[i] = 0;
+            SMEM[i] = -1;
         }
         __syncthreads();
 
@@ -252,14 +252,11 @@ __global__ void build_leaves_kernel(
         {
             // First node is a leaf at idx.
             int2 node = make_int2(idx, idx);
-            int2* parent_ptr = &node;
 
             bool first_arrival;
             // Climb tree.
             do
             {
-                node = *parent_ptr;
-
                 GRACE_ASSERT(node.x >= 0);
                 GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
                 GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
@@ -271,26 +268,29 @@ __global__ void build_leaves_kernel(
                 }
 
                 int parent_index = node_parent(node, deltas, delta_comp);
-                parent_ptr = tmp_nodes + parent_index;
 
                 if (out_of_block(parent_index, low, high)) {
                     break;
                 }
 
                 // Propagate left- or right-most primitive up the tree.
+                int this_end;
                 if (is_left_child(node, parent_index)) {
                     tmp_nodes[parent_index].x = node.x;
+                    this_end = node.x;
                 }
                 else {
                     tmp_nodes[parent_index].y = node.y;
+                    this_end = node.y;
                 }
 
-                __threadfence_block();
+                int other_end = atomicExch(flags + parent_index, this_end);
+                first_arrival = (other_end == -1);
 
-                unsigned int count = atomicAdd(flags + parent_index, 1);
-                first_arrival = (count == 0);
+                GRACE_ASSERT(other_end != this_end);
 
-                GRACE_ASSERT(count < 2);
+                node = make_int2(min(this_end, other_end),
+                                 max(this_end, other_end));
             } while (!first_arrival);
 
         } // for idx < high
