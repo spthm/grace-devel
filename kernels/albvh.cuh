@@ -407,11 +407,14 @@ __global__ void build_nodes_slice_kernel(
     const AABBFunc AABB)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
+    __shared__ float3 AABB_min[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ float3 AABB_max[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ int g_other_end[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ int b_other_end[grace::BUILD_THREADS_PER_BLOCK];
     extern __shared__ int SMEM[];
 
     int* sm_flags = SMEM;
-    volatile int2* sm_nodes
-        = (int2*)&sm_flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
@@ -426,9 +429,7 @@ __global__ void build_nodes_slice_kernel(
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_node;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            sm_flags[i] = 0;
-            sm_nodes[i].x = 0;
-            sm_nodes[i].y = 0;
+            sm_flags[i] = -1;
         }
         __syncthreads();
 
@@ -443,7 +444,6 @@ __global__ void build_nodes_slice_kernel(
         // So b_nodes and flags can be accessed directly with a (logical) node
         // index.
         int* flags = sm_flags - low;
-        volatile int2* b_nodes = sm_nodes - low;
 
         for (int idx = tid; idx < high2; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
@@ -509,62 +509,57 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
 
+            AABB_min[threadIdx.x] = bot;
+            AABB_max[threadIdx.x] = top;
+
             if (is_left_child(g_node, g_parent_index))
             {
                 propagate_left(g_node, bot, top, g_index, g_parent_index,
                                nodes);
-                b_nodes[b_parent_index].x = b_node.x;
+                g_other_end[threadIdx.x] = g_node.z;
+                b_other_end[threadIdx.x] = b_node.x;
             }
             else
             {
                 propagate_right(g_node, bot, top, g_index, g_parent_index,
                                 nodes);
-                b_nodes[b_parent_index].y = b_node.y;
+                g_other_end[threadIdx.x] = g_node.w;
+                b_other_end[threadIdx.x] = b_node.y;
             }
 
             // Travel up the tree.  The second thread to reach a node writes its
             // logical/compressed left or right end to its parent; the first
             // exits the loop.
             __threadfence_block();
-            unsigned int count = atomicAdd(flags + b_parent_index, 1);
-            GRACE_ASSERT(count < 2);
+            int other_idx = atomicExch(flags + b_parent_index, threadIdx.x);
+            GRACE_ASSERT(other_idx != threadIdx.x);
 
-            bool first_arrival = (count == 0);
+            bool first_arrival = (other_idx == -1);
             while (!first_arrival)
             {
+                int g_end = g_other_end[other_idx];
+                int b_end = b_other_end[other_idx];
+                if (is_left_child(g_node, g_parent_index)) {
+                    g_node.w = g_end;
+                    b_node.y = b_end;
+                }
+                else {
+                    g_node.z = g_end;
+                    b_node.x = b_end;
+                }
+                // Now b_node.xy are correct, g_node.zw are correct.
+
                 b_index = b_parent_index;
                 g_index = g_parent_index;
 
                 GRACE_ASSERT(b_index < n_base_nodes);
                 GRACE_ASSERT(g_index < n_nodes);
 
-                // We are certain that a thread in this block has already
-                // *written* the other child of the current node, so we can read
-                // from L1 if we get a cache hit.
-                // int4 node = load_vec4s32(&(nodes[4 * g_index + 0].x));
-                g_node = get_inner(g_index, nodes);
-
-                // We are the second thread in this block to reach this node.
-                // The node must therefore be fully and correctly written.
-                GRACE_ASSERT(g_index > g_node.x || g_node.x >= n_nodes);
-                GRACE_ASSERT(g_index < g_node.y || g_node.y > n_nodes);
-                GRACE_ASSERT(g_node.x >= 0);
-                GRACE_ASSERT(g_node.y > 0);
-                GRACE_ASSERT(g_node.x < n_nodes + n_leaves - 1);
-                GRACE_ASSERT(g_node.y <= n_nodes + n_leaves - 1);
                 GRACE_ASSERT(g_node.z >= 0);
                 GRACE_ASSERT(g_node.w > 0);
                 GRACE_ASSERT(g_node.z < n_leaves - 1);
                 GRACE_ASSERT(g_node.w <= n_leaves - 1);
 
-                // Using the below,
-                //   int2 b_node = b_nodes[b_index];
-                // gives
-                //   error: class "int2" has no suitable copy constructor
-                // because of the volatile qualifier on b_nodes.
-                int b_left = b_nodes[b_index].x;
-                int b_right = b_nodes[b_index].y;
-                int2 b_node = make_int2(b_left, b_right);
                 // We are the second thread in this block to reach this node.
                 // Both of its logical/compressed end-indices must also be in
                 // this block.
@@ -594,33 +589,36 @@ __global__ void build_nodes_slice_kernel(
                     break;
                 }
 
-                float4 AABB1 = get_AABB1(g_index, f4_nodes);
-                float4 AABB2 = get_AABB2(g_index, f4_nodes);
-                float4 AABB3 = get_AABB3(g_index, f4_nodes);
+                float3 other_bot = AABB_min[other_idx];
+                float3 other_top = AABB_max[other_idx];
+                AABB_union(bot, top, other_bot, other_top, &bot, &top);
 
-                float3 bot, top;
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
                 GRACE_ASSERT(bot.x < top.x);
                 GRACE_ASSERT(bot.y < top.y);
                 GRACE_ASSERT(bot.z < top.z);
+
+                AABB_min[threadIdx.x] = bot;
+                AABB_max[threadIdx.x] = top;
 
                 if (is_left_child(g_node, g_parent_index))
                 {
                     propagate_left(g_node, bot, top, g_index, g_parent_index,
                                    nodes);
-                    b_nodes[b_parent_index].x = b_node.x;
+                    g_other_end[threadIdx.x] = g_node.z;
+                    b_other_end[threadIdx.x] = b_node.x;
                 }
                 else
                 {
                     propagate_right(g_node, bot, top, g_index, g_parent_index,
                                     nodes);
-                    b_nodes[b_parent_index].y = b_node.y;
+                    g_other_end[threadIdx.x] = g_node.w;
+                    b_other_end[threadIdx.x] = b_node.y;
                 }
 
                 __threadfence_block();
-                unsigned int count = atomicAdd(flags + b_parent_index, 1);
-                GRACE_ASSERT(count < 2);
-                first_arrival = (count == 0);
+                other_idx = atomicExch(flags + b_parent_index, threadIdx.x);
+                GRACE_ASSERT(other_idx != threadIdx.x);
+                first_arrival = (other_idx == -1);
             } // while (!first_arrival)
         } // for idx < high
     } // for bid * BUILD_THREADS_PER_BLOCK < n_base_nodes
