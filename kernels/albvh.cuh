@@ -818,10 +818,8 @@ GRACE_HOST void build_nodes(
         int blocks = min(grace::MAX_BLOCKS,
                          (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
                                  / grace::BUILD_THREADS_PER_BLOCK));
-        // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
-        // AND int2 nodes.
-        int smem_size = (sizeof(int) + sizeof(int2))
-                        * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
+        // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags.
+        int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
         build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             reinterpret_cast<float4*>(
