@@ -387,6 +387,9 @@ __global__ void build_nodes_slice_kernel(
     const AABBFunc AABB)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
+    __shared__ float3 AABB_min[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ float3 AABB_max[grace::BUILD_THREADS_PER_BLOCK];
     extern __shared__ int SMEM[];
 
     int* sm_flags = SMEM;
@@ -406,7 +409,7 @@ __global__ void build_nodes_slice_kernel(
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_node - 1;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            sm_flags[i] = 0;
+            sm_flags[i] = -1;
             sm_nodes[i].x = 0;
             sm_nodes[i].y = 0;
         }
@@ -422,6 +425,7 @@ __global__ void build_nodes_slice_kernel(
         int* flags = sm_flags - low;
         volatile int2* g_nodes = sm_nodes - low;
 
+        float3 bot, top;
         for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
         {
             // For the tree climb, we start at base nodes, treating them as
@@ -456,7 +460,6 @@ __global__ void build_nodes_slice_kernel(
                 continue;
             }
 
-            float3 bot, top;
             if (g_cur_index < n_nodes) {
                 float4 AABB1 = get_AABB1(g_cur_index, f4_nodes);
                 float4 AABB2 = get_AABB2(g_cur_index, f4_nodes);
@@ -484,6 +487,9 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
 
+            AABB_min[threadIdx.x] = bot;
+            AABB_max[threadIdx.x] = top;
+
             // Encoding identifies that the node was written this iteration.
             node = encode_node(node);
             if (is_left_child(g_node, g_parent_index))
@@ -503,10 +509,10 @@ __global__ void build_nodes_slice_kernel(
             // logical/compressed left or right end to its parent; the first
             // exits the loop.
             __threadfence_block();
-            unsigned int count = atomicAdd(flags + parent_index, 1);
-            GRACE_ASSERT(count < 2);
+            int other_idx = atomicExch(flags + parent_index, threadIdx.x);
+            GRACE_ASSERT(other_idx != threadIdx.x);
 
-            bool first_arrival = (count == 0);
+            bool first_arrival = (other_idx == -1);
             while (!first_arrival)
             {
                 cur_index = parent_index;
@@ -564,15 +570,21 @@ __global__ void build_nodes_slice_kernel(
                     break;
                 }
 
-                float4 AABB1 = get_AABB1(g_cur_index, f4_nodes);
-                float4 AABB2 = get_AABB2(g_cur_index, f4_nodes);
-                float4 AABB3 = get_AABB3(g_cur_index, f4_nodes);
+                // float4 AABB1 = get_AABB1(g_cur_index, f4_nodes);
+                // float4 AABB2 = get_AABB2(g_cur_index, f4_nodes);
+                // float4 AABB3 = get_AABB3(g_cur_index, f4_nodes);
+                // AABB_union(AABB1, AABB2, AABB3, &bot, &top);
 
-                float3 bot, top;
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                float3 bot_other = AABB_min[other_idx];
+                float3 top_other = AABB_max[other_idx];
+                AABB_union(bot, top, bot_other, top_other, &bot, &top);
+
                 GRACE_ASSERT(bot.x < top.x);
                 GRACE_ASSERT(bot.y < top.y);
                 GRACE_ASSERT(bot.z < top.z);
+
+                AABB_min[threadIdx.x] = bot;
+                AABB_max[threadIdx.x] = top;
 
                 node = encode_node(node);
                 if (is_left_child(g_node, g_parent_index))
@@ -589,9 +601,9 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 __threadfence_block();
-                unsigned int count = atomicAdd(flags + parent_index, 1);
-                GRACE_ASSERT(count < 2);
-                first_arrival = (count == 0);
+                other_idx = atomicExch(flags + parent_index, threadIdx.x);
+                GRACE_ASSERT(other_idx != threadIdx.x);
+                first_arrival = (other_idx == -1);
             } // while (!first_arrival)
         } // for idx < high
     } // for bid * BUILD_THREADS_PER_BLOCK < n_base_nodes
