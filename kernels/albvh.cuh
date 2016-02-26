@@ -349,8 +349,7 @@ __global__ void build_leaves_kernel(
     };
     __shared__ Shared shared;
 
-    // extern __shared__ int SMEM[];
-    __shared__ int SMEM[grace::BUILD_THREADS_PER_BLOCK + 32];
+    extern __shared__ int SMEM[];
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
     const int wid = threadIdx.x / grace::WARP_SIZE;
@@ -534,12 +533,23 @@ __global__ void build_nodes_slice_kernel(
     const DeltaComp delta_comp,
     const AABBFunc AABB)
 {
+    GRACE_ASSERT(grace::WARP_SIZE == warpSize);
+
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
+    union Shared {
+        int3 nodes[grace::BUILD_THREADS_PER_BLOCK];
+        int warp_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_reduce[grace::BUILD_THREADS_PER_BLOCK];
+        int block_scan[2 * grace::WARP_SIZE];
+        int warp_offsets[grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE];
+    };
+    __shared__ Shared shared;
     extern __shared__ int SMEM[];
 
-    int* sm_flags = SMEM;
-    volatile int2* sm_nodes
-        = (int2*)&sm_flags[grace::BUILD_THREADS_PER_BLOCK + max_per_node];
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+    const int wid = threadIdx.x / grace::WARP_SIZE;
+    const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
@@ -547,16 +557,12 @@ __global__ void build_nodes_slice_kernel(
     int bid = blockIdx.x;
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_base_nodes; bid += gridDim.x)
     {
-        int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-
         __syncthreads();
         for (int i = threadIdx.x;
              i < grace::BUILD_THREADS_PER_BLOCK + max_per_node;
              i += grace::BUILD_THREADS_PER_BLOCK)
         {
-            sm_flags[i] = 0;
-            sm_nodes[i].x = 0;
-            sm_nodes[i].y = 0;
+            SMEM[i] = -1;
         }
         __syncthreads();
 
@@ -570,187 +576,251 @@ __global__ void build_nodes_slice_kernel(
 
         // So b_nodes and flags can be accessed directly with a (logical) node
         // index.
-        int* flags = sm_flags - low;
-        volatile int2* b_nodes = sm_nodes - low;
+        int* flags = SMEM - low;
 
-        for (int idx = tid; idx < high2; idx += grace::BUILD_THREADS_PER_BLOCK)
+        int bid2 = bid;
+        for ( ; bid2 * grace::BUILD_THREADS_PER_BLOCK < high2; ++bid2)
         {
-            // For the tree climb, we start at base nodes, treating them as
-            // leaves.  The left/right values refer to the left- and right-most
-            // actual leaves covered by the current node.  (b_left and b_right
-            // contain the left- and right-most base node indices.)
-            // b_index is a logical node index, and is used for writing to
-            // shared memory.
-            int b_index = idx;
-            // These are real node indices (for writing to global memory).
-            int g_index = base_indices[b_index];
+            const int idx = threadIdx.x + bid2 * grace::BUILD_THREADS_PER_BLOCK;
+            bool active = (idx < high2);
 
-            // Node index can be >= n_nodes if a leaf.
-            GRACE_ASSERT(g_index < n_nodes + n_leaves);
-
-            int4 g_node = get_node(g_index, nodes, leaves, n_nodes);
-            // b_node contains left- and right-most base node indices.
-            int2 b_node = make_int2(b_index, b_index);
-
-            // Base nodes can be inner nodes or leaves.
-            GRACE_ASSERT(g_node.x >= 0);
-            GRACE_ASSERT(g_node.y > 0);
-            GRACE_ASSERT(g_node.x < n_nodes + n_leaves - 1 || is_leaf(g_index, n_nodes));
-            GRACE_ASSERT(g_node.y <= n_nodes + n_leaves - 1);
-            GRACE_ASSERT(g_node.z >= 0);
-            GRACE_ASSERT(g_node.w > 0 || (is_leaf(g_index, n_nodes) && g_node.w == 0));
-            GRACE_ASSERT(g_node.z < n_leaves - 1 || (is_leaf(g_index, n_nodes) && g_node.z == n_leaves - 1));
-            GRACE_ASSERT(g_node.w <= n_leaves - 1);
-
-            int g_parent_index = node_parent(g_node, deltas, delta_comp);
-            int b_parent_index = logical_parent(b_node, g_node, g_parent_index);
-
-            if (out_of_block(b_parent_index, low, high)) {
-                continue;
-            }
-
-            float3 bot, top;
-            if (!is_leaf(g_index, n_nodes)) {
-                float4 AABB1 = get_AABB1(g_index, f4_nodes);
-                float4 AABB2 = get_AABB2(g_index, f4_nodes);
-                float4 AABB3 = get_AABB3(g_index, f4_nodes);
-
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
-            }
-            else {
-                bot.x = bot.y = bot.z = CUDART_INF_F;
-                top.x = top.y = top.z = -1.f;
-
-                #pragma unroll 4
-                for (int i = 0; i < g_node.y; i++) {
-                    TPrimitive prim = primitives[g_node.x + i];
-
-                    float3 pbot, ptop;
-                    AABB(prim, &pbot, &ptop);
-
-                    AABB_union(bot, top, pbot, ptop, &bot, &top);
-                }
-            }
-
-            // Note, they should never be equal.
-            GRACE_ASSERT(bot.x < top.x);
-            GRACE_ASSERT(bot.y < top.y);
-            GRACE_ASSERT(bot.z < top.z);
-
-            if (is_left_child(g_node, g_parent_index))
+            int g_index, g_parent_index;
+            int b_index, b_parent_index;
+            int4 g_node;
+            int2 b_node;
+            if (active)
             {
-                propagate_left(g_node, bot, top, g_index, g_parent_index,
-                               nodes);
-                b_nodes[b_parent_index].x = b_node.x;
-            }
-            else
-            {
-                propagate_right(g_node, bot, top, g_index, g_parent_index,
-                                nodes);
-                b_nodes[b_parent_index].y = b_node.y;
-            }
+                // For the tree climb, we start at base nodes, treating them as
+                // leaves.  The left/right values refer to the left- and right-most
+                // actual leaves covered by the current node.  (b_left and b_right
+                // contain the left- and right-most base node indices.)
+                // b_index is a logical node index, and is used for writing to
+                // shared memory.
+                b_index = idx;
+                // These are real node indices (for writing to global memory).
+                g_index = base_indices[b_index];
 
-            // Travel up the tree.  The second thread to reach a node writes its
-            // logical/compressed left or right end to its parent; the first
-            // exits the loop.
-            __threadfence_block();
-            unsigned int count = atomicAdd(flags + b_parent_index, 1);
-            GRACE_ASSERT(count < 2);
+                // Node index can be >= n_nodes if a leaf.
+                GRACE_ASSERT(g_index < n_nodes + n_leaves);
 
-            bool first_arrival = (count == 0);
-            while (!first_arrival)
-            {
-                b_index = b_parent_index;
-                g_index = g_parent_index;
+                g_node = get_node(g_index, nodes, leaves, n_nodes);
+                // b_node contains left- and right-most base node indices.
+                b_node = make_int2(b_index, b_index);
 
-                GRACE_ASSERT(b_index < n_base_nodes);
-                GRACE_ASSERT(g_index < n_nodes);
-
-                // We are certain that a thread in this block has already
-                // *written* the other child of the current node, so we can read
-                // from L1 if we get a cache hit.
-                // int4 node = load_vec4s32(&(nodes[4 * g_index + 0].x));
-                g_node = get_inner(g_index, nodes);
-
-                // We are the second thread in this block to reach this node.
-                // The node must therefore be fully and correctly written.
-                GRACE_ASSERT(g_index > g_node.x || g_node.x >= n_nodes);
-                GRACE_ASSERT(g_index < g_node.y || g_node.y > n_nodes);
+                // Base nodes can be inner nodes or leaves.
                 GRACE_ASSERT(g_node.x >= 0);
                 GRACE_ASSERT(g_node.y > 0);
-                GRACE_ASSERT(g_node.x < n_nodes + n_leaves - 1);
+                GRACE_ASSERT(g_node.x < n_nodes + n_leaves - 1 || is_leaf(g_index, n_nodes));
                 GRACE_ASSERT(g_node.y <= n_nodes + n_leaves - 1);
                 GRACE_ASSERT(g_node.z >= 0);
-                GRACE_ASSERT(g_node.w > 0);
-                GRACE_ASSERT(g_node.z < n_leaves - 1);
+                GRACE_ASSERT(g_node.w > 0 || (is_leaf(g_index, n_nodes) && g_node.w == 0));
+                GRACE_ASSERT(g_node.z < n_leaves - 1 || (is_leaf(g_index, n_nodes) && g_node.z == n_leaves - 1));
                 GRACE_ASSERT(g_node.w <= n_leaves - 1);
-
-                // Using the below,
-                //   int2 b_node = b_nodes[b_index];
-                // gives
-                //   error: class "int2" has no suitable copy constructor
-                // because of the volatile qualifier on b_nodes.
-                int b_left = b_nodes[b_index].x;
-                int b_right = b_nodes[b_index].y;
-                int2 b_node = make_int2(b_left, b_right);
-                // We are the second thread in this block to reach this node.
-                // Both of its logical/compressed end-indices must also be in
-                // this block.
-                GRACE_ASSERT(b_node.x >= low);
-                GRACE_ASSERT(b_node.y > low);
-                GRACE_ASSERT(b_node.x < high2 - 1);
-                GRACE_ASSERT(b_node.y < high2);
 
                 g_parent_index = node_parent(g_node, deltas, delta_comp);
                 b_parent_index = logical_parent(b_node, g_node, g_parent_index);
+            }
 
-                // Even if this is true, the following size test can be false.
-                if (node_size(g_node) == n_leaves) {
-                    *root_index = g_index;
-                }
+            if (out_of_block(b_parent_index, low, high)) {
+                active = false;
+            }
 
-                // Exit the loop if at least one of our child nodes is large
-                // enough to become a base node.
-                if (node_size(b_node) > max_per_node) {
-                    break;
-                }
-
-                if (out_of_block(b_parent_index, low, high)) {
-                    // Parent node outside this block's boundaries.  Either a
-                    // thread in an adjacent block will follow this path, or the
-                    // current node will be a base node in the next iteration.
-                    break;
-                }
-
-                float4 AABB1 = get_AABB1(g_index, f4_nodes);
-                float4 AABB2 = get_AABB2(g_index, f4_nodes);
-                float4 AABB3 = get_AABB3(g_index, f4_nodes);
-
+            if (active)
+            {
                 float3 bot, top;
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                if (!is_leaf(g_index, n_nodes)) {
+                    float4 AABB1 = get_AABB1(g_index, f4_nodes);
+                    float4 AABB2 = get_AABB2(g_index, f4_nodes);
+                    float4 AABB3 = get_AABB3(g_index, f4_nodes);
+
+                    AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                }
+                else {
+                    bot.x = bot.y = bot.z = CUDART_INF_F;
+                    top.x = top.y = top.z = -1.f;
+
+                    #pragma unroll 4
+                    for (int i = 0; i < g_node.y; i++) {
+                        TPrimitive prim = primitives[g_node.x + i];
+
+                        float3 pbot, ptop;
+                        AABB(prim, &pbot, &ptop);
+
+                        AABB_union(bot, top, pbot, ptop, &bot, &top);
+                    }
+                }
+
+                // Note, they should never be equal.
                 GRACE_ASSERT(bot.x < top.x);
                 GRACE_ASSERT(bot.y < top.y);
                 GRACE_ASSERT(bot.z < top.z);
 
+                int this_end;
                 if (is_left_child(g_node, g_parent_index))
                 {
                     propagate_left(g_node, bot, top, g_index, g_parent_index,
                                    nodes);
-                    b_nodes[b_parent_index].x = b_node.x;
+                    this_end = b_node.x;
                 }
                 else
                 {
                     propagate_right(g_node, bot, top, g_index, g_parent_index,
                                     nodes);
-                    b_nodes[b_parent_index].y = b_node.y;
+                    this_end = b_node.y;
                 }
 
+                // Travel up the tree.  The second thread to reach a node writes its
+                // logical/compressed left or right end to its parent; the first
+                // exits the loop.
                 __threadfence_block();
-                unsigned int count = atomicAdd(flags + b_parent_index, 1);
-                GRACE_ASSERT(count < 2);
-                first_arrival = (count == 0);
-            } // while (!first_arrival)
-        } // for idx < high
+                int other_end = atomicExch(flags + b_parent_index, this_end);
+                GRACE_ASSERT(this_end != other_end);
+
+                active = (other_end != -1);
+                b_node = make_int2(min(this_end, other_end),
+                                   max(this_end, other_end));
+            }
+
+            bool block_active = true;
+            const int total_active = __syncthreads_count(active);
+            if (total_active)
+            {
+                const int thread_offset = block_ex_scan_pred(active,
+                                                             lane, wid, n_warps,
+                                                             shared.block_scan);
+                __syncthreads();
+
+                if (active) shared.nodes[thread_offset] = make_int3(g_parent_index,
+                                                                    b_node.x,
+                                                                    b_node.y);
+                __syncthreads();
+
+                // Next iteration of for loop, first total_active threads in
+                // the block will be active.
+                active = (threadIdx.x < total_active);
+            }
+            else {
+                // All threads in block done climbing.
+                block_active = false;
+            }
+
+            while (block_active)
+            {
+                if (active)
+                {
+                    const int3 node3 = shared.nodes[threadIdx.x];
+                    g_index = node3.x;
+                    b_node = make_int2(node3.y, node3.z);
+
+                    GRACE_ASSERT(g_index < n_nodes);
+
+                    // We are certain that a thread in this block has already
+                    // *written* the other child of the current node, so we can read
+                    // from L1 if we get a cache hit.
+                    // int4 node = load_vec4s32(&(nodes[4 * g_index + 0].x));
+                    g_node = get_inner(g_index, nodes);
+
+                    // We are the second thread in this block to reach this node.
+                    // The node must therefore be fully and correctly written.
+                    GRACE_ASSERT(g_index > g_node.x || g_node.x >= n_nodes);
+                    GRACE_ASSERT(g_index < g_node.y || g_node.y > n_nodes);
+                    GRACE_ASSERT(g_node.x >= 0);
+                    GRACE_ASSERT(g_node.y > 0);
+                    GRACE_ASSERT(g_node.x < n_nodes + n_leaves - 1);
+                    GRACE_ASSERT(g_node.y <= n_nodes + n_leaves - 1);
+                    GRACE_ASSERT(g_node.z >= 0);
+                    GRACE_ASSERT(g_node.w > 0);
+                    GRACE_ASSERT(g_node.z < n_leaves - 1);
+                    GRACE_ASSERT(g_node.w <= n_leaves - 1);
+
+                    // We are the second thread in this block to reach this node.
+                    // Both of its logical/compressed end-indices must also be in
+                    // this block.
+                    GRACE_ASSERT(b_node.x >= low);
+                    GRACE_ASSERT(b_node.y > low);
+                    GRACE_ASSERT(b_node.x < high2 - 1);
+                    GRACE_ASSERT(b_node.y < high2);
+
+                    g_parent_index = node_parent(g_node, deltas, delta_comp);
+                    b_parent_index = logical_parent(b_node, g_node, g_parent_index);
+                }
+
+                // Even if this is true, the following size test can be false.
+                if (active && node_size(g_node) == n_leaves) {
+                    *root_index = g_index;
+                }
+
+                // Exit the loop if at least one of our child nodes is large
+                // enough to become a base node.
+                if (active && node_size(b_node) > max_per_node) {
+                    active = false;
+                }
+
+                if (active && out_of_block(b_parent_index, low, high)) {
+                    // Parent node outside this block's boundaries.  Either a
+                    // thread in an adjacent block will follow this path, or the
+                    // current node will be a base node in the next iteration.
+                    active = false;
+                }
+
+                if (active)
+                {
+                    float4 AABB1 = get_AABB1(g_index, f4_nodes);
+                    float4 AABB2 = get_AABB2(g_index, f4_nodes);
+                    float4 AABB3 = get_AABB3(g_index, f4_nodes);
+
+                    float3 bot, top;
+                    AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                    GRACE_ASSERT(bot.x < top.x);
+                    GRACE_ASSERT(bot.y < top.y);
+                    GRACE_ASSERT(bot.z < top.z);
+
+                    int this_end;
+                    if (is_left_child(g_node, g_parent_index))
+                    {
+                        propagate_left(g_node, bot, top, g_index, g_parent_index,
+                                       nodes);
+                        this_end = b_node.x;
+                    }
+                    else
+                    {
+                        propagate_right(g_node, bot, top, g_index, g_parent_index,
+                                        nodes);
+                        this_end = b_node.y;
+                    }
+
+                    __threadfence_block();
+                    int other_end = atomicExch(flags + b_parent_index, this_end);
+                    GRACE_ASSERT(this_end != other_end);
+                    active = (other_end != -1);
+
+                    b_node = make_int2(min(this_end, other_end),
+                                       max(this_end, other_end));
+                }
+
+                const int total_active = __syncthreads_count(active);
+                if (total_active)
+                {
+                    const int thread_offset = block_ex_scan_pred(active,
+                                                                 lane, wid, n_warps,
+                                                                 shared.block_scan);
+                    __syncthreads();
+
+                    if (active) shared.nodes[thread_offset] = make_int3(g_parent_index,
+                                                                        b_node.x,
+                                                                        b_node.y);
+                    __syncthreads();
+
+                    // Next iteration of for loop, first total_active threads in
+                    // the block will be active.
+                    active = (threadIdx.x < total_active);
+                }
+                else {
+                    // All threads in block done climbing.
+                    block_active = false;
+                }
+            } // while (block_active)
+        } // for big * grace::BUILD_THREADS_PER_BLOCK < high2
     } // for bid * BUILD_THREADS_PER_BLOCK < n_base_nodes
     return;
 }
@@ -948,10 +1018,8 @@ GRACE_HOST void build_nodes(
         int blocks = min(grace::MAX_BLOCKS,
                          (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
                                  / grace::BUILD_THREADS_PER_BLOCK));
-        // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
-        // AND int2 nodes.
-        int smem_size = (sizeof(int) + sizeof(int2))
-                        * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
+        // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags.
+        int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
         build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             reinterpret_cast<float4*>(
