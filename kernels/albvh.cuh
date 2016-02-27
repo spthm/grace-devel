@@ -206,6 +206,38 @@ struct is_invalid_node<int2> : public thrust::unary_function<int2, bool>
     }
 };
 
+GRACE_HOST_DEVICE unsigned long long pack(int x, int y)
+{
+    typedef unsigned int       u32;
+    typedef unsigned long long u64;
+    
+    GRACE_ASSERT(sizeof(int) * CHAR_BIT == 32);
+    GRACE_ASSERT(sizeof(u32) * CHAR_BIT == 32);
+    GRACE_ASSERT(sizeof(u64) * CHAR_BIT == 64);
+
+    u32 u_x = reinterpret_cast<u32&>(x);
+    u32 u_y = reinterpret_cast<u32&>(y);
+
+    u64 ull_x = static_cast<u64>(u_x);
+    u64 ull_y = static_cast<u64>(u_y);
+
+    return (ull_x << 32) | ull_y;
+}
+
+GRACE_HOST_DEVICE int2 unpack(unsigned long long xy)
+{
+    typedef unsigned int       u32;
+    typedef unsigned long long u64;
+
+    u32 u_x = static_cast<u32>(xy >> 32);
+    u32 u_y = static_cast<u32>(xy);
+
+    int x = reinterpret_cast<int&>(u_x);
+    int y = reinterpret_cast<int&>(u_y);
+
+    return make_int2(x, y);
+}
+
 //-----------------------------------------------------------------------------
 // CUDA ALBVH kernels.
 //-----------------------------------------------------------------------------
@@ -577,9 +609,10 @@ __global__ void join_leaves_kernel(
     int4* nodes,
     const int4* leaves,
     const size_t n_leaves,
+    const int iteration,
     PrimitiveIter primitives,
     DeltaIter deltas,
-    int* counters,
+    unsigned long long* flags,
     int* outq,
     int* pool,
     const DeltaComp delta_comp,
@@ -650,9 +683,12 @@ __global__ void join_leaves_kernel(
 
             // The second thread to reach a (parent) node will write that node's
             // index to the work queue.
-            int count = atomicAdd(counters + parent_index, 1);
-            GRACE_ASSERT(count < 2);
-            join = (count == 1);
+            const unsigned long long thread_code = pack(iteration, tid);
+            const unsigned long long other_code = atomicExch(flags + parent_index, thread_code);
+            const int2 other = unpack(other_code);
+            const int other_idx = other.y;
+            GRACE_ASSERT(other_idx != tid);
+            join = (other_idx != -1);
         } // if (tid < n_leaves);
 
         // Per-block update of work-queue pool.
@@ -665,7 +701,6 @@ __global__ void join_leaves_kernel(
         __syncthreads();
 
         if (join) {
-            GRACE_ASSERT(atomicExch(counters + parent_index, 2) == 2);
             outq[block_offset + thread_offset] = parent_index;
         }
 
@@ -687,13 +722,14 @@ template <
 __global__ void join_nodes_kernel(
     const int* inq,
     const size_t n_in,
+    const int iteration,
     int4* nodes,
     const size_t n_nodes,
     int* root_index,
     PrimitiveIter primitives,
     DeltaIter deltas,
     const int climb_levels,
-    int* counters,
+    unsigned long long int* flags,
     int* outq,
     int* pool,
     const DeltaComp delta_comp,
@@ -702,7 +738,15 @@ __global__ void join_nodes_kernel(
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
 
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
-    __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
+
+    union Shared {
+        int scan[grace::BUILD_THREADS_PER_BLOCK];
+        int other_end[grace::BUILD_THREADS_PER_BLOCK];
+    };
+
+    __shared__ float3 AABB_min[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ float3 AABB_max[grace::BUILD_THREADS_PER_BLOCK];
+    __shared__ Shared shared;
     __shared__ int block_offset;
 
     const int lane = threadIdx.x % grace::WARP_SIZE;
@@ -717,37 +761,56 @@ __global__ void join_nodes_kernel(
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+        const int low = bid * grace::BUILD_THREADS_PER_BLOCK;
+        const int high = (bid + 1) * grace::BUILD_THREADS_PER_BLOCK;
         const bool active = (tid < n_in);
 
-        int node_index;
+        int node_index, other_idx, other_iteration;
         if (active) {
             node_index = inq[tid];
-            GRACE_ASSERT(atomicExch(counters + node_index, 2) == 2);
+            other_idx = -1; // Out of range for all threads.
+            other_iteration = -1; // Never a valid iteration count.
         }
 
         int4 node;
-        float4 AABB1, AABB2, AABB3;
+        float3 bot, top;
         bool climb = active;
         for (int level = 0; level < climb_levels && climb; ++level)
         {
-            node = get_inner(node_index, nodes);
-            AABB1 = get_AABB1(node_index, nodes);
-            AABB2 = get_AABB2(node_index, nodes);
-            AABB3 = get_AABB3(node_index, nodes);
-
             GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
+
+            if (other_iteration != iteration ||
+                out_of_block(other_idx, low, high))
+            {
+                node = get_inner(node_index, nodes);
+                const float4 AABB1 = get_AABB1(node_index, nodes);
+                const float4 AABB2 = get_AABB2(node_index, nodes);
+                const float4 AABB3 = get_AABB3(node_index, nodes);
+                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+            }
+            else
+            {
+                const int other_end = shared.other_end[other_idx - low];
+                if (other_end > node.w) node.w = other_end;
+                else                    node.z = other_end;
+
+                const float3 other_bot = AABB_min[other_idx - low];
+                const float3 other_top = AABB_max[other_idx - low];
+                AABB_union(bot, top, other_bot, other_top, &bot, &top);
+            }
+
             GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
             GRACE_ASSERT(node.y > 0 && node.w <= n_nodes + n_leaves - 1);
             GRACE_ASSERT(node.z >= 0 && node.z < n_leaves - 1);
             GRACE_ASSERT(node.w > 0 && node.w <= n_leaves - 1);
 
-            float3 bot, top;
-            AABB_union(AABB1, AABB2, AABB3, &bot, &top);
-
             // Note, they should never be equal.
             GRACE_ASSERT(bot.x < top.x);
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
+
+            AABB_min[threadIdx.x] = bot;
+            AABB_max[threadIdx.x] = top;
 
             // Root node has no valid parent index.
             if (node_size(node) < n_leaves)
@@ -757,20 +820,27 @@ __global__ void join_nodes_kernel(
                 if (is_left_child(node, parent_index)) {
                     propagate_left(node, bot, top, node_index, parent_index,
                                    nodes);
+                    shared.other_end[threadIdx.x] = node.z;
                 }
                 else {
                     propagate_right(node, bot, top, node_index, parent_index,
                                     nodes);
+                    shared.other_end[threadIdx.x] = node.w;
                 }
 
-                // If another thread sees count == 1 for the current parent, it
-                // must also be able to see our writes to the parent node.
+                // If another thread sees other_idx != -1 for the current
+                // parent, it must also be able to see our writes to the
+                // current parent.
                 __threadfence();
 
-                int count = atomicAdd(counters + parent_index, 1);
-                GRACE_ASSERT(count < 2);
+                const unsigned long long thread_code = pack(iteration, tid);
+                const unsigned long long other_code = atomicExch(flags + parent_index, thread_code);
+                GRACE_ASSERT(other_code != thread_code);
+                const int2 other = unpack(other_code);
+                other_iteration = other.x;
+                other_idx = other.y;
                 // Second thread to reach the parent is the one which continues.
-                climb = (count == 1);
+                climb = (other_idx != -1);
 
                 node_index = parent_index;
             }
@@ -792,21 +862,20 @@ __global__ void join_nodes_kernel(
         // On Kepler, this is fastest.
         int total = __syncthreads_count(join);
         const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
-                                                     shared);
+                                                     shared.scan);
 
         if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
         __syncthreads();
 
         if (join) {
-            GRACE_ASSERT(atomicExch(counters + join_node_index, 2) == 2);
             outq[block_offset + thread_offset] = join_node_index;
         }
 
         // Per-warp update of work-queue pool.
         // int total = 0;
         // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0 && total) shared[wid] = atomicAdd(pool, total);
-        // if (join) outq[shared[wid] + lane_offset] = parent_index;
+        // if (lane == 0 && total) shared.scan[wid] = atomicAdd(pool, total);
+        // if (join) outq[shared.scan[wid] + lane_offset] = parent_index;
     } // for bid * BUILD_THREADS_PER_BLOCK < n_in
 }
 
@@ -937,13 +1006,15 @@ GRACE_HOST void build_nodes(
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
-    thrust::device_vector<int> d_counters(n_nodes);
+    thrust::device_vector<unsigned long long int> d_flags(n_nodes);
     thrust::device_vector<int> d_queue1(n_leaves / 2);
     thrust::device_vector<int> d_queue2(n_leaves / 2);
     thrust::device_vector<int> d_pool(1);
 
-    thrust::fill(d_counters.begin(), d_counters.end(), 0);
+    const unsigned long long flag = pack(0, -1);
+    thrust::fill(d_flags.begin(), d_flags.end(), flag);
     d_pool[0] = 0;
+    int iteration = 0;
 
     int* d_in_queue = thrust::raw_pointer_cast(d_queue1.data());
     int* d_out_queue = thrust::raw_pointer_cast(d_queue2.data());
@@ -955,15 +1026,18 @@ GRACE_HOST void build_nodes(
         thrust::raw_pointer_cast(d_tree.nodes.data()),
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         n_leaves,
+        iteration,
         d_prims_iter,
         d_deltas_iter,
-        thrust::raw_pointer_cast(d_counters.data()),
+        thrust::raw_pointer_cast(d_flags.data()),
         d_in_queue, // Will be used as input for first iteration of while().
         thrust::raw_pointer_cast(d_pool.data()),
         delta_comp,
         AABB);
 
     size_t n_in = d_pool[0];
+    // join_leaves_kernel was iteration 1.
+    ++iteration;
     while (n_in)
     {
         d_pool[0] = 0;
@@ -975,13 +1049,14 @@ GRACE_HOST void build_nodes(
         join_nodes_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             d_in_queue,
             n_in,
+            iteration,
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
             d_tree.root_index_ptr,
             d_prims_iter,
             d_deltas_iter,
             10, // TODO: Choose optimal value, or find suitable heuristic.
-            thrust::raw_pointer_cast(d_counters.data()),
+            thrust::raw_pointer_cast(d_flags.data()),
             d_out_queue,
             thrust::raw_pointer_cast(d_pool.data()),
             delta_comp,
@@ -989,6 +1064,7 @@ GRACE_HOST void build_nodes(
         GRACE_KERNEL_CHECK();
 
         n_in = d_pool[0];
+        ++iteration;
         std::swap(d_in_queue, d_out_queue);
     }
 }
