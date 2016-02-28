@@ -210,7 +210,7 @@ GRACE_HOST_DEVICE unsigned long long pack(int x, int y)
 {
     typedef unsigned int       u32;
     typedef unsigned long long u64;
-    
+
     GRACE_ASSERT(sizeof(int) * CHAR_BIT == 32);
     GRACE_ASSERT(sizeof(u32) * CHAR_BIT == 32);
     GRACE_ASSERT(sizeof(u64) * CHAR_BIT == 64);
@@ -766,38 +766,57 @@ __global__ void join_nodes_kernel(
         const bool active = (tid < n_in);
 
         int node_index, other_idx, other_iteration;
-        if (active) {
-            node_index = inq[tid];
-            other_idx = -1; // Out of range for all threads.
-            other_iteration = -1; // Never a valid iteration count.
-        }
-
         int4 node;
         float3 bot, top;
+        if (active) {
+            node_index = inq[tid];
+            node = get_inner(node_index, nodes);
+
+            // Set up AABB_min[other_idx], AABB_max[other_idx] and
+            // shared.other_end[other_idx] as if we have come from the right
+            // child of node.
+            other_idx = tid;
+            other_iteration = iteration;
+            shared.other_end[threadIdx.x] = node.z;
+
+            get_left_AABB(node_index, nodes, &bot, &top);
+            AABB_min[threadIdx.x] = bot;
+            AABB_max[threadIdx.x] = top;
+
+            get_right_AABB(node_index, nodes, &bot, &top);
+        }
+
         bool climb = active;
         for (int level = 0; level < climb_levels && climb; ++level)
         {
             GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
 
+            const bool from_left = is_left_child(node, node_index);
+
+            float3 other_bot, other_top;
             if (other_iteration != iteration ||
                 out_of_block(other_idx, low, high))
             {
                 node = get_inner(node_index, nodes);
-                const float4 AABB1 = get_AABB1(node_index, nodes);
-                const float4 AABB2 = get_AABB2(node_index, nodes);
-                const float4 AABB3 = get_AABB3(node_index, nodes);
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
+                if (from_left) {
+                    get_right_AABB(node_index, nodes, &other_bot, &other_top);
+                }
+                else {
+                    get_left_AABB(node_index, nodes, &other_bot, &other_top);
+                }
             }
             else
             {
                 const int other_end = shared.other_end[other_idx - low];
-                if (other_end > node.w) node.w = other_end;
-                else                    node.z = other_end;
+                if (from_left) node.w = other_end;
+                else           node.z = other_end;
 
-                const float3 other_bot = AABB_min[other_idx - low];
-                const float3 other_top = AABB_max[other_idx - low];
-                AABB_union(bot, top, other_bot, other_top, &bot, &top);
+                other_bot = AABB_min[other_idx - low];
+                other_top = AABB_max[other_idx - low];
             }
+
+            AABB_union(bot, top, other_bot, other_top, &bot, &top);
+
 
             GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
             GRACE_ASSERT(node.y > 0 && node.w <= n_nodes + n_leaves - 1);
