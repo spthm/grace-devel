@@ -210,7 +210,7 @@ GRACE_HOST_DEVICE unsigned long long pack(int x, int y)
 {
     typedef unsigned int       u32;
     typedef unsigned long long u64;
-    
+
     GRACE_ASSERT(sizeof(int) * CHAR_BIT == 32);
     GRACE_ASSERT(sizeof(u32) * CHAR_BIT == 32);
     GRACE_ASSERT(sizeof(u64) * CHAR_BIT == 64);
@@ -443,60 +443,46 @@ GRACE_DEVICE int block_ex_scan_pred(bool pred, const int lane, const int wid,
 
 template <typename DeltaIter, typename DeltaComp>
 __global__ void build_leaves_kernel(
-    const int4* inq,
-    const size_t n_in,
+    const int2* leaves,
+    const size_t n_leaves,
     DeltaIter deltas,
     const size_t n_primitives,
     const int max_per_leaf,
-    const int climb_levels,
     int* node_ends,
-    int4* outq,
-    int* pool,
     int4* wide_leaves,
-    int* spanned_primitives,
     const DeltaComp delta_comp)
 {
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
-
-    __shared__ int shared[grace::BUILD_THREADS_PER_BLOCK];
-    __shared__ int block_offset;
-
-    const int lane = threadIdx.x % grace::WARP_SIZE;
-    const int wid = threadIdx.x / grace::WARP_SIZE;
-    const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
-
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
     ++deltas;
 
     int bid = blockIdx.x;
-    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
+    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-        const bool active = (tid < n_in);
+        const bool active = (tid < n_leaves);
 
-        int4 node;
+        int2 node;
         int node_index;
         if (active) {
-            node = inq[tid];
-            node_index = node.x;
+            node = leaves[tid];
+            node_index = tid;
         }
 
         int total = 0;
         bool climb = active;
-        for (int level = 0; level < climb_levels && climb; ++level)
+        while(climb)
         {
-            GRACE_ASSERT(node.x >= 0 || node.x == node.z);
-            GRACE_ASSERT(node.x < n_primitives - 1 || node.z == node.w);
-            GRACE_ASSERT(node.z >= 0 || node.x == node.z);
-            GRACE_ASSERT(node.z < n_primitives - 1 || node.z == node.w);
-            GRACE_ASSERT(node.w > 0 || node.z == node.w);
-            GRACE_ASSERT(node.w < n_primitives);
+            GRACE_ASSERT(node.x >= 0 || node.x == node.y);
+            GRACE_ASSERT(node.x < n_primitives - 1 || node.x == node.y);
+            GRACE_ASSERT(node.y > 0 || node.x == node.y);
+            GRACE_ASSERT(node.y < n_primitives);
 
             if (node_size(node) > max_per_leaf)
             {
-                const int2 lchild = make_int2(node.z, node_index);
-                const int2 rchild = make_int2(node_index + 1, node.w);
+                const int2 lchild = make_int2(node.x, node_index);
+                const int2 rchild = make_int2(node_index + 1, node.y);
 
                 const int4 lleaf = make_int4(lchild.x, node_size(lchild),
                                              -1, -1);
@@ -523,16 +509,15 @@ __global__ void build_leaves_kernel(
             if (node_size(node) < n_primitives)
             {
                 const int parent_index = node_parent(node, deltas, delta_comp);
-                GRACE_ASSERT(parent_index != node_index || node.z == node.w);
+                GRACE_ASSERT(parent_index != node_index || node.x == node.y);
 
-                const int this_end = is_left_child(node, parent_index) ? node.z : node.w;
+                const int this_end = is_left_child(node, parent_index) ? node.x : node.y;
                 const int other_end = atomicExch(&node_ends[parent_index], this_end);
                 GRACE_ASSERT(other_end != this_end);
 
                 // Second thread to reach the parent is the one which continues.
                 climb = (other_end != -1);
-                node = make_int4(parent_index, -1,
-                                 min(this_end, other_end),
+                node = make_int2(min(this_end, other_end),
                                  max(this_end, other_end));
                 node_index = parent_index;
             }
@@ -542,49 +527,8 @@ __global__ void build_leaves_kernel(
                 // to avoid deadlock.
                 climb = false;
             }
-        } // for (level < climb_levels && climb)
-
-        // Any thread wishing to continue the climb beyond climb_levels should
-        // output its parent to the queue.
-        const bool join = climb;
-        const int4 join_node = node;
-
-        // Make sure we can safely use shared.
-        __syncthreads();
-
-        // Per-block update of spanned_primitives.
-        // total = block_reduce(total, lane, wid, n_warps, shared);
-        // if (threadIdx.x == 0 && total) atomicAdd(spanned_primitives, total);
-
-        // Per-warp update of spanned_primitives.
-        if (__ballot(total != 0)) {
-            total = warp_reduce(total, lane, shared + wid * grace::WARP_SIZE);
-        }
-        if (lane == 0 && total) atomicAdd(spanned_primitives, total);
-
-        // Per-thread update of spanned_primitives.
-        // On Kepler, this seems marginally faster.
-        // if (total) atomicAdd(spanned_primitives, total);
-
-        // Per-block update of work-queue pool.
-        // On Kepler, this is fastest.
-        // Make sure we're done with shared before we use it again.
-        total = __syncthreads_count(join);
-        const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
-                                                     shared);
-        if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
-        __syncthreads();
-        if (join) outq[block_offset + thread_offset] = join_node;
-
-        // Per-warp update of work-queue pool.
-        // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0) shared[wid] = atomicAdd(pool, total);
-        // if (join) outq[shared[wid] + lane_offset] = join_node;
-
-        // Per-thread update of work-queue pool.
-        // int offset = atomicAdd(pool, (int)join);
-        // if (join) outq[offset] = join_node;
-    } // for bid * BUILD_THREADS_PER_BLOCK < n_in
+        } // while (climb)
+    } // for bid * BUILD_THREADS_PER_BLOCK < n_leaves
 }
 
 __global__ void fix_leaf_ranges(int4* leaves, const size_t n_leaves)
@@ -609,10 +553,9 @@ __global__ void join_leaves_kernel(
     int4* nodes,
     const int4* leaves,
     const size_t n_leaves,
-    const int iteration,
     PrimitiveIter primitives,
     DeltaIter deltas,
-    unsigned long long* flags,
+    int* flags,
     int* outq,
     int* pool,
     const DeltaComp delta_comp,
@@ -683,10 +626,10 @@ __global__ void join_leaves_kernel(
 
             // The second thread to reach a (parent) node will write that node's
             // index to the work queue.
-            const unsigned long long thread_code = pack(iteration, tid);
-            const unsigned long long other_code = atomicExch(flags + parent_index, thread_code);
-            const int2 other = unpack(other_code);
-            const int other_idx = other.y;
+            // -2 is never a valid tid, so join_nodes_kernel will not attempt to
+            // read from shared memory when it reads an other_idx written by
+            // this kernel.
+            const int other_idx = atomicExch(flags + parent_index, -2);
             GRACE_ASSERT(other_idx != tid);
             join = (other_idx != -1);
         } // if (tid < n_leaves);
@@ -714,7 +657,6 @@ __global__ void join_leaves_kernel(
 }
 
 template <
-    typename PrimitiveIter,
     typename DeltaIter,
     typename DeltaComp,
     typename AABBFunc
@@ -722,22 +664,15 @@ template <
 __global__ void join_nodes_kernel(
     const int* inq,
     const size_t n_in,
-    const int iteration,
     int4* nodes,
     const size_t n_nodes,
     int* root_index,
-    PrimitiveIter primitives,
     DeltaIter deltas,
-    const int climb_levels,
-    unsigned long long int* flags,
-    int* outq,
-    int* pool,
+    int* flags,
     const DeltaComp delta_comp,
     const AABBFunc AABB)
 {
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
-
-    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
 
     union Shared {
         int scan[grace::BUILD_THREADS_PER_BLOCK];
@@ -747,11 +682,7 @@ __global__ void join_nodes_kernel(
     __shared__ float3 AABB_min[grace::BUILD_THREADS_PER_BLOCK];
     __shared__ float3 AABB_max[grace::BUILD_THREADS_PER_BLOCK];
     __shared__ Shared shared;
-    __shared__ int block_offset;
 
-    const int lane = threadIdx.x % grace::WARP_SIZE;
-    const int wid = threadIdx.x / grace::WARP_SIZE;
-    const int n_warps = grace::BUILD_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t n_leaves = n_nodes + 1;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
@@ -765,22 +696,20 @@ __global__ void join_nodes_kernel(
         const int high = (bid + 1) * grace::BUILD_THREADS_PER_BLOCK;
         const bool active = (tid < n_in);
 
-        int node_index, other_idx, other_iteration;
+        int node_index, other_idx;
         if (active) {
             node_index = inq[tid];
             other_idx = -1; // Out of range for all threads.
-            other_iteration = -1; // Never a valid iteration count.
         }
 
         int4 node;
         float3 bot, top;
         bool climb = active;
-        for (int level = 0; level < climb_levels && climb; ++level)
+        while(climb)
         {
             GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
 
-            if (other_iteration != iteration ||
-                out_of_block(other_idx, low, high))
+            if (out_of_block(other_idx, low, high))
             {
                 node = get_inner(node_index, nodes);
                 const float4 AABB1 = get_AABB1(node_index, nodes);
@@ -833,12 +762,8 @@ __global__ void join_nodes_kernel(
                 // current parent.
                 __threadfence();
 
-                const unsigned long long thread_code = pack(iteration, tid);
-                const unsigned long long other_code = atomicExch(flags + parent_index, thread_code);
-                GRACE_ASSERT(other_code != thread_code);
-                const int2 other = unpack(other_code);
-                other_iteration = other.x;
-                other_idx = other.y;
+                other_idx = atomicExch(flags + parent_index, tid);
+                GRACE_ASSERT(other_idx != tid);
                 // Second thread to reach the parent is the one which continues.
                 climb = (other_idx != -1);
 
@@ -851,31 +776,7 @@ __global__ void join_nodes_kernel(
                 *root_index = node_index;
                 climb = false;
             }
-        } // for (level < climb_levels && climb);
-
-        // Any thread wishing to climb beyond climb_levels should output its
-        // current parent index to the queue.
-        const bool join = climb;
-        const int join_node_index = node_index;
-
-        // Per-block update of work-queue pool.
-        // On Kepler, this is fastest.
-        int total = __syncthreads_count(join);
-        const int thread_offset = block_ex_scan_pred(join, lane, wid, n_warps,
-                                                     shared.scan);
-
-        if (threadIdx.x == 0) block_offset = atomicAdd(pool, total);
-        __syncthreads();
-
-        if (join) {
-            outq[block_offset + thread_offset] = join_node_index;
-        }
-
-        // Per-warp update of work-queue pool.
-        // int total = 0;
-        // int lane_offset = warp_ex_scan_pred(join, lane, &total);
-        // if (lane == 0 && total) shared.scan[wid] = atomicAdd(pool, total);
-        // if (join) outq[shared.scan[wid] + lane_offset] = parent_index;
+        } // while (climb)
     } // for bid * BUILD_THREADS_PER_BLOCK < n_in
 }
 
@@ -900,11 +801,11 @@ GRACE_HOST void copy_leaf_deltas(
     GRACE_KERNEL_CHECK();
 }
 
-struct int4_functor
+struct int2_functor
 {
-    GRACE_HOST_DEVICE int4 operator()(unsigned int n)
+    GRACE_HOST_DEVICE int2 operator()(unsigned int n)
     {
-        return make_int4(n, n, n, n);
+        return make_int2(n, n);
     }
 };
 
@@ -924,48 +825,25 @@ GRACE_HOST void build_leaves(
     }
 
     thrust::device_vector<int> d_node_ends(n_primitives - 1);
-    thrust::device_vector<int4> d_queue1(n_primitives);
-    thrust::device_vector<int4> d_queue2(n_primitives / 2);
-    thrust::device_vector<int> d_pool(1);
-    thrust::device_vector<int> d_completed(1);
+    thrust::device_vector<int2> d_leaves(n_primitives);
 
     thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(),
                  invalid<int4>::node);
     thrust::fill(d_node_ends.begin(), d_node_ends.end(), -1);
-    thrust::tabulate(d_queue1.begin(), d_queue1.end(), int4_functor());
-    d_completed[0] = 0;
+    thrust::tabulate(d_leaves.begin(), d_leaves.end(), int2_functor());
 
-    int4* d_in_queue  = thrust::raw_pointer_cast(d_queue1.data());
-    int4* d_out_queue = thrust::raw_pointer_cast(d_queue2.data());
-
-    size_t n_in = n_primitives;
-    int n_completed = 0;
-    while (n_completed < n_primitives)
-    {
-        d_pool[0] = 0u;
-
-        int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
-        build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-            d_in_queue,
-            n_in,
-            d_deltas_iter,
-            n_primitives,
-            max_per_leaf,
-            10, // On Kepler, this is optimal for max_per_leaf = 32, 64 and 128.
-            thrust::raw_pointer_cast(d_node_ends.data()),
-            d_out_queue,
-            thrust::raw_pointer_cast(d_pool.data()),
-            thrust::raw_pointer_cast(d_tree.leaves.data()),
-            thrust::raw_pointer_cast(d_completed.data()),
-            delta_comp);
-
-        n_in = d_pool[0];
-        n_completed = d_completed[0];
-
-        std::swap(d_in_queue, d_out_queue);
-    }
+    int blocks = min(grace::MAX_BLOCKS,
+                 (int) ((d_leaves.size() + grace::BUILD_THREADS_PER_BLOCK - 1)
+                         / grace::BUILD_THREADS_PER_BLOCK));
+    build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_leaves.data()),
+        d_leaves.size(),
+        d_deltas_iter,
+        n_primitives,
+        max_per_leaf,
+        thrust::raw_pointer_cast(d_node_ends.data()),
+        thrust::raw_pointer_cast(d_tree.leaves.data()),
+        delta_comp);
 
     // Using
     //   const invalid4 = make_int4(-1, -1, -1, -1);
@@ -980,9 +858,9 @@ GRACE_HOST void build_leaves(
     const size_t n_wide_leaves = d_tree.leaves.size();
     d_tree.nodes.resize(4 * n_wide_leaves);
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_wide_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
+    blocks = min(grace::MAX_BLOCKS,
+                 (int) ((n_wide_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
+                         / grace::BUILD_THREADS_PER_BLOCK));
 
     fix_leaf_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tree.leaves.data()),
@@ -1006,18 +884,12 @@ GRACE_HOST void build_nodes(
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
 
-    thrust::device_vector<unsigned long long int> d_flags(n_nodes);
-    thrust::device_vector<int> d_queue1(n_leaves / 2);
-    thrust::device_vector<int> d_queue2(n_leaves / 2);
+    thrust::device_vector<int> d_flags(n_nodes);
+    thrust::device_vector<int> d_start_indices(n_leaves / 2);
     thrust::device_vector<int> d_pool(1);
 
-    const unsigned long long flag = pack(0, -1);
-    thrust::fill(d_flags.begin(), d_flags.end(), flag);
+    thrust::fill(d_flags.begin(), d_flags.end(), -1);
     d_pool[0] = 0;
-    int iteration = 0;
-
-    int* d_in_queue = thrust::raw_pointer_cast(d_queue1.data());
-    int* d_out_queue = thrust::raw_pointer_cast(d_queue2.data());
 
     int blocks = min(grace::MAX_BLOCKS,
                      (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -1026,47 +898,30 @@ GRACE_HOST void build_nodes(
         thrust::raw_pointer_cast(d_tree.nodes.data()),
         thrust::raw_pointer_cast(d_tree.leaves.data()),
         n_leaves,
-        iteration,
         d_prims_iter,
         d_deltas_iter,
         thrust::raw_pointer_cast(d_flags.data()),
-        d_in_queue, // Will be used as input for first iteration of while().
+        thrust::raw_pointer_cast(d_start_indices.data()),
         thrust::raw_pointer_cast(d_pool.data()),
         delta_comp,
         AABB);
 
-    size_t n_in = d_pool[0];
-    // join_leaves_kernel was iteration 1.
-    ++iteration;
-    while (n_in)
-    {
-        d_pool[0] = 0;
+    const size_t n_in = d_pool[0];
+    blocks = min(grace::MAX_BLOCKS,
+                 (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
+                         / grace::BUILD_THREADS_PER_BLOCK));
 
-        blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
-
-        join_nodes_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-            d_in_queue,
-            n_in,
-            iteration,
-            thrust::raw_pointer_cast(d_tree.nodes.data()),
-            n_nodes,
-            d_tree.root_index_ptr,
-            d_prims_iter,
-            d_deltas_iter,
-            10, // TODO: Choose optimal value, or find suitable heuristic.
-            thrust::raw_pointer_cast(d_flags.data()),
-            d_out_queue,
-            thrust::raw_pointer_cast(d_pool.data()),
-            delta_comp,
-            AABB);
-        GRACE_KERNEL_CHECK();
-
-        n_in = d_pool[0];
-        ++iteration;
-        std::swap(d_in_queue, d_out_queue);
-    }
+    join_nodes_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        thrust::raw_pointer_cast(d_start_indices.data()),
+        n_in,
+        thrust::raw_pointer_cast(d_tree.nodes.data()),
+        n_nodes,
+        d_tree.root_index_ptr,
+        d_deltas_iter,
+        thrust::raw_pointer_cast(d_flags.data()),
+        delta_comp,
+        AABB);
+    GRACE_KERNEL_CHECK();
 }
 
 } // namespace ALBVH
