@@ -674,15 +674,6 @@ __global__ void join_nodes_kernel(
 {
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
 
-    union Shared {
-        int scan[grace::BUILD_THREADS_PER_BLOCK];
-        int other_end[grace::BUILD_THREADS_PER_BLOCK];
-    };
-
-    __shared__ float3 AABB_min[grace::BUILD_THREADS_PER_BLOCK];
-    __shared__ float3 AABB_max[grace::BUILD_THREADS_PER_BLOCK];
-    __shared__ Shared shared;
-
     const size_t n_leaves = n_nodes + 1;
 
     // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
@@ -692,41 +683,25 @@ __global__ void join_nodes_kernel(
     for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_in; bid += gridDim.x)
     {
         const int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
-        const int low = bid * grace::BUILD_THREADS_PER_BLOCK;
-        const int high = (bid + 1) * grace::BUILD_THREADS_PER_BLOCK;
         const bool active = (tid < n_in);
 
-        int node_index, other_idx;
+        int node_index;
         if (active) {
             node_index = inq[tid];
-            other_idx = -1; // Out of range for all threads.
         }
 
-        int4 node;
-        float3 bot, top;
         bool climb = active;
         while(climb)
         {
             GRACE_ASSERT(node_index >= 0 && node_index < n_nodes);
 
-            if (out_of_block(other_idx, low, high))
-            {
-                node = get_inner(node_index, nodes);
-                const float4 AABB1 = get_AABB1(node_index, nodes);
-                const float4 AABB2 = get_AABB2(node_index, nodes);
-                const float4 AABB3 = get_AABB3(node_index, nodes);
-                AABB_union(AABB1, AABB2, AABB3, &bot, &top);
-            }
-            else
-            {
-                const int other_end = shared.other_end[other_idx - low];
-                if (other_end > node.w) node.w = other_end;
-                else                    node.z = other_end;
+            const int4 node = get_inner(node_index, nodes);
+            const float4 AABB1 = get_AABB1(node_index, nodes);
+            const float4 AABB2 = get_AABB2(node_index, nodes);
+            const float4 AABB3 = get_AABB3(node_index, nodes);
 
-                const float3 other_bot = AABB_min[other_idx - low];
-                const float3 other_top = AABB_max[other_idx - low];
-                AABB_union(bot, top, other_bot, other_top, &bot, &top);
-            }
+            float3 bot, top;
+            AABB_union(AABB1, AABB2, AABB3, &bot, &top);
 
             GRACE_ASSERT(node.x >= 0 && node.x < n_nodes + n_leaves - 1);
             GRACE_ASSERT(node.y > 0 && node.w <= n_nodes + n_leaves - 1);
@@ -738,9 +713,6 @@ __global__ void join_nodes_kernel(
             GRACE_ASSERT(bot.y < top.y);
             GRACE_ASSERT(bot.z < top.z);
 
-            AABB_min[threadIdx.x] = bot;
-            AABB_max[threadIdx.x] = top;
-
             // Root node has no valid parent index.
             if (node_size(node) < n_leaves)
             {
@@ -749,12 +721,10 @@ __global__ void join_nodes_kernel(
                 if (is_left_child(node, parent_index)) {
                     propagate_left(node, bot, top, node_index, parent_index,
                                    nodes);
-                    shared.other_end[threadIdx.x] = node.z;
                 }
                 else {
                     propagate_right(node, bot, top, node_index, parent_index,
                                     nodes);
-                    shared.other_end[threadIdx.x] = node.w;
                 }
 
                 // If another thread sees other_idx != -1 for the current
@@ -762,7 +732,7 @@ __global__ void join_nodes_kernel(
                 // current parent.
                 __threadfence();
 
-                other_idx = atomicExch(flags + parent_index, tid);
+                const int other_idx = atomicExch(flags + parent_index, tid);
                 GRACE_ASSERT(other_idx != tid);
                 // Second thread to reach the parent is the one which continues.
                 climb = (other_idx != -1);
