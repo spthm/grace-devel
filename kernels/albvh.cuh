@@ -212,90 +212,153 @@ __global__ void copy_leaf_deltas_kernel(
     }
 }
 
+// Return the index of the largest delta-value in the range [begin, end).
 template <typename DeltaIter, typename DeltaComp>
-__global__ void build_leaves_kernel(
-    int2* tmp_nodes,
-    const size_t n_nodes,
-    DeltaIter deltas,
-    const int max_per_leaf,
-    const DeltaComp delta_comp)
+GRACE_HOST_DEVICE int find_split(int begin, int end, DeltaIter deltas,
+                                 DeltaComp comp)
 {
-    extern __shared__ int SMEM[];
+    int max_delta_idx = begin;
+    DeltaType max_delta = deltas[begin];
 
-    const size_t n_leaves = n_nodes + 1;
+    for (int i = begin + 1; i < end; ++i)
+    {
+        DeltaType delta = deltas[i];
 
-    // Offset deltas so the range [-1, n_leaves) is valid for indexing it.
+        if (delta_comp(max_delta, delta)) {
+            max_delta = delta;
+            max_delta_idx = i;
+        }
+    }
+}
+
+// TODO: This is just a segmented reduction over deltas. Use e.g. MGPU.
+//
+// Note: tid == n_segments - 1 should always find n_primitives - 1 for the
+// split index. This is not really the desired behaviour, as it may be that
+// the final segment should would be better if split into < max_per_group
+// sub-segments. But this only affects the final wide leaf, so it's essentially
+// inconsequential.
+template <typename DeltaIter, typename DeltaComp>
+__global__ coarse_splits_kernel(
+    const size_t n_primitives,
+    const int max_per_group,
+    DeltaIter deltas,
+    int* splits,
+    const size_t n_segments,
+    DeltaComp delta_comp)
+{
+    // Because deltas[0] == delta_function(-1, 0).
     ++deltas;
 
-    int bid = blockIdx.x;
-    for ( ; bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves; bid += gridDim.x)
+    for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+         tid < n_segments;
+         tid += blockDim.x * gridDim.x)
     {
-        int tid = threadIdx.x + bid * grace::BUILD_THREADS_PER_BLOCK;
+        const int begin = tid * max_per_group;
+        const int end = min((tid + 1) * max_per_group,
+                            static_cast<int>(n_primitives));
 
-        __syncthreads();
-        for (int i = threadIdx.x;
-             i < grace::BUILD_THREADS_PER_BLOCK + max_per_leaf;
-             i += grace::BUILD_THREADS_PER_BLOCK)
+        splits[tid] = find_split(begin, end, deltas, delta_comp);
+    }
+}
+
+template <typename DeltaIter, typename DeltaComp>
+__global__ count_fine_splits_kernel(
+    const int max_per_group,
+    DeltaIter deltas,
+    const int* splits,
+    const size_t n_splits,
+    int* split_counts,
+    DeltaComp delta_comp)
+{
+    // So deltas[-1] is valid.
+    ++deltas;
+
+    for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+         tid < n_splits;
+         tid += blockDim.x * gridDim.x)
+    {
+        int begin = (tid > 0) ? splits[tid - 1] + 1 : 0;
+        int end = splits[tid];
+        const int size = end - begin + 1;
+
+        int count = 1;
+        if (size > max_per_group)
         {
-            SMEM[i] = 0;
-        }
-        __syncthreads();
+            GRACE_ASSERT(size < 2 * max_per_group);
 
-        // [low, high) leaf indices covered by this block, including the
-        // max_per_leaf buffer.
-        int low = bid * grace::BUILD_THREADS_PER_BLOCK;
-        int high = min((bid + 1) * grace::BUILD_THREADS_PER_BLOCK + max_per_leaf,
-                       (int)n_leaves);
-        // So flags can be accessed directly with a node index.
-        int* flags = SMEM - low;
-
-        for (int idx = tid; idx < high; idx += grace::BUILD_THREADS_PER_BLOCK)
-        {
-            // First node is a leaf at idx.
-            int2 node = make_int2(idx, idx);
-            int2* parent_ptr = &node;
-
-            bool first_arrival;
-            // Climb tree.
             do
             {
-                node = *parent_ptr;
+                ++count;
 
-                GRACE_ASSERT(node.x >= 0);
-                GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
-                GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
-                GRACE_ASSERT(node.y < n_leaves);
+                const int split_idx = find_split(begin, end, deltas, delta_comp);
+                const int lsize = split_idx - begin + 1;
+                const int rsize = end - split_idx;
 
-                if (node_size(node) > max_per_leaf) {
-                    // Both children will become wide leaves.
-                    break;
-                }
+                GRACE_ASSERT(!(lsize > max_per_group && rsize > max_per_group));
 
-                int parent_index = node_parent(node, deltas, delta_comp);
-                parent_ptr = tmp_nodes + parent_index;
+                begin = (lsize > max_per_group) ? begin : split_idx + 1;
+                end   = (rsize > max_per_group) ? end   : split_idx;
+            }
+            while (begin < end);
+        }
 
-                if (out_of_block(parent_index, low, high)) {
-                    break;
-                }
+        split_counts[tid] = count;
+    }
+}
 
-                // Propagate left- or right-most primitive up the tree.
-                if (is_left_child(node, parent_index)) {
-                    tmp_nodes[parent_index].x = node.x;
-                }
-                else {
-                    tmp_nodes[parent_index].y = node.y;
-                }
+template <typename DeltaIter, typename DeltaComp>
+__global__ fine_splits_kernel(
+    const int max_per_group,
+    DeltaIter deltas,
+    const int* split_offsets,
+    const size_t n_coarse_splits,
+    int* fine_splits,
+    DeltaComp delta_comp)
+{
+    // So deltas[-1] is valid.
+    ++deltas;
 
-                __threadfence_block();
+    for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+         tid < n_coarse_splits;
+         tid += blockDim.x * gridDim.x)
+    {
+        const int begin_offset = (tid > 0) ? split_offsets[tid - 1] : 0;
+        const int end_offset = split_offsets[tid];
 
-                unsigned int count = atomicAdd(flags + parent_index, 1);
-                first_arrival = (count == 0);
+        int begin = (tid > 0) ? fine_splits[begin_offset] + 1 : 0;
+        int end = coarse_splits[end_offset];
+        const int size = end - begin + 1;
 
-                GRACE_ASSERT(count < 2);
-            } while (!first_arrival);
+        if (size > max_per_group)
+        {
+            GRACE_ASSERT(size < 2 * max_per_group);
 
-        } // for idx < high
-    } // for bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves
+            // Splits must be output in ascending order (of split index).
+            // We ensure this by writing either the first- or last-most split
+            // each time, updating first/last after each write.
+            int first = begin_offset + 1;
+            int last  = end_offset - 1;
+
+            do
+            {
+                GRACE_ASSERT(first < last);
+
+                const int split_idx = find_split(begin, end, deltas, delta_comp);
+                const int lsize = split_idx - begin + 1;
+                const int rsize = end - split_idx;
+
+                GRACE_ASSERT(!(lsize > max_per_group && rsize > max_per_group));
+
+                if (lsize > max_per_group) fine_splits[last--] = split_idx;
+                if (rsize > max_per_group) fine_splits[first++] = split_idx;
+
+                begin = (lsize > max_per_group) ? begin : split_idx + 1;
+                end   = (rsize > max_per_group) ? end   : split_idx;
+            }
+            while (begin < end);
+        }
+    }
 }
 
 __global__ void write_leaves_kernel(
