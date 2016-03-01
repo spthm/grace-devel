@@ -11,8 +11,10 @@
 #include <thrust/functional.h>
 #include <thrust/device_vector.h>
 #include <thrust/remove.h>
+#include <thrust/scan.h>
 #include <thrust/sequence.h>
 #include <thrust/swap.h>
+#include <thrust/transform.h>
 
 #include "../device/loadstore.cuh"
 #include "../error.h"
@@ -217,6 +219,8 @@ template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST_DEVICE int find_split(int begin, int end, DeltaIter deltas,
                                  DeltaComp comp)
 {
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
+
     int max_delta_idx = begin;
     DeltaType max_delta = deltas[begin];
 
@@ -224,11 +228,13 @@ GRACE_HOST_DEVICE int find_split(int begin, int end, DeltaIter deltas,
     {
         DeltaType delta = deltas[i];
 
-        if (delta_comp(max_delta, delta)) {
+        if (comp(max_delta, delta)) {
             max_delta = delta;
             max_delta_idx = i;
         }
     }
+
+    return max_delta_idx;
 }
 
 // TODO: This is just a segmented reduction over deltas. Use e.g. MGPU.
@@ -239,7 +245,7 @@ GRACE_HOST_DEVICE int find_split(int begin, int end, DeltaIter deltas,
 // sub-segments. But this only affects the final wide leaf, so it's essentially
 // inconsequential.
 template <typename DeltaIter, typename DeltaComp>
-__global__ coarse_splits_kernel(
+__global__ void coarse_splits_kernel(
     const size_t n_primitives,
     const int max_per_group,
     DeltaIter deltas,
@@ -263,7 +269,7 @@ __global__ coarse_splits_kernel(
 }
 
 template <typename DeltaIter, typename DeltaComp>
-__global__ count_fine_splits_kernel(
+__global__ void count_fine_splits_kernel(
     const int max_per_group,
     DeltaIter deltas,
     const int* splits,
@@ -282,6 +288,7 @@ __global__ count_fine_splits_kernel(
         int end = splits[tid];
         const int size = end - begin + 1;
 
+        // We always have at least one (coarse) split.
         int count = 1;
         if (size > max_per_group)
         {
@@ -308,7 +315,7 @@ __global__ count_fine_splits_kernel(
 }
 
 template <typename DeltaIter, typename DeltaComp>
-__global__ fine_splits_kernel(
+__global__ void fine_splits_kernel(
     const int max_per_group,
     DeltaIter deltas,
     const int* split_offsets,
@@ -327,12 +334,13 @@ __global__ fine_splits_kernel(
         const int end_offset = split_offsets[tid];
 
         int begin = (tid > 0) ? fine_splits[begin_offset] + 1 : 0;
-        int end = coarse_splits[end_offset];
+        int end = fine_splits[end_offset];
         const int size = end - begin + 1;
 
         if (size > max_per_group)
         {
             GRACE_ASSERT(size < 2 * max_per_group);
+            GRACE_ASSERT(size > 0);
 
             // Splits must be output in ascending order (of split index).
             // We ensure this by writing either the first- or last-most split
@@ -342,13 +350,18 @@ __global__ fine_splits_kernel(
 
             do
             {
-                GRACE_ASSERT(first < last);
+                GRACE_ASSERT(first <= last);
 
                 const int split_idx = find_split(begin, end, deltas, delta_comp);
                 const int lsize = split_idx - begin + 1;
                 const int rsize = end - split_idx;
 
                 GRACE_ASSERT(!(lsize > max_per_group && rsize > max_per_group));
+                GRACE_ASSERT(lsize > 0);
+                GRACE_ASSERT(rsize > 0);
+
+                // For the final split. This has to be checked first!
+                if (first == last) fine_splits[first] = split_idx;
 
                 if (lsize > max_per_group) fine_splits[last--] = split_idx;
                 if (rsize > max_per_group) fine_splits[first++] = split_idx;
@@ -362,68 +375,24 @@ __global__ fine_splits_kernel(
 }
 
 __global__ void write_leaves_kernel(
-    const int2* nodes,
-    const size_t n_nodes,
-    int4* big_leaves,
-    const int max_per_leaf)
+    const int* splits,
+    const size_t n_splits,
+    const int max_per_leaf,
+    int4* wide_leaves)
 {
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    for ( ; tid < n_nodes; tid += blockDim.x * gridDim.x)
+    for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+         tid < n_splits;
+         tid += blockDim.x * gridDim.x)
     {
-        int2 node = nodes[tid];
-        int left = node.x;
-        int right = node.y;
+        const int begin = (tid > 0) ? splits[tid - 1] + 1 : 0;
+        const int end = splits[tid];
+        const int size = end - begin + 1;
 
-        int2 lchild = make_int2(left, tid);
-        int2 rchild = make_int2(tid + 1, right);
+        GRACE_ASSERT(size <= max_per_leaf);
+        GRACE_ASSERT(size > 0);
 
-        // If left or right are 0, size may be incorrect.
-        int size = node_size(node);
-
-        // left == 0 may have been written as node.x = 0, or node.x may be
-        // unwritten.
-        // right == 0 means node.y was unwritten, and the right child is
-        // therefore not a leaf, so its size is set accordingly.
-        int left_size = node_size(lchild);
-        int right_size = (right > 0 ? node_size(rchild) : INT_MAX);
-
-        // These are both guarranteed to be correct:
-        // If left_size was computed incorrectly, then the true value of
-        // node.x is not zero, and thus node.x was unwritten.  This requires
-        // that the left child not be a leaf, and hence the node index (tid)
-        // must be > max_per_leaf, resulting in left_is_leaf = false.
-        //
-        // right_is_leaf follows from the correctness of right_size.
-        bool left_is_leaf = (left_size <= max_per_leaf);
-        bool right_is_leaf = (right_size <= max_per_leaf);
-
-        bool write_check =
-            (left_is_leaf != right_is_leaf) ? true : (size > max_per_leaf);
-
-        int4 leaf;
-        if (left_is_leaf && write_check) {
-            leaf.x = lchild.x;
-            leaf.y = left_size;
-            big_leaves[left] = leaf;
-        }
-        if (right_is_leaf && write_check) {
-            leaf.x = rchild.x;
-            leaf.y = right_size;
-            big_leaves[right] = leaf;
-        }
-    }
-}
-
-__global__ void fix_leaf_ranges(int4* leaves, const size_t n_leaves)
-{
-    int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    for ( ; tid < n_leaves; tid += blockDim.x * gridDim.x)
-    {
-        int4 leaf = leaves[tid];
-        leaf.z = leaf.w = tid;
-        leaves[tid] = leaf;
+        const int4 leaf = make_int4(begin, size, tid, tid);
+        wide_leaves[tid] = leaf;
     }
 }
 
@@ -782,75 +751,82 @@ GRACE_HOST void copy_leaf_deltas(
 
 template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
-    thrust::device_vector<int2>& d_tmp_nodes,
-    thrust::device_vector<int4>& d_tmp_leaves,
-    const int max_per_leaf,
+    Tree& d_tree,
+    const size_t n_primitives,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
 {
-    const size_t n_leaves = d_tmp_leaves.size();
-    const size_t n_nodes = n_leaves - 1;
+    const int max_per_leaf = d_tree.max_per_leaf;
 
-    if (n_leaves <= max_per_leaf) {
+    if (n_primitives <= max_per_leaf) {
         const std::string msg
             = "max_per_leaf must be less than the total number of primitives.";
         throw std::invalid_argument(msg);
     }
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
-    int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
+    const size_t n_segments = (n_primitives + max_per_leaf - 1) / max_per_leaf;
+    thrust::device_vector<int> d_coarse_splits(n_segments);
+    thrust::device_vector<int> d_split_counts(n_segments);
 
-    build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
-        thrust::raw_pointer_cast(d_tmp_nodes.data()),
-        n_nodes,
-        d_deltas_iter,
+    int blocks = min(grace::MAX_BLOCKS,
+                     (int) ((n_segments + grace::BUILD_THREADS_PER_BLOCK - 1)
+                             / grace::BUILD_THREADS_PER_BLOCK));
+    coarse_splits_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        n_primitives,
         max_per_leaf,
+        d_deltas_iter,
+        thrust::raw_pointer_cast(d_coarse_splits.data()),
+        n_segments,
         delta_comp);
     GRACE_KERNEL_CHECK();
 
-    blocks = min(grace::MAX_BLOCKS,
-                 (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
-                         / grace::BUILD_THREADS_PER_BLOCK));
+    count_fine_splits_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        max_per_leaf,
+        d_deltas_iter,
+        thrust::raw_pointer_cast(d_coarse_splits.data()),
+        n_segments,
+        thrust::raw_pointer_cast(d_split_counts.data()),
+        delta_comp);
+    GRACE_KERNEL_CHECK();
+
+    thrust::inclusive_scan(d_split_counts.begin(), d_split_counts.end(),
+                           d_split_counts.begin());
+    const int total_splits = d_split_counts.back();
+
+    // Scatter the coarse splits we already have into the array of fine splits.
+    // Because we used an inclusive scan, the scatter operation must operate as
+    //     d_fine_splits[d_split_counts[i] - 1] = d_coarse_splits[i],
+    // fine_splits_kernel needs a similarly modified d_fine_splits array.
+    // It is easiest to just modify the array.
+    // (This is safe because d_split_counts[i] >= 1 for all i.)
+    {
+        using namespace thrust::placeholders;
+        thrust::transform(d_split_counts.begin(), d_split_counts.end(),
+                          d_split_counts.begin(), _1 - 1);
+    }
+    thrust::device_vector<int> d_fine_splits(total_splits);
+    thrust::scatter(d_coarse_splits.begin(), d_coarse_splits.end(),
+                    d_split_counts.begin(),
+                    d_fine_splits.begin());
+
+    fine_splits_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
+        max_per_leaf,
+        d_deltas_iter,
+        thrust::raw_pointer_cast(d_split_counts.data()),
+        d_coarse_splits.size(),
+        thrust::raw_pointer_cast(d_fine_splits.data()),
+        delta_comp);
+    GRACE_KERNEL_CHECK();
+
+    d_tree.leaves.resize(total_splits);
+    d_tree.nodes.resize(4 * (total_splits - 1));
 
     write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tmp_nodes.data()),
-        n_nodes,
-        thrust::raw_pointer_cast(d_tmp_leaves.data()),
-        max_per_leaf);
+        thrust::raw_pointer_cast(d_fine_splits.data()),
+        d_fine_splits.size(),
+        max_per_leaf,
+        thrust::raw_pointer_cast(d_tree.leaves.data()));
     GRACE_KERNEL_CHECK();
-}
-
-GRACE_HOST void remove_empty_leaves(Tree& d_tree)
-{
-    // A transform_reduce (with unary op 'is_valid_node()') followed by a
-    // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
-    // than the below.  However, this method does not require a temporary leaves
-    // array, which would be the largest temporary memory allocation in the
-    // build process.
-
-    // error: no operator "==" matches these operands
-    //         operand types are: const int4 == const int4
-    // thrust::remove(.., .., make_int4(0, 0, 0, 0))
-
-    typedef thrust::device_vector<int4>::iterator Int4Iter;
-    Int4Iter end = thrust::remove_if(d_tree.leaves.begin(), d_tree.leaves.end(),
-                                     is_empty_node());
-
-    const size_t n_new_leaves = end - d_tree.leaves.begin();
-    const size_t n_new_nodes = n_new_leaves - 1;
-    d_tree.nodes.resize(4 * n_new_nodes);
-    d_tree.leaves.resize(n_new_leaves);
-
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_new_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
-
-    fix_leaf_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-        thrust::raw_pointer_cast(d_tree.leaves.data()),
-        d_tree.leaves.size()
-    );
 }
 
 template <
@@ -1016,9 +992,8 @@ GRACE_HOST void build_ALBVH(
     const size_t n_nodes = n_leaves - 1;
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    ALBVH::build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
+    ALBVH::build_leaves(d_tree, n_leaves,
                         d_deltas_iter, delta_comp);
-    ALBVH::remove_empty_leaves(d_tree);
 
     const size_t n_new_leaves = d_tree.leaves.size();
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);

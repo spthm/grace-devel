@@ -94,12 +94,10 @@ int main(int argc, char* argv[])
         if (i >= 0) t_deltas += timer.split();
 
         grace::ALBVH::build_leaves(
-            d_tmp_nodes,
-            d_tree.leaves,
-            d_tree.max_per_leaf,
+            d_tree,
+            d_spheres.size(),
             thrust::raw_pointer_cast(d_deltas.data()),
             thrust::less<float>());
-        grace::ALBVH::remove_empty_leaves(d_tree);
         if (i >= 0) t_leaves += timer.split();
 
         const size_t n_new_leaves = d_tree.leaves.size();
