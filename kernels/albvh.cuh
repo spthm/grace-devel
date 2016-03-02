@@ -275,6 +275,7 @@ __global__ void count_fine_splits_kernel(
     const int* splits,
     const size_t n_splits,
     int* split_counts,
+    const bool avoid_singletons,
     DeltaComp delta_comp)
 {
     // So deltas[-1] is valid.
@@ -288,12 +289,17 @@ __global__ void count_fine_splits_kernel(
         int end = splits[tid];
         const int size = end - begin + 1;
 
+        GRACE_ASSERT(size < 2 * max_per_group);
+        GRACE_ASSERT(size > 0);
+
         // We always have at least one (coarse) split.
         int count = 1;
-        if (size > max_per_group)
-        {
-            GRACE_ASSERT(size < 2 * max_per_group);
 
+        if (size > max_per_group && avoid_singletons) {
+            ++count;
+        }
+        else if (size > max_per_group)
+        {
             do
             {
                 ++count;
@@ -321,6 +327,7 @@ __global__ void fine_splits_kernel(
     const int* split_offsets,
     const size_t n_coarse_splits,
     int* fine_splits,
+    const bool avoid_singletons,
     DeltaComp delta_comp)
 {
     // So deltas[-1] is valid.
@@ -333,14 +340,47 @@ __global__ void fine_splits_kernel(
         const int begin_offset = (tid > 0) ? split_offsets[tid - 1] : 0;
         const int end_offset = split_offsets[tid];
 
-        int begin = (tid > 0) ? fine_splits[begin_offset] + 1 : 0;
-        int end = fine_splits[end_offset];
-        const int size = end - begin + 1;
+        const int segment_begin = (tid > 0) ? fine_splits[begin_offset] + 1 : 0;
+        const int segment_end = fine_splits[end_offset];
+        const int size = segment_end - segment_begin + 1;
 
-        if (size > max_per_group)
+        GRACE_ASSERT(size < 2 * max_per_group);
+        GRACE_ASSERT(size > 0);
+
+        if (size > max_per_group && avoid_singletons)
         {
-            GRACE_ASSERT(size < 2 * max_per_group);
-            GRACE_ASSERT(size > 0);
+            int begin = segment_begin;
+            int end = segment_end;
+            int largest_half = size;
+
+            // Loop to find the largest split such that both halves have sizes
+            // < max_per_group.
+            do
+            {
+                GRACE_ASSERT(begin < end);
+
+                const int split_idx = find_split(begin, end, deltas, delta_comp);
+                const int lsize = split_idx - segment_begin + 1;
+                const int rsize = segment_end - split_idx;
+
+                if (lsize <= max_per_group && rsize <= max_per_group) {
+                    fine_splits[begin_offset + 1] = split_idx;
+                }
+
+                // If lsize == rsize, both must be < max_per_group, so we're
+                // about to exit the loop. Doesn't matter what these become.
+                begin = (lsize > rsize) ? begin     : split_idx + 1;
+                end   = (lsize > rsize) ? split_idx : end;
+
+                largest_half = max(lsize, rsize);
+            }
+            while (largest_half > max_per_group);
+        }
+
+        else if (size > max_per_group)
+        {
+            int begin = segment_begin;
+            int end = segment_end;
 
             // Splits must be output in ascending order (of split index).
             // We ensure this by writing either the first- or last-most split
@@ -348,6 +388,8 @@ __global__ void fine_splits_kernel(
             int first = begin_offset + 1;
             int last  = end_offset - 1;
 
+            // Loop, splitting at each largest split until all resulting
+            // segments have sixes < max_per_group.
             do
             {
                 GRACE_ASSERT(first <= last);
@@ -753,6 +795,7 @@ template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
     Tree& d_tree,
     const size_t n_primitives,
+    const bool avoid_singletons,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
 {
@@ -786,6 +829,7 @@ GRACE_HOST void build_leaves(
         thrust::raw_pointer_cast(d_coarse_splits.data()),
         n_segments,
         thrust::raw_pointer_cast(d_split_counts.data()),
+        avoid_singletons,
         delta_comp);
     GRACE_KERNEL_CHECK();
 
@@ -815,6 +859,7 @@ GRACE_HOST void build_leaves(
         thrust::raw_pointer_cast(d_split_counts.data()),
         d_coarse_splits.size(),
         thrust::raw_pointer_cast(d_fine_splits.data()),
+        avoid_singletons,
         delta_comp);
     GRACE_KERNEL_CHECK();
 
@@ -973,6 +1018,7 @@ GRACE_HOST void build_ALBVH(
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
     const AABBFunc AABB,
+    const bool avoid_singletons = true,
     const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
@@ -989,10 +1035,8 @@ GRACE_HOST void build_ALBVH(
     }
 
     const size_t n_leaves = d_tree.leaves.size();
-    const size_t n_nodes = n_leaves - 1;
-    thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    ALBVH::build_leaves(d_tree, n_leaves,
+    ALBVH::build_leaves(d_tree, n_leaves, avoid_singletons,
                         d_deltas_iter, delta_comp);
 
     const size_t n_new_leaves = d_tree.leaves.size();
@@ -1015,12 +1059,14 @@ GRACE_HOST void build_ALBVH(
     const thrust::device_vector<DeltaType>& d_deltas,
     const DeltaComp delta_comp,
     const AABBFunc AABB,
+    const bool avoid_singletons = true,
     const bool wipe = false)
 {
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB,
+                avoid_singletons, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
@@ -1030,12 +1076,14 @@ GRACE_HOST void build_ALBVH(
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const AABBFunc AABB,
+    const bool avoid_singletons = true,
     const bool wipe = false)
 {
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     typedef typename thrust::less<DeltaType> DeltaComp;
 
-    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB, wipe);
+    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB,
+                avoid_singletons, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
@@ -1045,13 +1093,15 @@ GRACE_HOST void build_ALBVH(
     const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const AABBFunc AABB,
+    const bool avoid_singletons = true,
     const bool wipe = false)
 {
     typedef typename thrust::less<DeltaType> DeltaComp;
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), AABB,
+                avoid_singletons, wipe);
 }
 
 } // namespace grace

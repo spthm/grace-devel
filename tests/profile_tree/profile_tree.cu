@@ -95,7 +95,6 @@ int main(int argc, char* argv[])
             thrust::device_vector<grace::uinteger32> d_keys(N);
             thrust::device_vector<float> d_deltas(N + 1);
             grace::Tree d_tree(N, max_per_leaf);
-            thrust::device_vector<int2> d_tmp_nodes(N - 1);
             // Don't include above memory allocations in t_morton.
             timer.split();
 
@@ -110,12 +109,11 @@ int main(int argc, char* argv[])
             if (i >= 0) t_deltas += timer.split();
 
             grace::ALBVH::build_leaves(
-                d_tmp_nodes,
-                d_tree.leaves,
-                d_tree.max_per_leaf,
+                d_tree,
+                d_spheres.size(),
+                true, // Avoid one-primitive leaves.
                 thrust::raw_pointer_cast(d_deltas.data()),
                 thrust::less<float>());
-            grace::ALBVH::remove_empty_leaves(d_tree);
             if (i >= 0) t_leaves += timer.split();
 
             const size_t n_new_leaves = d_tree.leaves.size();
