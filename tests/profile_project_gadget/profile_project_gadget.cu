@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
 
 
     CUDATimer timer;
-    double total;
+    double total = 0.0;
     thrust::device_vector<float> d_integrals(N_rays);
     for (int i = -1; i < N_iter; ++i)
     {

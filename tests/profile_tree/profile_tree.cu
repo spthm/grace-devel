@@ -87,6 +87,7 @@ int main(int argc, char* argv[])
 
         CUDATimer timer;
         double t_all, t_morton, t_sort, t_deltas, t_leaves, t_leaf_deltas, t_nodes;
+        t_all = t_morton = t_sort = t_deltas = t_leaves = t_leaf_deltas = t_nodes = 0.0;
         for (int i = -1; i < N_iter; ++i)
         {
             timer.start();
