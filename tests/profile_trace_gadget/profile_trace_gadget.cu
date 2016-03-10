@@ -85,6 +85,7 @@ int main(int argc, char* argv[])
 
     CUDATimer timer;
     double t_genray, t_sort, t_cum, t_trace, t_hit, t_all;
+    t_genray = t_sort = t_cum = t_trace = t_hit = t_all = 0.0;
     for (int i = -1; i < N_iter; ++i)
     {
         timer.start();

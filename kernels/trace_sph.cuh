@@ -21,15 +21,15 @@ namespace grace {
 
 const static int N_table = 51;
 
-template <typename Float>
+template <typename Real>
 struct KernelIntegrals
 {
-    static Float table[N_table];
+    const static Real table[N_table];
 
 };
 
-template <typename Float>
-    Float KernelIntegrals<Float>::table[N_table] = {
+template <typename Real>
+    const Real KernelIntegrals<Real>::table[N_table] = {
     1.90986019771937, 1.90563449910964, 1.89304415940934, 1.87230928086763,
     1.84374947679902, 1.80776276033034, 1.76481079856299, 1.71540816859939,
     1.66011373131439, 1.59952322363667, 1.53426266082279, 1.46498233888091,
@@ -45,9 +45,9 @@ template <typename Float>
     3.739494884706115E-003, 1.993729589156428E-003, 9.212900163813992E-004,
     3.395908945333921E-004, 8.287326418242995E-005, 7.387919939044624E-006,
     0.000000000000000E+000
-    };
+};
 
-const static KernelIntegrals<double> lookup;
+const static KernelIntegrals<double> lookup = {};
 
 
 //-----------------------------------------------------------------------------
