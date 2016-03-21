@@ -1,5 +1,7 @@
 #pragma once
 
+// Due to a bug in the version of Thrust provided with CUDA 6, this must appear
+// before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
 #include <thrust/device_vector.h>
@@ -223,7 +225,7 @@ GRACE_HOST void init_PRNG(
     N = factor * (N + factor - 1) / factor;
     *N_states = N;
 
-    int num_blocks = (N + block_size - 1) / block_size;
+    const int num_blocks = (N + block_size - 1) / block_size;
 
     cudaError_t cuerr = cudaMalloc(
         (void**)d_prng_states,
@@ -248,14 +250,14 @@ GRACE_HOST void uniform_random_rays(
     const Real length,
     const unsigned long long seed = 1234)
 {
-    float4 origin = make_float4(ox, oy, oz, length);
+    const float4 origin = make_float4(ox, oy, oz, length);
 
     curandState* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
     gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
@@ -282,7 +284,7 @@ GRACE_HOST void uniform_random_rays(
     const unsigned long long seed = 1234)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
-    size_t N_rays = d_rays.size();
+    const size_t N_rays = d_rays.size();
 
     uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
 }
@@ -298,14 +300,14 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const unsigned long long seed = 1234,
     const enum Octants octant = PPP)
 {
-    float4 origin = make_float4(ox, oy, oz, length);
+    const float4 origin = make_float4(ox, oy, oz, length);
 
     curandState* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
     gpu::gen_uniform_rays_single_octant<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
