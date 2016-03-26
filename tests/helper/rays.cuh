@@ -39,7 +39,8 @@ void orthogonal_rays_z(const size_t N_side,
     const float3 w = make_float3(span_x, 0.f, 0.f);
     const float3 h = make_float3(0.f, span_y, 0.f);
 
-    grace::plane_parallel_rays(d_rays, N_side, N_side, base, w, h, span_z);
+    grace::orthogonal_projection_rays(d_rays, N_side, N_side, base, w, h,
+                                      span_z);
 
     if (area != NULL) {
         const float cell_x = span_x / N_side;

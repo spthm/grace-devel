@@ -152,7 +152,7 @@ __global__ void gen_uniform_rays_single_octant(
 }
 
 template <typename Real, typename Real3>
-__global__ void plane_parallel_rays_kernel(
+__global__ void orthogonal_projection_rays_kernel(
     const int width,
     const int height,
     const size_t n_rays,
@@ -363,7 +363,7 @@ GRACE_HOST void uniform_random_rays_single_octant(
 // h = (0, 6, 0)
 // direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
 template <typename Real, typename Real3>
-GRACE_HOST void plane_parallel_rays(
+GRACE_HOST void orthogonal_projection_rays(
     Ray* const d_rays_ptr,
     const int width,
     const int height,
@@ -393,7 +393,7 @@ GRACE_HOST void plane_parallel_rays(
     const int blocks = min(grace::MAX_BLOCKS,
                            (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                    / RAYS_THREADS_PER_BLOCK));
-    gpu::plane_parallel_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    gpu::orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         width,
         height,
         N_rays,
@@ -430,7 +430,7 @@ GRACE_HOST void plane_parallel_rays(
 // h = (0, 6, 0)
 // direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
 template <typename Real, typename Real3>
-GRACE_HOST void plane_parallel_rays(
+GRACE_HOST void orthogonal_projection_rays(
     thrust::device_vector<Ray>& d_rays,
     const int width,
     const int height,
@@ -445,7 +445,7 @@ GRACE_HOST void plane_parallel_rays(
     }
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
 
-    plane_parallel_rays(d_rays_ptr, width, height, base, w, h, length);
+    orthogonal_projection_rays(d_rays_ptr, width, height, base, w, h, length);
 }
 
 } // namespace grace
