@@ -87,16 +87,7 @@ int main(int argc, char* argv[])
               << "Min output: " << min_integral << std::endl
               << std::endl;
 
-    // Sort ray data such that increasing the index moves us along x first,
-    // then y.
-    thrust::host_vector<grace::Ray> h_rays = d_rays;
-    thrust::host_vector<float> h_keys(N_rays);
     thrust::host_vector<float> h_integrals = d_integrals;
-    for (size_t i = 0; i < N_rays; ++i) {
-        h_keys[i] = h_rays[i].ox + (2 * (maxs.x - mins.x)) * h_rays[i].oy;
-    }
-    thrust::sort_by_key(h_keys.begin(), h_keys.end(), h_integrals.begin());
-
     // Increase the dynamic range.
     // Avoid zero so that max_integral - min_integral is a useful range
     // (required for the make_bitmap function).

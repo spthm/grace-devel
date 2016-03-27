@@ -73,7 +73,7 @@ int main(int argc, char* argv[])
     float area_per_ray;
 
     build_tree(d_spheres, mins, maxs, d_tree);
-    orthogonal_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
+    plane_parallel_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
     grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
 
     // ~ Integrate over x and y.
