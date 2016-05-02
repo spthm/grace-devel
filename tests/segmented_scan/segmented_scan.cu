@@ -49,7 +49,7 @@
 #include "grace/cuda/kernels/scan.cuh"
 
 // moderngpu
-#include "util/format.h"
+#include "grace/external/sgpu/util/format.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -64,7 +64,7 @@ int myRand(int min, int max) {
 
 template<typename T>
 void TestCsrScan(int count, int randomSize, int numIterations,
-                 bool supportEmpty, mgpu::CudaContext& context) {
+                 bool supportEmpty, sgpu::CudaContext& context) {
 
 #ifdef _DEBUG
     numIterations = 1;
@@ -93,17 +93,17 @@ void TestCsrScan(int count, int randomSize, int numIterations,
     thrust::device_vector<T> d_data(dataHost);
     thrust::device_vector<T> d_results(count);
 
-    // Compute using MGPU.
+    // Compute using SGPU.
     context.Start();
     for(int it = 0; it < numIterations; ++it) {
         grace::exclusive_segmented_scan(d_csr, d_data, d_results);
     }
-    double throughputMGPU = context.Throughput(count, numIterations);
+    double throughputSGPU = context.Throughput(count, numIterations);
 
-    printf("%9.3lf M/s  %9.3lf GB/s (MGPU)\n",
-           throughputMGPU / 1.0e6, sizeof(T) * throughputMGPU / 1.0e9);
+    printf("%9.3lf M/s  %9.3lf GB/s (SGPU)\n",
+           throughputSGPU / 1.0e6, sizeof(T) * throughputSGPU / 1.0e9);
 
-    thrust::host_vector<T> h_results_MGPU = d_results;
+    thrust::host_vector<T> h_results_SGPU = d_results;
 
     // Compute using Thrust.
     // Thrust requires per-item keys rather than per-segment offsets.
@@ -122,7 +122,7 @@ void TestCsrScan(int count, int randomSize, int numIterations,
     printf("%9s %9.3lf M/s  %9.3lf GB/s (Thrust)\n", "",
            throughputThrust / 1.0e6, sizeof(T) * throughputThrust / 1.0e9);
 
-    // Veryify MGPU and Thrust against host.
+    // Veryify SGPU and Thrust against host.
     std::vector<T> resultsRef(count);
     for(int row = 0; row < numRows; ++row) {
         int begin = csrHost[row];
@@ -133,18 +133,18 @@ void TestCsrScan(int count, int randomSize, int numIterations,
             resultsRef[i] = x;
             x = x + dataHost[i];
 
-            if(resultsRef[i] != h_results_MGPU[i]) {
+            if(resultsRef[i] != h_results_SGPU[i]) {
                 printf("SCAN ERROR ON ELEMENT %d OF %d, IN SEGMENT %d of %d\n",
                        i - begin, end - begin - 1, row, numRows);
                 printf("ELEMENT %d OF %d\n", i, count);
-                printf("MGPU result %.5g\nRef. result %.5g\n",
-                       h_results_MGPU[i], resultsRef[i]);
+                printf("SGPU result %.5g\nRef. result %.5g\n",
+                       h_results_SGPU[i], resultsRef[i]);
                 if (i)
-                    printf("Prior MGPU result %.5g\nPrior Ref. result %.5g\n",
-                           h_results_MGPU[i-1], resultsRef[i-1]);
+                    printf("Prior SGPU result %.5g\nPrior Ref. result %.5g\n",
+                           h_results_SGPU[i-1], resultsRef[i-1]);
                 if (i < count - 1)
-                    printf("Next MGPU result %.5g\nNext Ref. result %.5g\n",
-                           h_results_MGPU[i+1], x);
+                    printf("Next SGPU result %.5g\nNext Ref. result %.5g\n",
+                           h_results_SGPU[i+1], x);
                 exit(0);
             }
 
@@ -203,17 +203,17 @@ const int SegSizes[] = {
 const int NumSegSizes = sizeof(SegSizes) / sizeof(*SegSizes);
 
 template<typename T>
-void BenchmarkSegScan1(bool supportEmpty, mgpu::CudaContext& context)
+void BenchmarkSegScan1(bool supportEmpty, sgpu::CudaContext& context)
 {
     int avSegSize = 500;
 
     printf("Benchmarking preprocesss-scan type %s. AvSegSize = %d.\n",
-           mgpu::TypeIdName<T>(), avSegSize);
+           sgpu::TypeIdName<T>(), avSegSize);
 
     for(int test = 0; test < NumTests; ++test) {
         int count = Tests[test][0];
 
-        printf("%8s: ", mgpu::FormatInteger(count).c_str());
+        printf("%8s: ", sgpu::FormatInteger(count).c_str());
         TestCsrScan<T>(count, 2 * avSegSize, Tests[test][1], supportEmpty,
                        context);
         printf("\n");
@@ -224,18 +224,18 @@ void BenchmarkSegScan1(bool supportEmpty, mgpu::CudaContext& context)
 }
 
 template<typename T>
-void BenchmarkSegScan2(bool supportEmpty, mgpu::CudaContext& context)
+void BenchmarkSegScan2(bool supportEmpty, sgpu::CudaContext& context)
 {
     int count = 20000000;
     int numIterations = 500;
 
     printf("Benchmarking preprocess-scan type %s. Count = %d.\n",
-           mgpu::TypeIdName<T>(), count);
+           sgpu::TypeIdName<T>(), count);
 
     for(int test = 0; test < NumSegSizes; ++test) {
         int avSegSize = SegSizes[test];
 
-        printf("%8s: ", mgpu::FormatInteger(avSegSize).c_str());
+        printf("%8s: ", sgpu::FormatInteger(avSegSize).c_str());
         TestCsrScan<T>(count, 2 * avSegSize, numIterations, supportEmpty,
                        context);
 
@@ -245,7 +245,7 @@ void BenchmarkSegScan2(bool supportEmpty, mgpu::CudaContext& context)
 }
 
 int main(int argc, char** argv) {
-    mgpu::ContextPtr context = mgpu::CreateCudaDevice(argc, argv, true);
+    sgpu::ContextPtr context = sgpu::CreateCudaDeviceFromArgv(argc, argv, true);
 
     bool supportEmpty = true;
 
