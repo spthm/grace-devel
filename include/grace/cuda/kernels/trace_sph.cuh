@@ -117,7 +117,7 @@ GRACE_HOST void trace_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Real4>& d_spheres,
     const Tree& d_tree,
-    // MGPU's segmented scans and sorts require ray offsets to be int.
+    // SGPU's segmented scans and sorts require ray offsets to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<int>& d_hit_indices,
     thrust::device_vector<Real>& d_hit_integrals,
@@ -177,7 +177,7 @@ GRACE_HOST void trace_sph_with_sentinels(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Real4>& d_spheres,
     const Tree& d_tree,
-    // MGPU's segmented scans and sorts require this to be int.
+    // SGPU's segmented scans and sorts require this to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<int>& d_hit_indices,
     const int index_sentinel,

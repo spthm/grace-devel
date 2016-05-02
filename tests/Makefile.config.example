@@ -7,7 +7,7 @@ CXX = g++
 # errors when using nvcc.
 GRACE_FLAGS = -DGRACE_DEBUG -D_GLIBCXX_USE_CXX11_ABI=0
 
-# MGPU REQUIRES that compilation targets devices you will run on.
+# SGPU REQUIRES that compilation targets devices you will run on.
 # DO NOT REMOVE THESE, only add to if neessary.
 GENCODE_20 = -gencode arch=compute_20,code=sm_20
 GENCODE_21 = -gencode arch=compute_21,code=sm_21
@@ -20,8 +20,6 @@ CUARCH = $(GENCODE_30)
 # Set to 0 or comment out to compile without OpenMP.
 USE_OPENMP = 1
 
-# moderngpu
-MGPU_DIR = $(HOME)/Code/moderngpu/
 # CUDA toolkit
 CUDA_DIR = /opt/cuda/lib64
 # GNU Multiple Precision Library

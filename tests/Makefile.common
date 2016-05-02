@@ -9,14 +9,15 @@ THIS_PATH = $(dir $(lastword $(MAKEFILE_LIST)))
 # the Makefile with which make was called.
 include $(THIS_PATH)Makefile.config
 
-MGPU_OBJS = mgpucontext.o mgpuutil.o
+SGPU_OBJ = sgpuutil.o
 
 # abspath does not require files to exist.
 # We must use absolute paths because these dependencies will be used by
 # Makefiles in multiple locations.
 GRACE_DIR := $(abspath $(THIS_PATH)/../)
 GRACE_INC_DIR := $(abspath $(GRACE_DIR)/include/)
-MGPU_OBJS := $(abspath $(addprefix $(THIS_PATH),$(MGPU_OBJS)))
+SGPU_DIR := $(abspath $(GRACE_DIR)/include/grace/external/sgpu/)
+SGPU_OBJ := $(abspath $(addprefix $(THIS_PATH),$(SGPU_OBJ)))
 
 # We could do some of this on a Makefile-by-Makefile basis instead to save
 # re-compiling everything when only a few headers are changed, but that is
@@ -40,9 +41,9 @@ NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.hpp))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
-NVCCDEPS += $(MGPU_OBJS)
+NVCCDEPS += $(SGPU_OBJ)
 
-NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
+NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(SGPU_DIR)
 
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 ifdef USE_OPENMP
@@ -53,11 +54,7 @@ endif
 
 NVCCLFLAGS = -L$(CUDA_DIR)
 
-NVCCLIBS = $(MGPU_OBJS) -lcuda -lcurand
+NVCCLIBS = $(SGPU_OBJ) -lcuda -lcurand
 
-# TODO: These rules are too fragile! E.g. if MGPU_OBJS has its order switched.
-$(firstword $(MGPU_OBJS)): $(MGPU_DIR)/src/mgpucontext.cu
-	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ -c $<
-
-$(lastword $(MGPU_OBJS)): $(MGPU_DIR)/src/mgpuutil.cpp
+$(SGPU_OBJ): $(SGPU_DIR)/src/sgpuutil.cpp
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ -c $<

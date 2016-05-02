@@ -3,8 +3,7 @@
 #include "grace/error.h"
 #include "grace/types.h"
 
-// moderngpu/include must be in the INC path
-#include "kernels/segmentedsort.cuh"
+#include "grace/external/sgpu/kernels/segmentedsort.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -97,150 +96,17 @@ GRACE_HOST void sort_by_key(
     thrust::sort_by_key(d_keys2.begin(), d_keys2.end(), d_b.begin());
 }
 
-// MGPU's KernelSegBlocksortIndices, modified to be tolerant to grid sizes which
-// exceed the device maximum.
-template<typename Tuning, bool Stable, bool HasValues, typename InputIt1,
-         typename InputIt2, typename OutputIt1, typename OutputIt2,
-         typename Comp>
-MGPU_LAUNCH_BOUNDS void KernelSegBlocksortIndices(
-    InputIt1 keys_global,
-    InputIt2 values_global,
-    int count,
-    int numBlocks,
-    const int* indices_global,
-    const int* partitions_global,
-    OutputIt1 keysDest_global,
-    OutputIt2 valsDest_global,
-    int* ranges_global,
-    Comp comp) {
-
-    typedef typename std::iterator_traits<InputIt1>::value_type KeyType;
-    typedef typename std::iterator_traits<InputIt2>::value_type ValType;
-    typedef MGPU_LAUNCH_PARAMS Params;
-    const int NT = Params::NT;
-    const int VT = Params::VT;
-    const int NV = NT * VT;
-
-    const int FlagWordsPerThread = MGPU_DIV_UP(VT, 4);
-    struct Shared {
-        union {
-            mgpu::byte flags[NV];
-            int words[NT * FlagWordsPerThread];
-            KeyType keys[NV];
-            ValType values[NV];
-        };
-        int ranges[NT];
-    };
-    __shared__ Shared shared;
-
-    int tid = threadIdx.x;
-    int block = blockIdx.x;
-
-    // Compute capability 3.0+ devices have x-dim grid sizes of 2^31, and so
-    // will not exceed their grid size limit without also exceeding their memory
-    // capacity.
-#if __CUDA_ARCH__ < 300
-    while (block < numBlocks)
-#endif
-    {
-        int gid = NV * block;
-        int count2 = min(NV, count - gid);
-
-        int headFlags = mgpu::DeviceIndicesToHeadFlags<NT, VT>(indices_global,
-            partitions_global, tid, block, count2, shared.words, shared.flags);
-
-        mgpu::DeviceSegBlocksort<NT, VT, Stable, HasValues>(
-            keys_global, values_global, count2, shared.keys, shared.values,
-            shared.ranges, headFlags, tid, block, keysDest_global,
-            valsDest_global, ranges_global, comp);
-
-#if __CUDA_ARCH__ < 300
-        __syncthreads();
-        block += gridDim.x;
-#endif
-    }
-}
-
-// MGPU's SegSortPairsFromIndices in kernels/segmentedsort.cuh, using the above
-// modified block sort kernel that tolerates numBlocks > device maximum.
-// (All other kernels here are unchanged: they are similarly intolerant, but
-// their grid sizes are small enough that we could not max out compute
-// capability 2.0 hardware without first running out of memory.)
-template<typename KeyType, typename ValType, typename Comp>
-MGPU_HOST void SegSortPairsFromIndices(
-    KeyType* keys_global,
-    ValType* values_global,
-    int count,
-    const int* indices_global,
-    int indicesCount,
-    mgpu::CudaContext& context,
-    Comp comp,
-    bool verbose = false)
-{
-    const bool Stable = true;
-    typedef mgpu::LaunchBoxVT<
-        128, 11, 0,
-        128, 7, 0,
-        128, 7, 0
-    > Tuning;
-    int2 launch = Tuning::GetLaunchParams(context);
-    const int NV = launch.x * launch.y;
-
-    int numBlocks = MGPU_DIV_UP(count, NV);
-    int deviceMaxBlocks = context.Device().Prop().maxGridSize[0];
-    int numPasses = mgpu::FindLog2(numBlocks, true);
-
-    mgpu::SegSortSupport support;
-    MGPU_MEM(mgpu::byte) mem = mgpu::AllocSegSortBuffers(count, NV, support,
-                                                         true, context);
-
-    MGPU_MEM(KeyType) keysDestDevice = context.Malloc<KeyType>(count);
-    MGPU_MEM(ValType) valsDestDevice = context.Malloc<ValType>(count);
-
-    KeyType* keysSource = keys_global;
-    KeyType* keysDest = keysDestDevice->get();
-    ValType* valsSource = values_global;
-    ValType* valsDest = valsDestDevice->get();
-
-    MGPU_MEM(int) partitionsDevice =
-        mgpu::BinarySearchPartitions<mgpu::MgpuBoundsLower>(
-            count, indices_global, indicesCount, NV, mgpu::less<int>(),
-            context);
-
-    // Modified c.f. MGPU.
-    grace::KernelSegBlocksortIndices<Tuning, Stable, true>
-        <<<min(numBlocks, deviceMaxBlocks), launch.x, 0, context.Stream()>>>(
-            keysSource, valsSource, count, numBlocks, indices_global,
-            partitionsDevice->get(),
-            (1 & numPasses) ? keysDest : keysSource,
-            (1 & numPasses) ? valsDest : valsSource,
-            support.ranges_global,
-            comp);
-    GRACE_CUDA_CHECK(cudaPeekAtLastError());
-    MGPU_SYNC_CHECK("KernelSegBlocksortIndices");
-
-    if(1 & numPasses) {
-    std::swap(keysSource, keysDest);
-    std::swap(valsSource, valsDest);
-    }
-
-    mgpu::SegSortPasses<Tuning, true, true>(support, keysSource, valsSource,
-                                            count, numBlocks, numPasses,
-                                            keysDest, valsDest, comp, context,
-                                            verbose);
-}
-
-template <typename Float, typename T>
+template <typename Real, typename T>
 GRACE_HOST void sort_by_distance(
-    thrust::device_vector<Float>& d_hit_distances,
+    thrust::device_vector<Real>& d_hit_distances,
     const thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<int>& d_hit_indices,
     thrust::device_vector<T>& d_hit_data)
 {
-    // MGPU calls require a context.
+    // SGPU calls require a context.
     int device_ID = 0;
     GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
-    mgpu::ContextPtr mgpu_context_ptr = mgpu::CreateCudaDevice(device_ID);
+    sgpu::ContextPtr sgpu_context_ptr = sgpu::CreateCudaDevice(device_ID);
 
     // d_sort_map will be used to reorder the input vectors.
     thrust::device_vector<int> d_sort_map(d_hit_distances.size());
@@ -249,14 +115,14 @@ GRACE_HOST void sort_by_distance(
     // First, sort the hit distances and the indicies within the segments
     // defined by d_ray_offsets, i.e. sort each ray and its indices by distance.
     // The distances are the keys, and the ordered indices are the values.
-    grace::SegSortPairsFromIndices(
+    sgpu::SegSortPairsFromIndices(
         thrust::raw_pointer_cast(d_hit_distances.data()),
         thrust::raw_pointer_cast(d_sort_map.data()),
         d_hit_distances.size(),
         thrust::raw_pointer_cast(d_ray_offsets.data()),
         d_ray_offsets.size(),
-        *mgpu_context_ptr,
-        mgpu::less<Float>());
+        *sgpu_context_ptr,
+        sgpu::less<Real>());
 
     // Second, reorder the hit indices and hit data by the map produced in the
     // above sort.
