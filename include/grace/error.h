@@ -2,6 +2,8 @@
 
 #include "types.h"
 
+#include "cuda_runtime_api.h"
+
 #include <assert.h>
 #include <iostream>
 
