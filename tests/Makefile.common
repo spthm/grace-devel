@@ -17,7 +17,6 @@ SGPU_OBJ = sgpuutil.o
 GRACE_DIR := $(abspath $(THIS_PATH)/../)
 GRACE_INC_DIR := $(abspath $(GRACE_DIR)/include/)
 SGPU_DIR := $(abspath $(GRACE_DIR)/include/grace/external/sgpu/)
-SGPU_INC_DIR := $(abspath $(SGPU_DIR)/include/)
 SGPU_OBJ := $(abspath $(addprefix $(THIS_PATH),$(SGPU_OBJ)))
 
 # We could do some of this on a Makefile-by-Makefile basis instead to save
@@ -44,7 +43,7 @@ NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
 NVCCDEPS += $(SGPU_OBJ)
 
-NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(SGPU_INC_DIR)
+NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(SGPU_DIR)
 
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 ifdef USE_OPENMP
@@ -57,5 +56,5 @@ NVCCLFLAGS = -L$(CUDA_DIR)
 
 NVCCLIBS = $(SGPU_OBJ) -lcuda -lcurand
 
-sgpuutil.o: $(SGPU_DIR)/src/sgpuutil.cpp
+$(SGPU_OBJ): $(SGPU_DIR)/src/sgpuutil.cpp
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ -c $<
