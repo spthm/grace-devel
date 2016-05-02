@@ -1,17 +1,21 @@
 #pragma once
 
-#include <iterator>
+#include "grace/cuda/device/aabb.cuh"
+#include "grace/cuda/device/bits.cuh"
+#include "grace/cuda/device/morton.cuh"
+
+#include "grace/cuda/kernels/aabb.cuh"
+
+#include "grace/cuda/util/extrema.cuh"
+
+#include "grace/cuda/kernel_config.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 
-#include "aabb.cuh"
-#include "../error.h"
-#include "../kernel_config.h"
-#include "../types.h"
-#include "../device/aabb.cuh"
-#include "../device/bits.cuh"
-#include "../device/morton.cuh"
-#include "../util/extrema.cuh"
+#include <iterator>
 
 namespace grace {
 

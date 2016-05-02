@@ -1,21 +1,25 @@
 #pragma once
 
+#include "grace/cuda/device/intersect.cuh"
+
+#include "grace/cuda/util/bound_iter.cuh"
+#include "grace/cuda/util/texref_iter.cuh"
+
+#include "grace/generic/util/meta.h"
+
+#include "grace/cuda/kernel_config.h"
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/ray.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
+
+#include <thrust/device_vector.h>
+
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
 #include <string>
-
-#include <thrust/device_vector.h>
-
-#include "../device/intersect.cuh"
-#include "../util/bound_iter.cuh"
-#include "../util/texref_iter.cuh"
-#include "../util/meta.h"
-#include "../error.h"
-#include "../kernel_config.h"
-#include "../nodes.h"
-#include "../ray.h"
-#include "../types.h"
 
 #define FETCH_NODE(nodes, i) tex1Dfetch(nodes##_tex, i)
 

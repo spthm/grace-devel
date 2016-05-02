@@ -47,8 +47,8 @@
 
 #pragma once
 
-#include "../error.h"
-#include "../types.h"
+#include "grace/error.h"
+#include "grace/types.h"
 
 // moderngpu/include must be in the INC path
 #include "mgpuhost.cuh"

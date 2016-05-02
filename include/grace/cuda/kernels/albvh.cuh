@@ -1,10 +1,12 @@
 #pragma once
 
-// CUDA math constants.
-#include <math_constants.h>
+#include "grace/cuda/device/loadstore.cuh"
 
-#include <stdexcept>
-#include <string>
+#include "grace/cuda/kernel_config.h"
+#include "grace/cuda/nodes.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
 
 #include <thrust/fill.h>
 #include <thrust/functional.h>
@@ -13,11 +15,11 @@
 #include <thrust/sequence.h>
 #include <thrust/swap.h>
 
-#include "../device/loadstore.cuh"
-#include "../error.h"
-#include "../kernel_config.h"
-#include "../nodes.h"
-#include "../types.h"
+// CUDA math constants.
+#include <math_constants.h>
+
+#include <stdexcept>
+#include <string>
 
 namespace grace {
 

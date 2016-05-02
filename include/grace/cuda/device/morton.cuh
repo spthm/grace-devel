@@ -1,8 +1,8 @@
 #pragma once
 
-#include "../types.h"
+#include "grace/cuda/device/bits.cuh"
 
-#include "../device/bits.cuh"
+#include "grace/types.h"
 
 namespace grace {
 

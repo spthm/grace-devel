@@ -1,10 +1,10 @@
 #pragma once
 
+#include "grace/types.h"
+
 #include <cmath>
 #include <iostream>
 #include <bitset>
-
-#include "../types.h"
 
 namespace grace {
 
