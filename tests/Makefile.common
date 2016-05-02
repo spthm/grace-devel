@@ -14,7 +14,8 @@ MGPU_OBJS = mgpucontext.o mgpuutil.o
 # abspath does not require files to exist.
 # We must use absolute paths because these dependencies will be used by
 # Makefiles in multiple locations.
-GRACE_DIR := $(abspath $(GRACE_DIR))
+GRACE_DIR := $(abspath $(THIS_PATH)/../)
+GRACE_INC_DIR := $(abspath $(GRACE_DIR)/include/)
 MGPU_OBJS := $(abspath $(addprefix $(THIS_PATH),$(MGPU_OBJS)))
 
 # We could do some of this on a Makefile-by-Makefile basis instead to save
@@ -23,18 +24,25 @@ MGPU_OBJS := $(abspath $(addprefix $(THIS_PATH),$(MGPU_OBJS)))
 NVCCDEPS = Makefile
 NVCCDEPS += $(abspath $(THIS_PATH)Makefile.common)
 NVCCDEPS += $(abspath $(THIS_PATH)Makefile.config)
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../device/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../kernels/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../util/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../util/*.h))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)../*.h))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.h))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)./helper/*.hpp))
+
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/device/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/kernels/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/util/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.h))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.hpp))
+
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.h))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.hpp))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.h))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.hpp))
+
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
+NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
 NVCCDEPS += $(MGPU_OBJS)
 
-NVCCINCLUDES = -I$(GRACE_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
+NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(MGPU_DIR)/include/
 
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 ifdef USE_OPENMP

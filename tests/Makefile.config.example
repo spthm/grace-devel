@@ -6,7 +6,6 @@ CXX = g++
 # (e.g. Fedora 22 does not, but Fedora 23+ does) which will cause compilation
 # errors when using nvcc.
 GRACE_FLAGS = -DGRACE_DEBUG -D_GLIBCXX_USE_CXX11_ABI=0
-GRACE_DIR = ../../
 
 # MGPU REQUIRES that compilation targets devices you will run on.
 # DO NOT REMOVE THESE, only add to if neessary.
