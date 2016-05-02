@@ -4,16 +4,19 @@
 // before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
+#include "grace/cuda/device/morton.cuh"
+#include "grace/cuda/device/vecmath.cuh"
+
+#include "grace/cuda/kernels/sort.cuh"
+
+#include "grace/cuda/kernel_config.h"
+#include "grace/cuda/ray.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
+
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
-
-#include "sort.cuh"
-#include "../device/morton.cuh"
-#include "../device/vecmath.cuh"
-#include "../error.h"
-#include "../kernel_config.h"
-#include "../ray.h"
-#include "../types.h"
 
 namespace grace {
 

@@ -1,9 +1,11 @@
 #pragma once
 
-#include "albvh.cuh"
-#include "morton.cuh"
-#include "../device/build_functors.cuh"
-#include "../types.h"
+#include "grace/cuda/device/build_functors.cuh"
+
+#include "grace/cuda/kernels/albvh.cuh"
+#include "grace/cuda/kernels/morton.cuh"
+
+#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../error.h"
-#include "../types.h"
+#include "grace/error.h"
+#include "grace/types.h"
 
 // CUDA math constants.
 #include <math_constants.h>

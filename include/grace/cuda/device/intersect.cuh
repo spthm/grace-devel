@@ -1,8 +1,8 @@
 #pragma once
 
-#include "intrinsics.cuh"
+#include "grace/cuda/device/intrinsics.cuh"
 
-#include "../types.h"
+#include "grace/types.h"
 
 namespace grace {
 

@@ -3,7 +3,7 @@
 #include "AABB.cuh"
 #include "ray.cuh"
 
-#include "error.h" // GRACE
+#include "grace/error.h" // GRACE
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

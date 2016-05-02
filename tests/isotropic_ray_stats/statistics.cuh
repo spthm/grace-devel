@@ -1,6 +1,6 @@
 #pragma once
 
-#include "ray.h"
+#include "grace/cuda/ray.h"
 
 #include <thrust/device_vector.h>
 

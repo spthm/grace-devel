@@ -1,7 +1,7 @@
 #pragma once
 
-#include "error.h"
-#include "types.h"
+#include "grace/error.h"
+#include "grace/types.h"
 
 #include <thrust/host_vector.h>
 #include <thrust/device_vector.h>

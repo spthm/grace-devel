@@ -1,17 +1,17 @@
-#include <cstdlib>
-#include <iostream>
-#include <bitset>
-#include <iomanip>
+#include "grace/cuda/device/morton.cuh"
+#include "grace/cuda/kernels/build_sph.cuh"
+
+#include "helper/random.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 #include <thrust/iterator/counting_iterator.h>
 #include <thrust/transform.h>
 
-#include "device/morton.cuh"
-#include "kernels/build_sph.cuh"
-
-#include "helper/random.cuh"
+#include <cstdlib>
+#include <iostream>
+#include <bitset>
+#include <iomanip>
 
 int main(int argc, char* argv[])
 {

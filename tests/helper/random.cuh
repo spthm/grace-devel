@@ -1,6 +1,6 @@
 #pragma once
 
-#include "util/meta.h"
+#include "grace/generic/util/meta.h"
 
 #include <thrust/random.h>
 

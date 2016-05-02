@@ -1,11 +1,10 @@
 #pragma once
 
+#include "grace/error.h"
+#include "grace/types.h"
+
 #include <thrust/device_vector.h>
 #include <thrust/scan.h>
-
-#include "../../error.h"
-#include "../../types.h"
-#include "../../particle.h"
 
 namespace grace {
 

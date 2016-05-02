@@ -1,13 +1,14 @@
 #pragma once
 
-#include "../error.h"
-#include "../types.h"
+#include "grace/cuda/device/intersect.cuh"
+#include "grace/cuda/device/interpolation.cuh"
 
-#include "intersect.cuh"
-#include "interpolation.cuh"
+#include "grace/cuda/util/bound_iter.cuh"
 
-#include "../util/bound_iter.cuh"
-#include "../util/meta.h"
+#include "grace/generic/util/meta.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
 
 namespace grace {
 

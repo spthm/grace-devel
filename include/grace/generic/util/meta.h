@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../types.h"
+#include "grace/types.h"
 
 #include "vector_types.h"
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "types.h"
+#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/device_ptr.h>

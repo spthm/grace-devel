@@ -1,11 +1,14 @@
 #pragma once
 
-#include "../error.h"
-#include "../types.h"
-#include "../device/trace_functors.cuh"
-#include "../device/trace_raydata.cuh"
-#include "../util/meta.h"
-#include "bintree_trace.cuh"
+#include "grace/cuda/device/trace_functors.cuh"
+#include "grace/cuda/device/trace_raydata.cuh"
+
+#include "grace/cuda/kernels/bintree_trace.cuh"
+
+#include "grace/generic/util/meta.h"
+
+#include "grace/error.h"
+#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/iterator/counting_iterator.h>
