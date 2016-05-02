@@ -3,7 +3,7 @@
 #include "grace/error.h"
 #include "grace/types.h"
 
-#include "grace/external/sgpu/kernels/segrscancsr.cuh"
+#include "grace/external/sgpu/kernels/segscancsr.cuh"
 
 namespace grace {
 
