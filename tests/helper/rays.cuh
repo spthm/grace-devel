@@ -1,9 +1,9 @@
 #pragma once
 
-#include "ray.h"
+#include "grace/cuda/ray.h"
 
-#include "device/morton.cuh"
-#include "kernels/gen_rays.cuh"
+#include "grace/cuda/device/morton.cuh"
+#include "grace/cuda/kernels/gen_rays.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

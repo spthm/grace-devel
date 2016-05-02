@@ -6,10 +6,10 @@
 
 #include "intersection.cuh"
 
-#include "ray.h"
-#include "device/bits.cuh"
-#include "device/intersect.cuh"
-#include "kernels/gen_rays.cuh"
+#include "grace/cuda/ray.h"
+#include "grace/cuda/device/bits.cuh"
+#include "grace/cuda/device/intersect.cuh"
+#include "grace/cuda/kernels/gen_rays.cuh"
 #include "helper/random.cuh"
 
 #include <thrust/iterator/counting_iterator.h>

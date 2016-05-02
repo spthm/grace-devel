@@ -6,11 +6,11 @@
 
 #include "stats_math.cuh"
 
+#include "grace/cuda/ray.h"
+#include "grace/cuda/kernels/gen_rays.cuh"
+
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
-
-#include "ray.h"
-#include "kernels/gen_rays.cuh"
 
 #include <cmath>
 #include <iomanip>

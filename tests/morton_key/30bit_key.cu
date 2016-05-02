@@ -1,8 +1,8 @@
+#include "grace/cuda/device/bits.cuh"
+#include "grace/cuda/device/morton.cuh"
+
 #include <cstdlib>
 #include <iostream>
-
-#include "device/bits.cuh"
-#include "device/morton.cuh"
 
 int main(void)
 {

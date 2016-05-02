@@ -4,10 +4,10 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "nodes.h"
-#include "device/build_functors.cuh"
-#include "kernels/albvh.cuh"
-#include "kernels/build_sph.cuh"
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/device/build_functors.cuh"
+#include "grace/cuda/kernels/albvh.cuh"
+#include "grace/cuda/kernels/build_sph.cuh"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 

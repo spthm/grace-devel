@@ -1,8 +1,8 @@
 #include "statistics.cuh"
 #include "stats_math.cuh"
 
-#include "error.h"
-#include "ray.h"
+#include "grace/cuda/ray.h"
+#include "grace/error.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

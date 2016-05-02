@@ -4,9 +4,9 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "nodes.h"
-#include "ray.h"
-#include "kernels/gen_rays.cuh"
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/ray.h"
+#include "grace/cuda/kernels/gen_rays.cuh"
 #include "helper/tree.cuh"
 #include "helper/trace.cuh"
 

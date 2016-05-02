@@ -1,8 +1,14 @@
-#include "nodes.h"
-#include "ray.h"
-#include "util/extrema.cuh"
-#include "kernels/build_sph.cuh"
-#include "kernels/trace_sph.cuh"
+// Due to a bug in thrust, this must appear before thrust/sort.h
+// The simplest solution is to put it here, despite already being included in
+// all of the includes which require it.
+// See http://stackoverflow.com/questions/23352122
+#include <curand_kernel.h>
+
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/ray.h"
+#include "grace/cuda/util/extrema.cuh"
+#include "grace/cuda/kernels/build_sph.cuh"
+#include "grace/cuda/kernels/trace_sph.cuh"
 #include "helper/images.hpp"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"

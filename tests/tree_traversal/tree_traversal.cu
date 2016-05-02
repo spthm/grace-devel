@@ -4,11 +4,11 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "nodes.h"
-#include "ray.h"
-#include "device/intersect.cuh"
-#include "kernels/gen_rays.cuh"
-#include "kernels/trace_sph.cuh"
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/ray.h"
+#include "grace/cuda/device/intersect.cuh"
+#include "grace/cuda/kernels/gen_rays.cuh"
+#include "grace/cuda/kernels/trace_sph.cuh"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>

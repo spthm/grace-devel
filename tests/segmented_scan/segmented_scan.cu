@@ -45,15 +45,15 @@
  * See http://nvlabs.github.io/moderngpu for repository and documentation.
  */
 
-#include <thrust/device_vector.h>
-#include <thrust/host_vector.h>
-#include <thrust/scan.h>
-
-#include "kernels/sort.cuh"
-#include "kernels/scan.cuh"
+#include "grace/cuda/kernels/sort.cuh"
+#include "grace/cuda/kernels/scan.cuh"
 
 // moderngpu
 #include "util/format.h"
+
+#include <thrust/device_vector.h>
+#include <thrust/host_vector.h>
+#include <thrust/scan.h>
 
 #include <cstdlib>
 

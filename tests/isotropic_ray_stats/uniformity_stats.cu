@@ -4,18 +4,18 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include <cstdlib>
-#include <fstream>
-#include <iomanip>
-#include <string>
+#include "statistics.cuh"
+
+#include "grace/cuda/ray.h"
+#include "grace/cuda/kernels/gen_rays.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
-#include "ray.h"
-#include "kernels/gen_rays.cuh"
-
-#include "statistics.cuh"
+#include <cstdlib>
+#include <fstream>
+#include <iomanip>
+#include <string>
 
 int main(int argc, char* argv[]) {
     std::cout.precision(6);

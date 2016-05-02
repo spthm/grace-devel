@@ -1,8 +1,8 @@
 #pragma once
 
-#include "nodes.h"
-#include "kernels/build_sph.cuh"
-#include "util/meta.h"
+#include "grace/cuda/nodes.h"
+#include "grace/cuda/kernels/build_sph.cuh"
+#include "grace/generic/util/meta.h"
 
 #include "helper/random.cuh"
 
