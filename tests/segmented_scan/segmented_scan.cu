@@ -48,7 +48,6 @@
 #include "grace/cuda/kernels/sort.cuh"
 #include "grace/cuda/kernels/scan.cuh"
 
-// moderngpu
 #include "grace/external/sgpu/util/format.h"
 
 #include <thrust/device_vector.h>
