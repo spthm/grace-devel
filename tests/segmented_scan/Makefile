@@ -6,7 +6,7 @@ sgpuutil.o: $(SGPU_DIR)/src/sgpuutil.cpp
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ -c $<
 
 segmented_scan: segmented_scan.cu sgpuutil.o $(NVCCDEPS)
-	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(NVCCLFLAGS) $(NVCCLIBS)
+	$(NVCC) sgpuutil.o $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(NVCCLFLAGS) $(NVCCLIBS)
 
 clean:
 	@-rm -f *.o

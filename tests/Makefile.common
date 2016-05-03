@@ -51,8 +51,6 @@ NVCCFLAGS += -Xcompiler -fopenmp
 endif
 endif
 
-NVCCLFLAGS = -L$(CUDA_DIR)
-
-NVCCLIBS = $(SGPU_OBJ) -lcuda -lcurand
+NVCCLFLAGS = -L$(CUDA_LIB_DIR)
 
 NVCCLIBS = -lcuda -lcurand
