@@ -51,6 +51,6 @@ NVCCFLAGS += -Xcompiler -fopenmp
 endif
 endif
 
-NVCCLFLAGS = -L$(CUDA_LIB_DIR)
+NVCCLFLAGS += $(CUDA_LIB)
 
 NVCCLIBS = -lcuda -lcurand
