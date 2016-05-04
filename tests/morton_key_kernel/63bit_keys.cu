@@ -34,6 +34,8 @@ int main(int argc, char* argv[])
     }
 
     // Generate N random points with double precision co-ordinates in [0, 1).
+    // Note that, internally, GRACE will use single-precision values for the
+    // centroids of the particles.
     thrust::host_vector<double4> h_points(N);
     thrust::transform(thrust::counting_iterator<size_t>(0),
                       thrust::counting_iterator<size_t>(N),
@@ -45,9 +47,12 @@ int main(int argc, char* argv[])
     thrust::host_vector<KeyT> h_keys(N);
     const KeyT MAX_KEY = (1u << 21) - 1;
     for (size_t i = 0; i < N; ++i) {
-        KeyT ux = static_cast<KeyT>(h_points[i].x * MAX_KEY);
-        KeyT uy = static_cast<KeyT>(h_points[i].y * MAX_KEY);
-        KeyT uz = static_cast<KeyT>(h_points[i].z * MAX_KEY);
+        // We must cast to float here, as internally, GRACE only deals with
+        // float3 centroids. Not adding the cast here will lead to ~10% of keys
+        // mismatching.
+        KeyT ux = static_cast<KeyT>(static_cast<float>(h_points[i].x) * MAX_KEY);
+        KeyT uy = static_cast<KeyT>(static_cast<float>(h_points[i].y) * MAX_KEY);
+        KeyT uz = static_cast<KeyT>(static_cast<float>(h_points[i].z) * MAX_KEY);
 
         h_keys[i] = grace::morton::morton_key(ux, uy, uz);
     }
