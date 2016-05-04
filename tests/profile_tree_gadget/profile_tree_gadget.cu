@@ -119,7 +119,7 @@ int main(int argc, char* argv[])
             thrust::raw_pointer_cast(d_spheres.data()),
             thrust::raw_pointer_cast(d_new_deltas.data()),
             thrust::less<float>(),
-            grace::AABB_sphere());
+            grace::AABBSphere());
         if (i >= 0) t_nodes += timer.split();
 
         if (i >= 0) t_all += timer.elapsed();

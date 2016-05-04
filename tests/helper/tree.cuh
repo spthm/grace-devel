@@ -37,7 +37,7 @@ void build_tree(thrust::device_vector<Real4>& spheres,
     const float3 top = make_float3(high.x, high.y, high.z);
     thrust::device_vector<Real> deltas(spheres.size() + 1);
 
-    grace::morton_keys30_sort_sph(spheres, top, bottom);
+    grace::morton_keys30_sort_sph(spheres, bottom, top);
     grace::euclidean_deltas_sph(spheres, deltas);
     grace::ALBVH_sph(spheres, deltas, tree);
 }

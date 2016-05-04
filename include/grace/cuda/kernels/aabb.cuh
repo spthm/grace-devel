@@ -10,13 +10,12 @@ namespace grace {
 
 namespace AABB {
 
-// Centroid
-template <typename PrimitiveIter, typename AABBFunc>
+template <typename PrimitiveIter, typename CentroidFunc>
 __global__ void compute_centroids_kernel(
     PrimitiveIter primitives,
     const size_t N_primitives,
     float3* centroids,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
 
@@ -25,27 +24,26 @@ __global__ void compute_centroids_kernel(
     while (tid < N_primitives)
     {
         TPrimitive prim = primitives[tid];
-        float3 bot, top;
-        AABB(prim, &bot, &top);
-        centroids[tid] = AABB_centroid(bot, top);
+        centroids[tid] = centroid(prim);
 
         tid += blockDim.x * gridDim.x;
     }
 }
 
-template <typename PrimitiveIter, typename CentroidIter, typename AABBFunc>
+template <typename PrimitiveIter, typename CentroidIter, typename CentroidFunc>
 GRACE_HOST void compute_centroids(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
     CentroidIter d_centroid_iter,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
-    int blocks = min(MAX_BLOCKS, (int) ((N_primitives + 256 - 1) / 256));
-    compute_centroids_kernel<<<blocks, 256>>>(
+    const int NT = 256;
+    int blocks = min(MAX_BLOCKS, (int) ((N_primitives + NT - 1) / NT));
+    compute_centroids_kernel<<<blocks, NT>>>(
         d_prims_iter,
         N_primitives,
         d_centroid_iter,
-        AABB);
+        centroid);
     GRACE_KERNEL_CHECK();
 }
 

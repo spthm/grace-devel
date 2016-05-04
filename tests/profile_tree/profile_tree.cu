@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
             // Don't include above memory allocations in t_morton.
             timer.split();
 
-            grace::morton_keys_sph(d_spheres, high, low, d_keys);
+            grace::morton_keys_sph(d_spheres, low, high, d_keys);
             if (i >= 0) t_morton += timer.split();
 
             thrust::sort_by_key(d_keys.begin(), d_keys.end(),
@@ -135,7 +135,7 @@ int main(int argc, char* argv[])
                 thrust::raw_pointer_cast(d_spheres.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()),
                 thrust::less<float>(),
-                grace::AABB_sphere());
+                grace::AABBSphere());
             if (i >= 0) t_nodes += timer.split();
 
             // Record the total time spent in the loop.

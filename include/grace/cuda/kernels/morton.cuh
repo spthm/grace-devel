@@ -26,13 +26,13 @@ namespace morton {
 //-----------------------------------------------------------------------------
 
 template <typename PrimitiveIter, typename Real3, typename KeyIter,
-          typename AABBFunc>
+          typename CentroidFunc>
 __global__ void morton_keys_kernel(
     PrimitiveIter primitives,
     const size_t N_primitives,
     const Real3 norm_scale,
     KeyIter keys,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
     typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
@@ -40,7 +40,7 @@ __global__ void morton_keys_kernel(
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_primitives) {
-        float3 centre = AABB::primitive_centroid(primitives[tid], AABB);
+        float3 centre = centroid(primitives[tid]);
 
         KeyType x = static_cast<KeyType>(norm_scale.x * centre.x);
         KeyType y = static_cast<KeyType>(norm_scale.y * centre.y);
@@ -60,13 +60,13 @@ __global__ void morton_keys_kernel(
 // This functions signature is unlike the morton_key() functions below, which
 // is why it has been moved into the 'internal', morton:: namespace
 template <typename PrimitiveIter, typename Real3, typename KeyIter,
-          typename AABBFunc>
+          typename CentroidFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
     const Real3 normalizing_scale,
     KeyIter d_keys_iter,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
     int blocks = min(MAX_BLOCKS, (int) ((N_primitives + MORTON_THREADS_PER_BLOCK-1)
                                         / MORTON_THREADS_PER_BLOCK));
@@ -76,7 +76,7 @@ GRACE_HOST void morton_keys(
         N_primitives,
         normalizing_scale,
         d_keys_iter,
-        AABB);
+        centroid);
     GRACE_KERNEL_CHECK();
 }
 
@@ -90,14 +90,14 @@ GRACE_HOST void morton_keys(
 // Wrappers to compute morton keys given the AABB containing all primitives.
 // KeyIter's value_type must be an unsigned integer type of at least 32 bits.
 template <typename PrimitiveIter, typename Real3, typename KeyIter,
-          typename AABBFunc>
+          typename CentroidFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
-    const Real3 AABB_top,
     const Real3 AABB_bot,
+    const Real3 AABB_top,
     KeyIter d_keys_iter,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
     typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
 
@@ -108,34 +108,37 @@ GRACE_HOST void morton_keys(
                                span / (AABB_top.y - AABB_bot.y),
                                span / (AABB_top.z - AABB_bot.z));
 
-    morton::morton_keys(d_prims_iter, N_primitives, scale, d_keys_iter, AABB);
+    morton::morton_keys(d_prims_iter, N_primitives, scale, d_keys_iter,
+                        centroid);
 }
 
 template <typename TPrimitive, typename Real3, typename KeyType,
-          typename AABBFunc>
+          typename CentroidFunc>
 GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
-    const Real3 AABB_top,
     const Real3 AABB_bot,
+    const Real3 AABB_top,
     thrust::device_vector<KeyType>& d_keys,
-    const AABBFunc AABB)
+    const CentroidFunc centroid)
 {
     const size_t N_primitives = d_primitives.size();
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    morton_keys(prims_ptr, d_primitives.size(), AABB_top, AABB_bot, keys_ptr,
-                AABB);
+    morton_keys(prims_ptr, d_primitives.size(), AABB_bot, AABB_top, keys_ptr,
+                centroid);
 }
 
-// Wrappers to compute the AABB containing all primitives.
+// Wrappers to additionally compute the AABB containing all primitives.
 // Requires O(N_primitives) temporary storage.
-template <typename PrimitiveIter, typename KeyIter, typename AABBFunc>
+template <typename PrimitiveIter, typename KeyIter, typename CentroidFunc>
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
     KeyIter d_keys_iter,
-    const AABBFunc AABB)
+    const CentroidFunc centroid,
+    float3* const bots = NULL,
+    float3* const tops = NULL)
 {
     // grace::min_max_{x,y,z} use Thrust functions, which must accept either
     // Thrust iterators or device pointers.
@@ -149,25 +152,36 @@ GRACE_HOST void morton_keys(
     thrust::device_vector<float3> d_centroids(N_primitives);
     float3* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
 
-    AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr, AABB);
+    AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr,
+                            centroid);
 
     float3 mins, maxs;
     min_vec3(d_centroids_ptr, N_primitives, &mins);
     max_vec3(d_centroids_ptr, N_primitives, &maxs);
 
-    morton_keys(d_prims_iter, N_primitives, maxs, mins, d_keys_iter, AABB);
+    morton_keys(d_prims_iter, N_primitives, mins, maxs, d_keys_iter, centroid);
+
+    if (bots != NULL) {
+        *bots = mins;
+    }
+    if (tops != NULL) {
+        *tops = maxs;
+    }
 }
 
-template <typename TPrimitive, typename KeyType, typename AABBFunc>
+template <typename TPrimitive, typename KeyType, typename CentroidFunc>
 GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
     thrust::device_vector<KeyType>& d_keys,
-    const AABBFunc AABB)
+    const CentroidFunc centroid,
+    float3* const bots = NULL,
+    float3* const tops = NULL)
 {
     const TPrimitive* d_prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     KeyType* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, AABB);
+    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid, bots,
+                tops);
 }
 
 } // namespace grace

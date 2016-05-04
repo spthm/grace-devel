@@ -56,7 +56,7 @@ int main(int argc, char* argv[])
     float3 top = make_float3(1., 1., 1.);
     float3 bot = make_float3(0., 0., 0.);
     thrust::device_vector<KeyT> d_keys(N);
-    grace::morton_keys_sph(d_points, top, bot, d_keys);
+    grace::morton_keys_sph(d_points, bot, top, d_keys);
 
     // Check device keys against host keys.
     int errors = 0;

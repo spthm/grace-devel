@@ -6,13 +6,16 @@
 // CUDA math constants.
 #include <math_constants.h>
 
+#include <iterator>
+#include <limits>
+
 namespace grace {
 
 //-----------------------------------------------------------------------------
 // GPU helper functions for tree build kernels.
 //-----------------------------------------------------------------------------
 
-struct Delta_XOR
+struct DeltaXOR
 {
     GRACE_HOST_DEVICE uinteger32 operator()(
         const int i,
@@ -47,86 +50,83 @@ struct Delta_XOR
 };
 
 // Euclidian distance metric.
-struct Delta_sphere_euclidean
+template <typename PrimitiveIter, typename CentroidFunc>
+struct DeltaEuclidean
 {
-    GRACE_DEVICE float operator()(
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
+    GRACE_HOST_DEVICE DeltaEuclidean() : centroid(CentroidFunc()) {}
+
+    GRACE_HOST_DEVICE float operator()(
         const int i,
-        const float4* spheres,
-        const size_t n_spheres) const
+        PrimitiveIter primitives,
+        const size_t n_primitives) const
     {
-        if (i < 0 || i + 1 >= n_spheres)
+        if (i < 0 || i + 1 >= n_primitives) {
+#ifdef __CUDA_ARCH__
             return CUDART_INF_F;
+#else
+            return std::numeric_limits<float>::infinity();
+#endif
+        }
 
-        float4 si = spheres[i];
-        float4 sj = spheres[i+1];
+        TPrimitive pi = primitives[i];
+        TPrimitive pj = primitives[i+1];
 
-        return (si.x - sj.x) * (si.x - sj.x)
-               + (si.y - sj.y) * (si.y - sj.y)
-               + (si.z - sj.z) * (si.z - sj.z);
+        float3 ci = centroid(pi);
+        float3 cj = centroid(pj);
+
+        return (pi.x - pj.x) * (pi.x - pj.x)
+               + (pi.y - pj.y) * (pi.y - pj.y)
+               + (pi.z - pj.z) * (pi.z - pj.z);
     }
 
-    GRACE_DEVICE double operator()(
-        const int i,
-        const double4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF;
-
-        double4 si = spheres[i];
-        double4 sj = spheres[i+1];
-
-        return (si.x - sj.x) * (si.x - sj.x)
-               + (si.y - sj.y) * (si.y - sj.y)
-               + (si.z - sj.z) * (si.z - sj.z);
-    }
+private:
+    const CentroidFunc centroid;
 };
 
 // Surface area 'distance' metric.
-struct Delta_sphere_SA
+template <typename PrimitiveIter, typename AABBFunc>
+struct DeltaSurfaceArea
 {
-    GRACE_DEVICE float operator()(
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+
+    GRACE_HOST_DEVICE DeltaSurfaceArea() : AABB(AABBFunc()) {}
+
+    GRACE_HOST_DEVICE float operator()(
         const int i,
-        const float4* spheres,
-        const size_t n_spheres) const
+        PrimitiveIter primitives,
+        const size_t n_primitives) const
     {
-        if (i < 0 || i + 1 >= n_spheres)
+        if (i < 0 || i + 1 >= n_primitives) {
+#ifdef __CUDA_ARCH__
             return CUDART_INF_F;
+#else
+            return std::numeric_limits<float>::infinity();
+#endif
+        }
 
-        float4 si = spheres[i];
-        float4 sj = spheres[i+1];
+        TPrimitive pi = primitives[i];
+        TPrimitive pj = primitives[i+1];
 
-        float L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
-        float L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
-        float L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
+        float3 boti, topi, botj, topj;
+        AABB(pi, &boti, &topi);
+        AABB(pj, &botj, &topj);
+
+        float L_x = max(topi.x, topj.x) - min(boti.x, botj.x);
+        float L_y = max(topi.y, topj.y) - min(boti.y, botj.y);
+        float L_z = max(topi.z, topj.z) - min(boti.z, botj.z);
 
         float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
 
         return SA;
     }
 
-    GRACE_DEVICE float operator()(
-        const int i,
-        const double4* spheres,
-        const size_t n_spheres) const
-    {
-        if (i < 0 || i + 1 >= n_spheres)
-            return CUDART_INF_F;
-
-        double4 si = spheres[i];
-        double4 sj = spheres[i+1];
-
-        double L_x = max(si.x + si.w, sj.x + sj.w) - min(si.x - si.w, sj.x - sj.w);
-        double L_y = max(si.y + si.w, sj.y + sj.w) - min(si.y - si.w, sj.y - sj.w);
-        double L_z = max(si.z + si.w, sj.z + sj.w) - min(si.z - si.w, sj.z - sj.w);
-
-        double SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
-
-        return SA;
-    }
+private:
+    const AABBFunc AABB;
 };
 
-struct AABB_sphere
+struct AABBSphere
 {
     template <typename Real4>
     GRACE_HOST_DEVICE void operator()(
@@ -142,6 +142,15 @@ struct AABB_sphere
 
         bot->z = sphere.z - sphere.w;
         top->z = sphere.z + sphere.w;
+    }
+};
+
+struct CentroidSphere
+{
+    template <typename Real4>
+    GRACE_HOST_DEVICE float3 operator()(Real4 sphere) const
+    {
+        return make_float3(sphere.x, sphere.y, sphere.z);
     }
 };
 
