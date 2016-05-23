@@ -34,19 +34,7 @@ __host__ __device__ int williams(const Ray& ray, const AABB& box)
     tmin = fmax( fmax(bx, by), fmax(bz, 0) );
     tmax = fmin( fmin(tx, ty), fmin(tz, ray.length) );
 
-    // return (tmax >= tmin ? HIT : MISS);
-    int res = (tmax >= tmin ? HIT : MISS);
-    if (tx != fmax(bx, tx)) {
-        printf("box.bx: %.6f, box.tx: %.6f, ray.dx: %.6f\nbx: %.6f, tx: %.6f\n", box.bx, box.tx, ray.dx);
-    }
-    // assert(bx == fmin((box.bx - ray.ox) * ray.invdx, (box.tx - ray.ox) * ray.invdx));
-    // assert(by == fmin((box.by - ray.oy) * ray.invdy, (box.ty - ray.oy) * ray.invdy));
-    // assert(bz == fmin((box.bz - ray.oz) * ray.invdz, (box.tz - ray.oz) * ray.invdz));
-    // assert(tx == fmax((box.bx - ray.ox) * ray.invdx, (box.tx - ray.ox) * ray.invdx));
-    // assert(ty == fmax((box.by - ray.oy) * ray.invdy, (box.ty - ray.oy) * ray.invdy));
-    // assert(tz == fmax((box.bz - ray.oz) * ray.invdz, (box.tz - ray.oz) * ray.invdz));
-    // assert(res == williams_noif(ray, box));
-    return res;
+    return (tmax >= tmin ? HIT : MISS);
 }
 
 __host__ __device__ int williams_noif(const Ray& ray, const AABB& box)

@@ -13,7 +13,9 @@ williams.o
 
 NVCCDEPS += profile.cuh intersectors.cuh
 
-NVCCFLAGS += -O3
+# _FORCE_INLINES is required to succesfully compile AABB.cu when using newer
+# versions of gcc (seemingly 4.9+).
+NVCCFLAGS += -O3 -D_FORCE_INLINES
 
 all: AABB_intersect
 
