@@ -5,7 +5,7 @@
 #include "grace/cuda/util/bound_iter.cuh"
 #include "grace/cuda/util/texref_iter.cuh"
 
-#include "grace/generic/util/meta.h"
+#include "grace/generic/meta.h"
 
 #include "grace/cuda/kernel_config.h"
 #include "grace/cuda/nodes.h"

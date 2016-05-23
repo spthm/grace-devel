@@ -4,8 +4,8 @@
 
 #include "grace/cuda/util/bound_iter.cuh"
 
-#include "grace/generic/util/meta.h"
 #include "grace/generic/interpolate.h"
+#include "grace/generic/meta.h"
 
 #include "grace/error.h"
 #include "grace/types.h"
