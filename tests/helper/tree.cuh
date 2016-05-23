@@ -1,7 +1,7 @@
 #pragma once
 
+#include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/kernels/build_sph.cuh"
 #include "grace/generic/util/meta.h"
 
 #include "helper/random.cuh"

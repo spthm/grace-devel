@@ -2,6 +2,9 @@
 
 #include <stdint.h>
 
+// CUDA
+#include <vector_types.h>
+
 // Final clause seems to be necessary with some versions of NVCC, where
 // __CUDA_ARCH__ == 0 in host(?) compilation trajectory.
 #if defined(__CUDA_ARCH__) && (__CUDA_ARCH__ < 200) && (__CUDA_ARCH__ != 0)
@@ -13,11 +16,12 @@
     #define GRACE_DEVICE __device__ inline
     #define GRACE_HOST_DEVICE __host__ __device__ inline
 #else
-    // Only GRACE_HOST makes sense as an identifier when compiling non-CUDA
-    // source files. The others should (and will) cause the compiler to balk.
+    // GRACE_DEVICE does not make sense as an identifier when compiling non-CUDA
+    // source files. It should (and will) cause the compiler to balk.
+    // GRACE_HOST[_DEVICE], however, should compile just fine.
     #define GRACE_HOST inline
     #define GRACE_DEVICE __device__ inline
-    #define GRACE_HOST_DEVICE __host__ __device__ inline
+    #define GRACE_HOST_DEVICE inline
 #endif
 
 namespace grace {

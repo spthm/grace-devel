@@ -6,8 +6,8 @@
 
 #include "statistics.cuh"
 
-#include "grace/cuda/ray.h"
 #include "grace/cuda/kernels/gen_rays.cuh"
+#include "grace/ray.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

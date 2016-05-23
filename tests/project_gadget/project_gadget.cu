@@ -4,11 +4,11 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
+#include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/ray.h"
+#include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
-#include "grace/cuda/kernels/build_sph.cuh"
-#include "grace/cuda/kernels/trace_sph.cuh"
+#include "grace/ray.h"
 #include "helper/images.hpp"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"

@@ -1,14 +1,14 @@
 #pragma once
 
-#include "grace/cuda/device/aabb.cuh"
-#include "grace/cuda/device/bits.cuh"
-#include "grace/cuda/device/morton.cuh"
-
 #include "grace/cuda/kernels/aabb.cuh"
 
 #include "grace/cuda/util/extrema.cuh"
 
 #include "grace/cuda/kernel_config.h"
+
+#include "grace/generic/functors/aabb.h"
+#include "grace/generic/bits.h"
+#include "grace/generic/morton.h"
 
 #include "grace/error.h"
 #include "grace/types.h"

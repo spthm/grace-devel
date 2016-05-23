@@ -1,12 +1,9 @@
 #pragma once
 
-#include "grace/cuda/device/trace_functors.cuh"
-#include "grace/cuda/device/trace_raydata.cuh"
-
+#include "grace/cuda/functors/trace.cuh"
 #include "grace/cuda/kernels/bintree_trace.cuh"
-
 #include "grace/generic/util/meta.h"
-
+#include "grace/generic/raydata.h"
 #include "grace/error.h"
 #include "grace/types.h"
 

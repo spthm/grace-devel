@@ -45,7 +45,7 @@
  * See http://nvlabs.github.io/moderngpu for repository and documentation.
  */
 
-#include "grace/cuda/kernels/sort.cuh"
+#include "grace/cuda/sort.cuh"
 #include "grace/cuda/kernels/scan.cuh"
 
 #include "grace/external/sgpu/util/format.h"

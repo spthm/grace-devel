@@ -1,12 +1,14 @@
+#pragma once
+
+#include "grace/types.h"
+
 #include <iterator>
 
 namespace grace {
 
-namespace interp {
-
 // Requires x in [0, N_table)
 template <typename Real, typename TableIter>
-GRACE_DEVICE Real lerp(Real x, TableIter table, int N_table)
+GRACE_HOST_DEVICE Real lerp(Real x, TableIter table, int N_table)
 {
     typedef typename std::iterator_traits<TableIter>::value_type TableReal;
 
@@ -26,11 +28,14 @@ GRACE_DEVICE Real lerp(Real x, TableIter table, int N_table)
 
     // Sterbenz lemma: floating-point a - b is exact for 0.5*a <= b <= 2*a
     // This typically holds for adjacent values in a lookup table, so we choose
-    // the below form over the above. It has error 0.5 ulp (error of FMA).
+    // the below form over the above. It has error 0.5 ulp (error of FMA) on the
+    // GPU.
+#ifdef __CUDA_ARCH__
     Real y = fma(t, y1 - y0, y0);
+#else
+    Real y = t * (y1 - y0) + y0;
+#endif
     return y;
 }
-
-} // namespace interp
 
 } // namespace grace

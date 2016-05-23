@@ -2,8 +2,6 @@
 
 #include "grace/types.h"
 
-#include "vector_types.h"
-
 namespace grace {
 
 // Usage:  typedef typename Real{2,3,4}ToRealMapper<Real{2,3,4}>::type Real

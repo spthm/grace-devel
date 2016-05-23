@@ -1,3 +1,7 @@
+#pragma once
+
+#include "grace/types.h"
+
 #include <cmath>
 
 namespace grace {
@@ -5,17 +9,17 @@ namespace grace {
 template <typename Real3>
 GRACE_HOST_DEVICE Real3 normalize3(const Real3 v)
 {
-    #ifdef __CUDA_ARCH__
+#ifdef __CUDA_ARCH__
 
-    #if __CUDACC_VER_MAJOR__ >= 7
+#if __CUDACC_VER_MAJOR__ >= 7
     double N = rnorm3d(v.x, v.y, v.z);
-    #else
+#else
     double N = rsqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-    #endif
+#endif
 
-    #else
+#else
     double N = 1. / std::sqrt(v.x*v.x + v.y*v.y + v.z*v.z);
-    #endif
+#endif
 
     Real3 normv;
     normv.x = v.x * N;

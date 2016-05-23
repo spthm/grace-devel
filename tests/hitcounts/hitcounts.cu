@@ -5,9 +5,9 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/ray.h"
+#include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/kernels/gen_rays.cuh"
-#include "grace/cuda/kernels/trace_sph.cuh"
+#include "grace/ray.h"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>

@@ -1,5 +1,5 @@
-#include "grace/cuda/device/morton.cuh"
-#include "grace/cuda/kernels/build_sph.cuh"
+#include "grace/cuda/build_sph.cuh"
+#include "grace/generic/morton.h"
 
 #include "helper/random.cuh"
 
@@ -54,7 +54,7 @@ int main(int argc, char* argv[])
         KeyT uy = static_cast<KeyT>(static_cast<float>(h_points[i].y) * MAX_KEY);
         KeyT uz = static_cast<KeyT>(static_cast<float>(h_points[i].z) * MAX_KEY);
 
-        h_keys[i] = grace::morton::morton_key(ux, uy, uz);
+        h_keys[i] = grace::morton_key(ux, uy, uz);
     }
 
     // Compute keys on device.

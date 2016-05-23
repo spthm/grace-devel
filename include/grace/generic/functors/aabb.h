@@ -1,12 +1,31 @@
 #pragma once
 
-#include <thrust/functional.h>
+#include "grace/types.h"
 
 #include <iterator>
 
 namespace grace {
 
-namespace AABB {
+struct AABBSphere
+{
+    template <typename Real4>
+    GRACE_HOST_DEVICE void operator()(
+        Real4 sphere,
+        float3* bot,
+        float3* top) const
+    {
+        bot->x = sphere.x - sphere.w;
+        top->x = sphere.x + sphere.w;
+
+        bot->y = sphere.y - sphere.w;
+        top->y = sphere.y + sphere.w;
+
+        bot->z = sphere.z - sphere.w;
+        top->z = sphere.z + sphere.w;
+    }
+};
+
+namespace detail {
 
 // Finds the centroid of an AABB.
 // The performance hit of using doubles here is not particularly high.
@@ -20,35 +39,6 @@ GRACE_HOST_DEVICE float3 AABB_centroid(const float3 bot, const float3 top)
     return centre;
 }
 
-} // namespace AABB
-
-// Converts from TPrimitive to a float3 (primitive centroid).
-template <typename TPrimitive, typename AABBFunc>
-GRACE_HOST_DEVICE float3 primitive_centroid(
-    const TPrimitive primitive,
-    const AABBFunc AABB)
-{
-    float3 bot, top;
-    AABB(primitive, &bot, &top);
-    return AABB::AABB_centroid(bot, top);
-}
-
-// Functor to convert from TPrimitive to a float3 (primitive centroid), taking
-// the primitive's centroid to be the centroid of the primitive's AABB.
-// AABBFunc must be declared __host__ __device__, a Thrust requirement.
-template <typename TPrimitive, typename AABBFunc>
-struct PrimitiveCentroid : public thrust::unary_function<TPrimitive, float3>
-{
-public:
-    GRACE_HOST_DEVICE PrimitiveCentroid() : AABB(AABBFunc()) {}
-
-    GRACE_HOST_DEVICE float3 operator()(TPrimitive primitive)
-    {
-        return primitive_centroid(primitive, AABBFunc());
-    }
-
-private:
-    const AABBFunc AABB;
-};
+} // namespace detail
 
 } // namespace grace

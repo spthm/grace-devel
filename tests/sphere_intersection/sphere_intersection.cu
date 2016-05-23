@@ -6,10 +6,10 @@
 
 #include "intersection.cuh"
 
-#include "grace/cuda/ray.h"
-#include "grace/cuda/device/bits.cuh"
 #include "grace/cuda/device/intersect.cuh"
 #include "grace/cuda/kernels/gen_rays.cuh"
+#include "grace/generic/bits.h"
+#include "grace/ray.h"
 #include "helper/random.cuh"
 
 #include <thrust/iterator/counting_iterator.h>
@@ -31,9 +31,9 @@ struct expand_functor
     {
         float4 s = sphere;
         // Centre assumed (0, 0).
-        s.x += d * grace::bits::sgn(s.x);
-        s.y += d * grace::bits::sgn(s.y);
-        s.z += d * grace::bits::sgn(s.z);
+        s.x += d * grace::sgn(s.x);
+        s.y += d * grace::sgn(s.y);
+        s.z += d * grace::sgn(s.z);
         return s;
     }
 };

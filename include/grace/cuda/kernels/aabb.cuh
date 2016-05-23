@@ -1,8 +1,8 @@
 #pragma once
 
-#include "grace/cuda/device/aabb.cuh"
-
 #include "grace/cuda/kernel_config.h"
+
+#include "grace/generic/functors/aabb.h"
 
 #include <iterator>
 

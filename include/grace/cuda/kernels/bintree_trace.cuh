@@ -9,9 +9,9 @@
 
 #include "grace/cuda/kernel_config.h"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/ray.h"
 
 #include "grace/error.h"
+#include "grace/ray.h"
 #include "grace/types.h"
 
 #include <thrust/device_vector.h>
