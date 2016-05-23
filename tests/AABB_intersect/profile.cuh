@@ -8,6 +8,7 @@
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
+#include <algorithm>
 #include <time.h>
 
 template <typename Intersector>
@@ -71,7 +72,7 @@ float profile_gpu(const thrust::device_vector<Ray>& rays,
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    const int num_blocks = min((rays.size() + 127) / 128, (size_t)48);
+    const int num_blocks = std::min((rays.size() + 127) / 128, (size_t)48);
 
     cudaEventRecord(start);
     intersect_kernel<<<num_blocks, 128>>>(
