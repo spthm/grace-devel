@@ -6,7 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
-#include "grace/cuda/kernels/gen_rays.cuh"
+#include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/tree.cuh"
 

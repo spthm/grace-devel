@@ -1,8 +1,6 @@
 #pragma once
 
-#include "grace/cuda/kernels/gen_rays.cuh"
-
-#include "grace/generic/morton.h"
+#include "grace/cuda/gen_rays.cuh"
 
 #include "grace/ray.h"
 
