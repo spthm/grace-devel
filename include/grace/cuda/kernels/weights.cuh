@@ -12,9 +12,9 @@ namespace detail {
 template <typename Real, typename IdxType>
 __global__ void multiply_by_weights_kernel(
     const Real* unweighted,
+    size_t N_unweighted,
     const Real* weights,
     const IdxType* weight_map,
-    size_t N_unweighted,
     Real* weighted)
 {
     for(unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -29,13 +29,13 @@ __global__ void multiply_by_weights_kernel(
 template <typename Real, typename IdxType>
 GRACE_HOST void multiply_by_weights(
     const Real* unweighted,
+    const size_t N_unweighted,
     const Real* weights,
     const IdxType* weight_map,
-    const size_t N_unweighted,
     Real* weighted)
 {
     detail::multiply_by_weights_kernel<<<48, 512>>>(
-        unweighted, weights, weight_map, N_unweighted, weighted
+        unweighted, N_unweighted, weights, weight_map, weighted
     );
     GRACE_KERNEL_CHECK();
 }
