@@ -8,10 +8,16 @@
 
 namespace grace {
 
-namespace bits {
+template <typename T>
+GRACE_HOST_DEVICE int sgn(T val)
+{
+    return (T(0) < val) - (val < T(0));
+}
+
+namespace detail {
 
 //-----------------------------------------------------------------------------
-// Functions (host-compatible) for bitwise manipulation.
+// Functions for bitwise manipulation.
 //-----------------------------------------------------------------------------
 
 template <typename UInteger>
@@ -39,12 +45,6 @@ GRACE_HOST_DEVICE uinteger64 space_by_two_21bit(const UInteger x)
     return x_64;
 }
 
-template <typename T>
-GRACE_HOST_DEVICE int sgn(T val)
-{
-    return (T(0) < val) - (val < T(0));
-}
-
-} // namespace bits
+} // namespace detail
 
 } // namespace grace

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "grace/cuda/ray.h"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/kernels/trace_sph.cuh"
-#include "grace/cuda/kernels/sort.cuh"
+#include "grace/cuda/sort.cuh"
+#include "grace/cuda/trace_sph.cuh"
+#include "grace/ray.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>

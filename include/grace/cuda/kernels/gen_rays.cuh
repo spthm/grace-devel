@@ -4,15 +4,14 @@
 // before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
-#include "grace/cuda/device/morton.cuh"
-#include "grace/cuda/device/vecmath.cuh"
-
-#include "grace/cuda/kernels/sort.cuh"
-
 #include "grace/cuda/kernel_config.h"
-#include "grace/cuda/ray.h"
+#include "grace/cuda/sort.cuh"
+
+#include "grace/generic/morton.h"
+#include "grace/generic/vecmath.h"
 
 #include "grace/error.h"
+#include "grace/ray.h"
 #include "grace/types.h"
 
 #include <thrust/device_vector.h>
@@ -86,9 +85,9 @@ __global__ void gen_uniform_rays(
         ray.dz = dz * invR;
 
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
-        keys[tid] = morton::morton_key((ray.dx+1)/2.f,
-                                       (ray.dy+1)/2.f,
-                                       (ray.dz+1)/2.f);
+        keys[tid] = morton_key((ray.dx+1)/2.f,
+                               (ray.dy+1)/2.f,
+                               (ray.dz+1)/2.f);
 
         ray.ox = ol.x;
         ray.oy = ol.y;
@@ -139,9 +138,9 @@ __global__ void gen_uniform_rays_single_octant(
         ray.dz = dz * invR;
 
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
-        keys[tid] = morton::morton_key((ray.dx+1)/2.f,
-                                       (ray.dy+1)/2.f,
-                                       (ray.dz+1)/2.f);
+        keys[tid] = morton_key((ray.dx+1)/2.f,
+                               (ray.dy+1)/2.f,
+                               (ray.dz+1)/2.f);
 
         ray.ox = ol.x;
         ray.oy = ol.y;

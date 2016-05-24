@@ -1,5 +1,5 @@
-#include "grace/cuda/device/bits.cuh"
-#include "grace/cuda/device/morton.cuh"
+#include "grace/generic/bits.h"
+#include "grace/generic/morton.h"
 
 #include <cstdlib>
 #include <iostream>
@@ -25,10 +25,10 @@ int main(void)
     KeyT ref_spaced_z = 1297353911585505801;
     KeyT ref_key = 8995068606879603957;
 
-    KeyT spaced_x = grace::bits::space_by_two_21bit(x);
-    KeyT spaced_y = grace::bits::space_by_two_21bit(y);
-    KeyT spaced_z = grace::bits::space_by_two_21bit(z);
-    KeyT key = grace::morton::morton_key(x, y, z);
+    KeyT spaced_x = grace::detail::space_by_two_21bit(x);
+    KeyT spaced_y = grace::detail::space_by_two_21bit(y);
+    KeyT spaced_z = grace::detail::space_by_two_21bit(z);
+    KeyT key = grace::morton_key(x, y, z);
 
     if ((spaced_x != ref_spaced_x) ||
         (spaced_y != ref_spaced_y) ||

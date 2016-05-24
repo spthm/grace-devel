@@ -1,12 +1,10 @@
 #pragma once
 
-#include "grace/cuda/device/bits.cuh"
+#include "grace/generic/bits.h"
 
 #include "grace/types.h"
 
 namespace grace {
-
-namespace morton {
 
 //-----------------------------------------------------------------------------
 // Helper functions (host-compatible) for generating morton keys
@@ -18,7 +16,7 @@ GRACE_HOST_DEVICE uinteger32 morton_key(
     const uinteger32 y,
     const uinteger32 z)
 {
-    return bits::space_by_two_10bit(z) << 2 | bits::space_by_two_10bit(y) << 1 | bits::space_by_two_10bit(x);
+    return detail::space_by_two_10bit(z) << 2 | detail::space_by_two_10bit(y) << 1 | detail::space_by_two_10bit(x);
 }
 
 // 63-bit keys.
@@ -27,7 +25,7 @@ GRACE_HOST_DEVICE uinteger64 morton_key(
     const uinteger64 y,
     const uinteger64 z)
 {
-    return bits::space_by_two_21bit(z) << 2 | bits::space_by_two_21bit(y) << 1 | bits::space_by_two_21bit(x);
+    return detail::space_by_two_21bit(z) << 2 | detail::space_by_two_21bit(y) << 1 | detail::space_by_two_21bit(x);
 }
 
 // 30-bit keys from floats.  Assumes floats lie in (0, 1)!
@@ -55,7 +53,5 @@ GRACE_HOST_DEVICE uinteger64 morton_key(
                       static_cast<uinteger64>(span * z));
 
 }
-
-} // namespace morton
 
 } // namespace grace

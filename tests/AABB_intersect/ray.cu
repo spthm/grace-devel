@@ -1,5 +1,5 @@
 #include "ray.cuh" // THIS
-#include "grace/cuda/ray.h" // GRACE
+#include "grace/ray.h" // GRACE
 #include "grace/cuda/kernels/gen_rays.cuh"
 
 #include <thrust/device_vector.h>

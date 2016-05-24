@@ -1,6 +1,5 @@
 #pragma once
 
-#include "grace/error.h"
 #include "grace/types.h"
 
 // CUDA math constants.
@@ -124,34 +123,6 @@ struct DeltaSurfaceArea
 
 private:
     const AABBFunc AABB;
-};
-
-struct AABBSphere
-{
-    template <typename Real4>
-    GRACE_HOST_DEVICE void operator()(
-        Real4 sphere,
-        float3* bot,
-        float3* top) const
-    {
-        bot->x = sphere.x - sphere.w;
-        top->x = sphere.x + sphere.w;
-
-        bot->y = sphere.y - sphere.w;
-        top->y = sphere.y + sphere.w;
-
-        bot->z = sphere.z - sphere.w;
-        top->z = sphere.z + sphere.w;
-    }
-};
-
-struct CentroidSphere
-{
-    template <typename Real4>
-    GRACE_HOST_DEVICE float3 operator()(Real4 sphere) const
-    {
-        return make_float3(sphere.x, sphere.y, sphere.z);
-    }
 };
 
 } // namespace grace

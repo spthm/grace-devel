@@ -2,8 +2,6 @@
 
 namespace grace {
 
-// RayData structs.
-
 template<typename T>
 struct RayData_datum
 {

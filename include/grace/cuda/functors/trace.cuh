@@ -1,11 +1,11 @@
 #pragma once
 
 #include "grace/cuda/device/intersect.cuh"
-#include "grace/cuda/device/interpolation.cuh"
 
 #include "grace/cuda/util/bound_iter.cuh"
 
-#include "grace/generic/util/meta.h"
+#include "grace/generic/interpolate.h"
+#include "grace/generic/meta.h"
 
 #include "grace/error.h"
 #include "grace/types.h"
@@ -182,7 +182,7 @@ public:
 
         Real ir = 1.f / sphere.w;
         Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
-        Real integral = interp::lerp(b, Wk_lookup, N_table);
+        Real integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         GRACE_ASSERT(integral >= 0);
@@ -220,7 +220,7 @@ public:
 
         Real ir = 1.f / sphere.w;
         Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
-        Real integral = interp::lerp(b, Wk_lookup, N_table);
+        Real integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         indices[ray_data.data] = sphere_idx;

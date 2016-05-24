@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/generic/util/meta.h"
+#include "grace/generic/meta.h"
 
 #include "grace/error.h"
 #include "grace/types.h"

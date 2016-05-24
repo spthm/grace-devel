@@ -1,9 +1,10 @@
 #pragma once
 
-#include "grace/cuda/device/build_functors.cuh"
-
 #include "grace/cuda/kernels/albvh.cuh"
 #include "grace/cuda/kernels/morton.cuh"
+
+#include "grace/generic/functors/albvh.h"
+#include "grace/generic/functors/centroid.h"
 
 #include "grace/types.h"
 
