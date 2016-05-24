@@ -5,9 +5,9 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/nodes.h"
+#include "grace/cuda/gen_rays.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
-#include "grace/cuda/kernels/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"

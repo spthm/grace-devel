@@ -31,4 +31,17 @@ typedef uint64_t uinteger64;
 typedef int32_t integer32;
 typedef int64_t integer64;
 
+// Binary encoding with +ve = 1, -ve = 0.
+// Octants for ray generation.
+enum Octants {
+    PPP = 7,
+    PPM = 6,
+    PMP = 5,
+    PMM = 4,
+    MPP = 3,
+    MPM = 2,
+    MMP = 1,
+    MMM = 0
+};
+
 } // namespace grace

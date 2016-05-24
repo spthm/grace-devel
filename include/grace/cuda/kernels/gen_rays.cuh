@@ -19,19 +19,22 @@
 
 namespace grace {
 
-// Binary encoding with P = 1, M = 0.
-enum Octants {
-    PPP = 7,
-    PPM = 6,
-    PMP = 5,
-    PMM = 4,
-    MPP = 3,
-    MPM = 2,
-    MMP = 1,
-    MMM = 0
-};
+namespace detail {
 
-namespace gpu {
+// map f.k in [0, 1] to f'.k in [a.k, b.k] for each k = x, y, z component.
+GRACE_HOST_DEVICE float3 zero_one_to_a_b(
+    const float3 f,
+    const float3 a,
+    const float3 b)
+{
+    return make_float3(f.x * (b.x - a.x) + a.x,
+                       f.y * (b.y - a.y) + a.y,
+                       f.z * (b.z - a.z) + a.z);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// Kernels
+////////////////////////////////////////////////////////////////////////////////
 
 __global__ void init_PRNG_kernel(
     curandState* const prng_states,
@@ -55,7 +58,7 @@ __global__ void init_PRNG_kernel(
  * http://www.math.niu.edu/~rusin/known-math/96/sph.rand
  */
 template <typename Real4, typename KeyType>
-__global__ void gen_uniform_rays(
+__global__ void gen_uniform_rays_kernel(
     const curandState* const prng_states,
     const Real4 ol, // ox, oy, oz, length.
     Ray* const rays,
@@ -102,7 +105,7 @@ __global__ void gen_uniform_rays(
 
 
 template <typename Real4, typename KeyType>
-__global__ void gen_uniform_rays_single_octant(
+__global__ void gen_uniform_rays_single_octant_kernel(
     const curandState* const prng_states,
     const Real4 ol, // ox, oy, oz, length.
     Ray* const rays,
@@ -151,17 +154,6 @@ __global__ void gen_uniform_rays_single_octant(
 
         tid += blockDim.x * gridDim.x;
     }
-}
-
-// map f.k in [0, 1] to f'.k in [a.k, b.k] for each k = x, y, z component.
-GRACE_HOST_DEVICE float3 zero_one_to_a_b(
-    const float3 f,
-    const float3 a,
-    const float3 b)
-{
-    return make_float3(f.x * (b.x - a.x) + a.x,
-                       f.y * (b.y - a.y) + a.y,
-                       f.z * (b.z - a.z) + a.z);
 }
 
 template <typename Real, typename Real3>
@@ -268,7 +260,10 @@ __global__ void orthogonal_projection_rays_kernel(
     }
 }
 
-} // namespace gpu
+
+////////////////////////////////////////////////////////////////////////////////
+// Kernel wrappers
+////////////////////////////////////////////////////////////////////////////////
 
 // We launch only enough blocks to ~fill the hardware, minimizing the number
 // of threads which must call the expensive curand_init().
@@ -314,7 +309,7 @@ GRACE_HOST void init_PRNG(
     GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the P-RNG states.
-    gpu::init_PRNG_kernel<<<num_blocks, block_size>>>(
+    init_PRNG_kernel<<<num_blocks, block_size>>>(
         *d_prng_states,
         seed,
         N);
@@ -329,7 +324,7 @@ GRACE_HOST void uniform_random_rays(
     const Real oy,
     const Real oz,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     const float4 origin = make_float4(ox, oy, oz, length);
 
@@ -341,7 +336,7 @@ GRACE_HOST void uniform_random_rays(
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
-    gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+    gen_uniform_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
         d_rays_ptr,
@@ -356,21 +351,6 @@ GRACE_HOST void uniform_random_rays(
 }
 
 template <typename Real>
-GRACE_HOST void uniform_random_rays(
-    thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
-    const Real length,
-    const unsigned long long seed = 1234)
-{
-    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
-    const size_t N_rays = d_rays.size();
-
-    uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
-}
-
-template <typename Real>
 GRACE_HOST void uniform_random_rays_single_octant(
     Ray* const d_rays_ptr,
     const size_t N_rays,
@@ -378,8 +358,8 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const Real oy,
     const Real oz,
     const Real length,
-    const unsigned long long seed = 1234,
-    const enum Octants octant = PPP)
+    const enum Octants octant,
+    const unsigned long long seed)
 {
     const float4 origin = make_float4(ox, oy, oz, length);
 
@@ -391,13 +371,14 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
-    gpu::gen_uniform_rays_single_octant<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-        d_prng_states,
-        origin,
-        d_rays_ptr,
-        thrust::raw_pointer_cast(d_keys.data()),
-        N_rays,
-        octant);
+    gen_uniform_rays_single_octant_kernel
+        <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+            d_prng_states,
+            origin,
+            d_rays_ptr,
+            thrust::raw_pointer_cast(d_keys.data()),
+            N_rays,
+            octant);
     GRACE_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
@@ -406,53 +387,6 @@ GRACE_HOST void uniform_random_rays_single_octant(
                         thrust::device_ptr<Ray>(d_rays_ptr));
 }
 
-template <typename Real>
-GRACE_HOST void uniform_random_rays_single_octant(
-    thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
-    const Real length,
-    const unsigned long long seed = 1234,
-    const enum Octants octant = PPP)
-{
-    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
-    const size_t N_rays = d_rays.size();
-
-    uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz, length,
-                                      seed, octant);
-
-}
-
-// width and height: the dimensions of the grid of rays to generate
-// base: a point at one corner of the ray-grid plane
-// w: a vector defining the width of the plane, beginning from base
-//    n = width rays are generated along w from base, for m = height rows
-// h: a vector defining the height of the plane, beginning from base
-//    m = height rays are generated along h from base, for n = width columns
-// length: the length of all rays
-//
-// A grid of width * height cells, covering an area |w| * |h|, is produced.
-// base is located at one corner of this grid.
-// The direction of all rays is normalize(cross(w, h)).
-//
-// One ray is generated for each N = width * height cells, with each ray's
-// origin at a random location within its cell. Each ray-cell pair is unique.
-// This introduces some randomness to the distribution while attempting to
-// maintain relatively uniform sampling of the plane.
-// For the same combination of inputs, the same rays will always be generated on
-// the same hardware. This does not otherwise hold.
-// For different rays within the same plane, provide a different seed parameter.
-//
-// No guarantees are made for the ordering of rays, other than that the order
-// should be efficient for tracing.
-//
-// For rays originating at z = 10, travelling in the -z direction, and covering
-// an area |w| * |h| = 5 * 6 = 30:
-// base = (5, 0, 10)
-// w = (-5, 0, 0)
-// h = (0, 6, 0)
-// direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
 template <typename Real, typename Real3>
 GRACE_HOST void plane_parallel_random_rays(
     Ray* const d_rays_ptr,
@@ -462,7 +396,7 @@ GRACE_HOST void plane_parallel_random_rays(
     const Real3 w,
     const Real3 h,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     const size_t N_rays = static_cast<size_t>(width) * height;
 
@@ -484,7 +418,7 @@ GRACE_HOST void plane_parallel_random_rays(
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
     const int blocks = N_states / RAYS_THREADS_PER_BLOCK;
-    gpu::plane_parallel_random_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    plane_parallel_random_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         width,
         height,
@@ -498,58 +432,6 @@ GRACE_HOST void plane_parallel_random_rays(
     GRACE_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
-}
-
-// width and height: the dimensions of the grid of rays to generate
-// base: a point at one corner of the ray-grid plane
-// w: a vector defining the width of the plane, beginning from base
-//    n = width rays are generated along w from base, for m = height rows
-// h: a vector defining the height of the plane, beginning from base
-//    m = height rays are generated along h from base, for n = width columns
-// length: the length of all rays
-//
-// d_rays will be resized only if its current size is too small to contain
-// width * height rays; it will never be reduced in size.
-//
-// A grid of width * height cells, covering an area |w| * |h|, is produced.
-// base is located at one corner of this grid.
-// The direction of all rays is normalize(cross(w, h)).
-//
-// One ray is generated for each N = width * height cells, with each ray's
-// origin at a random location within its cell. Each ray-cell pair is unique.
-// This introduces some randomness to the distribution while attempting to
-// maintain relatively uniform sampling of the plane.
-// For the same combination of inputs, the same rays will always be generated on
-// the same hardware. This does not otherwise hold.
-// For different rays within the same plane, provide a different seed parameter.
-//
-// No guarantees are made for the ordering of rays, other than that the order
-// should be efficient for tracing.
-//
-// For rays originating at z = 10, travelling in the -z direction, and covering
-// an area |w| * |h| = 5 * 6 = 30:
-// base = (5, 0, 10)
-// w = (-5, 0, 0)
-// h = (0, 6, 0)
-// direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
-template <typename Real, typename Real3>
-GRACE_HOST void plane_parallel_random_rays(
-    thrust::device_vector<Ray>& d_rays,
-    const int width,
-    const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
-    const Real length,
-    const unsigned long long seed = 1234)
-{
-    const size_t N_rays = static_cast<size_t>(width) * height;
-    if (d_rays.size() < N_rays) {
-        d_rays.resize(N_rays);
-    }
-    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
-
-    plane_parallel_random_rays(d_rays_ptr, width, height, base, w, h, length);
 }
 
 // Similar to plane_parallel_random_rays, except ray origins are fixed at the
@@ -608,7 +490,7 @@ GRACE_HOST void orthogonal_projection_rays(
     const int blocks = min(grace::MAX_BLOCKS,
                            (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                    / RAYS_THREADS_PER_BLOCK));
-    gpu::orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         width,
         height,
         N_rays,
@@ -621,51 +503,6 @@ GRACE_HOST void orthogonal_projection_rays(
     GRACE_KERNEL_CHECK();
 }
 
-// Similar to plane_parallel_random_rays, except ray origins are fixed at the
-// cell centres for a given grid. Useful for emulating an orthogonal projection
-// camera.
-// Rays are ordered such that they increase along the direction of w first, then
-// h.
-//
-// d_rays will be resized only if its current size is too small to contain
-// width * height rays; it will never be reduced in size.
-//
-// width and height: the dimensions of the grid of rays to generate
-// base: a point at one corner of the ray-grid plane
-// w: a vector defining the width of the plane, beginning from base
-//    n = width rays are generated along w from base, for m = height rows
-// h: a vector defining the height of the plane, beginning from base
-//    m = height rays are generated along h from base, for n = width columns
-// length: the length of all rays
-//
-// A grid of width * height cells, covering an area |w| * |h|, is produced.
-// The centre of each cell in this grid defines a ray origin. base is located at
-// one corner of this grid. Hence, no ray will have origin == base.
-// The direction of all rays is normalize(cross(w, h)).
-//
-// For rays originating at z = 10, travelling in the -z direction, and covering
-// an area |w| * |h| = 5 * 6 = 30:
-// base = (5, 0, 10)
-// w = (-5, 0, 0)
-// h = (0, 6, 0)
-// direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
-template <typename Real, typename Real3>
-GRACE_HOST void orthogonal_projection_rays(
-    thrust::device_vector<Ray>& d_rays,
-    const int width,
-    const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
-    const Real length)
-{
-    const size_t N_rays = static_cast<size_t>(width) * height;
-    if (d_rays.size() < N_rays) {
-        d_rays.resize(N_rays);
-    }
-    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
-
-    orthogonal_projection_rays(d_rays_ptr, width, height, base, w, h, length);
-}
+} // namespace detail
 
 } // namespace grace
