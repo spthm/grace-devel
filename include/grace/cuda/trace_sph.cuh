@@ -130,7 +130,7 @@ GRACE_HOST void trace_sph(
     //
     // hits = [3, 0, 4, 1]
     // exclusive_scan:
-    //    => offsets = [0, 3, 3, 7]
+    //     => offsets = [0, 3, 3, 7]
     // total_hits = hits[3] + offsets[3] = 1 + 7 = 8
     thrust::exclusive_scan(d_ray_offsets.begin(), d_ray_offsets.end(),
                            d_ray_offsets.begin());
@@ -184,8 +184,8 @@ GRACE_HOST void trace_with_sentinels_sph(
     const size_t n_rays = d_rays.size();
 
     // Initially, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts(d_rays, d_ray_offsets, d_tree, d_spheres);
-    int last_ray_hitcount = d_ray_offsets[n_rays-1];
+    trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_ray_offsets);
+    int last_ray_hitcount = d_ray_offsets[n_rays - 1];
 
     // Allocate output array from total per-ray hit counts, and calculate
     // individual ray offsets into this array:
@@ -196,6 +196,7 @@ GRACE_HOST void trace_with_sentinels_sph(
     thrust::exclusive_scan(d_ray_offsets.begin(), d_ray_offsets.end(),
                            d_ray_offsets.begin());
     size_t allocate_size = d_ray_offsets[n_rays-1] + last_ray_hitcount;
+
     // Each ray segment in the output arrays ends with a dummy, or sentinel,
     // value marking the end of the ray; increase offsets accordingly.
     // transform:
