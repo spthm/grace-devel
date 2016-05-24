@@ -1,35 +1,14 @@
 #pragma once
 
-#include "grace/error.h"
 #include "grace/types.h"
+
+#include "grace/cuda/kernels/weights.cuh"
 
 #include "grace/external/sgpu/kernels/segscancsr.cuh"
 
 #include <thrust/device_vector.h>
 
 namespace grace {
-
-namespace gpu {
-
-template <typename Real>
-__global__ void multiply_by_weights(const Real* unweighted,
-                                    const Real* weights,
-                                    const unsigned int* weight_map,
-                                    size_t N_unweighted,
-                                    Real* weighted)
-{
-    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-    unsigned int weight_index;
-
-    while (tid < N_unweighted)
-    {
-        weight_index = weight_map[tid];
-        weighted[tid] = weights[weight_index] * unweighted[tid];
-        tid += blockDim.x * gridDim.x;
-    }
-}
-
-} // namespace gpu
 
 // d_data and d_results may be the same vector.
 template <typename Real>
@@ -71,13 +50,7 @@ GRACE_HOST void weighted_exclusive_segmented_scan(
 {
     // Initialize the weighted inputs, d_weighted.
     thrust::device_vector<Real> d_weighted(d_to_sum.size());
-    gpu::multiply_by_weights<<<48, 512>>>(
-        thrust::raw_pointer_cast(d_to_sum.data()),
-        thrust::raw_pointer_cast(d_weights.data()),
-        thrust::raw_pointer_cast(d_weight_map.data()),
-        d_weighted.size(),
-        thrust::raw_pointer_cast(d_weighted.data()));
-    GRACE_KERNEL_CHECK();
+    detail::multiply_by_weights(d_to_sum, d_weights, d_weight_map, d_weighted);
 
     // Segmented, cumulative sum such that d_sum[i] = cumulative sum *up to*
     // (not including, i.e. an exclusive sum) the ith weighted value.
