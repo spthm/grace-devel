@@ -193,17 +193,17 @@ public:
 };
 
 // Storing per-ray kernel integrals, sphere indices and ray-particle distances.
-template <typename IntegerIdx, typename Real>
+template <typename IndexType, typename Real>
 class OnHit_sphere_individual
 {
 private:
-    IntegerIdx* const indices;
+    IndexType* const indices;
     Real* const integrals;
     Real* const distances;
     const int N_table;
 
 public:
-    OnHit_sphere_individual(IntegerIdx* const indices, Real* const integrals,
+    OnHit_sphere_individual(IndexType* const indices, Real* const integrals,
                             Real* const distances, const int N_table) :
         indices(indices), integrals(integrals), distances(distances),
         N_table(N_table) {}
