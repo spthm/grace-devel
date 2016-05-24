@@ -168,9 +168,8 @@ GRACE_HOST void trace_sph(
     );
 }
 
-// FIXME: Rename this function.
 template <typename Real4, typename Real>
-GRACE_HOST void trace_sph_with_sentinels(
+GRACE_HOST void trace_with_sentinels_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Real4>& d_spheres,
     const Tree& d_tree,
