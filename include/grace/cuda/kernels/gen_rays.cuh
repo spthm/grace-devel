@@ -309,7 +309,7 @@ GRACE_HOST void init_PRNG(
     GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the P-RNG states.
-    gpu::init_PRNG_kernel<<<num_blocks, block_size>>>(
+    init_PRNG_kernel<<<num_blocks, block_size>>>(
         *d_prng_states,
         seed,
         N);
@@ -336,7 +336,7 @@ GRACE_HOST void uniform_random_rays(
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
-    gpu::gen_uniform_rays<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+    gen_uniform_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
         d_rays_ptr,
@@ -371,13 +371,14 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
-    gpu::gen_uniform_rays_single_octant<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-        d_prng_states,
-        origin,
-        d_rays_ptr,
-        thrust::raw_pointer_cast(d_keys.data()),
-        N_rays,
-        octant);
+    gen_uniform_rays_single_octant_kernel
+        <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+            d_prng_states,
+            origin,
+            d_rays_ptr,
+            thrust::raw_pointer_cast(d_keys.data()),
+            N_rays,
+            octant);
     GRACE_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
@@ -417,7 +418,7 @@ GRACE_HOST void plane_parallel_random_rays(
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
     const int blocks = N_states / RAYS_THREADS_PER_BLOCK;
-    gpu::plane_parallel_random_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    plane_parallel_random_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         width,
         height,
@@ -489,7 +490,7 @@ GRACE_HOST void orthogonal_projection_rays(
     const int blocks = min(grace::MAX_BLOCKS,
                            (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                    / RAYS_THREADS_PER_BLOCK));
-    gpu::orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
         width,
         height,
         N_rays,
