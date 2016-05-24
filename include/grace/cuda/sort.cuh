@@ -96,11 +96,11 @@ GRACE_HOST void sort_by_key(
     thrust::sort_by_key(d_keys2.begin(), d_keys2.end(), d_b.begin());
 }
 
-template <typename Real, typename T>
+template <typename Real, typename IndexType, typename T>
 GRACE_HOST void sort_by_distance(
     thrust::device_vector<Real>& d_hit_distances,
     const thrust::device_vector<int>& d_ray_offsets,
-    thrust::device_vector<int>& d_hit_indices,
+    thrust::device_vector<IndexType>& d_hit_indices,
     thrust::device_vector<T>& d_hit_data)
 {
     // SGPU calls require a context.
