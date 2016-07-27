@@ -103,7 +103,6 @@ __global__ void gen_uniform_rays_kernel(
     }
 }
 
-
 template <typename Real4, typename KeyType>
 __global__ void gen_uniform_rays_single_octant_kernel(
     const curandState* const prng_states,
@@ -149,6 +148,54 @@ __global__ void gen_uniform_rays_single_octant_kernel(
         ray.oy = ol.y;
         ray.oz = ol.z;
         ray.length = ol.w;
+
+        rays[tid] = ray;
+
+        tid += blockDim.x * gridDim.x;
+    }
+}
+
+template <typename Real3, typename PointType, typename KeyType>
+__global__ void one_to_many_rays_kernel(
+    const Real3 o, // ox, oy, oz.
+    const PointType* const points,
+    Ray* const rays,
+    KeyType* const keys,
+    const size_t N_rays)
+{
+    int tid = threadIdx.x + blockIdx.x * blockDim.x;
+
+    while (tid < N_rays)
+    {
+        float dx, dy, dz, R, invR;
+        Ray ray;
+
+        PointType point = points[tid];
+
+        dx = point.x - o.x;
+        dy = point.y - o.y;
+        dz = point.z - o.z;
+        #if __CUDACC_VER_MAJOR__ >= 7
+        R = norm3d(dx, dy, dz);
+        invR = rnorm3d(dx, dy, dz);
+        #else
+        invR = rsqrt(dx*dx + dy*dy + dz*dz);
+        R = 1.0 / static_cast<double>(invR);
+        #endif
+
+        ray.dx = dx * invR;
+        ray.dy = dy * invR;
+        ray.dz = dz * invR;
+
+        // morton_key requires *floats* in (0, 1) for 30-bit keys.
+        keys[tid] = morton_key((ray.dx+1)/2.f,
+                               (ray.dy+1)/2.f,
+                               (ray.dz+1)/2.f);
+
+        ray.ox = o.x;
+        ray.oy = o.y;
+        ray.oz = o.z;
+        ray.length = R;
 
         rays[tid] = ray;
 
@@ -332,10 +379,10 @@ GRACE_HOST void uniform_random_rays(
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
+    thrust::device_vector<uinteger32> d_keys(N_rays);
+
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
-
-    thrust::device_vector<uinteger32> d_keys(N_rays);
     gen_uniform_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
@@ -367,10 +414,10 @@ GRACE_HOST void uniform_random_rays_single_octant(
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
+    thrust::device_vector<uinteger32> d_keys(N_rays);
+
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
-
-    thrust::device_vector<uinteger32> d_keys(N_rays);
     gen_uniform_rays_single_octant_kernel
         <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
             d_prng_states,
@@ -385,6 +432,34 @@ GRACE_HOST void uniform_random_rays_single_octant(
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
+}
+
+template <typename Real, typename Real3>
+GRACE_HOST void one_to_many_rays(
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const Real3* const d_points_ptr)
+{
+    const float3 origin = make_float3(ox, oy, oz);
+
+    thrust::device_vector<uinteger32> d_keys(N_rays);
+
+    const int num_blocks = min(grace::MAX_BLOCKS,
+                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                       / RAYS_THREADS_PER_BLOCK));
+    one_to_many_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+        origin,
+        d_points_ptr,
+        d_rays_ptr,
+        thrust::raw_pointer_cast(d_keys.data()),
+        N_rays);
+    GRACE_KERNEL_CHECK();
+
+    thrust::sort_by_key(d_keys.begin(), d_keys.end(),
+                        thrust::devie_ptr<Ray>(d_rays_ptr));
 }
 
 template <typename Real, typename Real3>
@@ -417,8 +492,8 @@ GRACE_HOST void plane_parallel_random_rays(
     direction = normalize3(cross(w, h));
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    const int blocks = N_states / RAYS_THREADS_PER_BLOCK;
-    plane_parallel_random_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    plane_parallel_random_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         width,
         height,
@@ -487,10 +562,10 @@ GRACE_HOST void orthogonal_projection_rays(
 
     direction = normalize3(cross(w, h));
 
-    const int blocks = min(grace::MAX_BLOCKS,
-                           (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
-                                   / RAYS_THREADS_PER_BLOCK));
-    orthogonal_projection_rays_kernel<<<blocks, RAYS_THREADS_PER_BLOCK>>>(
+    const int num_blocks = min(grace::MAX_BLOCKS,
+                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                       / RAYS_THREADS_PER_BLOCK));
+    orthogonal_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         width,
         height,
         N_rays,

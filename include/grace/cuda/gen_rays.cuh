@@ -86,6 +86,41 @@ GRACE_HOST void uniform_random_rays_single_octant(
 
 }
 
+// Generates rays emanating from a single point to N other points.
+// ox, oy and oz are the co-ordinates of the origin for all rays.
+// d_points_ptr points to an array of Real3-like (.x, .y and .z members)
+//              co-ordinates, specifying the location of each ray's end point.
+template <typename Real, typename Real3>
+GRACE_HOST void one_to_many_rays(
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const Real3* const d_points_ptr)
+{
+    detail::one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr);
+}
+
+// If d_rays.size() < d_points.size(), d_rays will be resized.
+template <typename Real, typename Real3>
+GRACE_HOST void one_to_many_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const thrust::device_vector<Real3>& d_points)
+{
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+    const Real3* const d_points_ptr = thrust::raw_pointer_cast(d_points.data());
+    const size_t N_rays = d_points.size();
+    if (d_rays.size() < N_rays) {
+        d_rays.resize(N_rays);
+    }
+
+    one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr);
+}
+
 // width and height: the dimensions of the grid of rays to generate
 // base: a point at one corner of the ray-grid plane
 // w: a vector defining the width of the plane, beginning from base
