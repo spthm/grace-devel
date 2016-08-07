@@ -459,7 +459,7 @@ GRACE_HOST void one_to_many_rays(
     GRACE_KERNEL_CHECK();
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
-                        thrust::devie_ptr<Ray>(d_rays_ptr));
+                        thrust::device_ptr<Ray>(d_rays_ptr));
 }
 
 template <typename Real, typename Real3>
