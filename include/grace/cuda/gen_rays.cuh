@@ -2,10 +2,16 @@
 
 #include "grace/cuda/kernels/gen_rays.cuh"
 
+#include "grace/cuda/util/extrema.cuh"
+
 #include "grace/types.h"
 #include "grace/ray.h"
 
 #include <thrust/device_vector.h>
+
+#include <sstream>
+#include <stdexcept>
+#include <string>
 
 namespace grace {
 
@@ -84,6 +90,110 @@ GRACE_HOST void uniform_random_rays_single_octant(
     uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz, length,
                                       octant, seed);
 
+}
+
+// Generates rays emanating from a single point to N other points.
+// ox, oy and oz are the co-ordinates of the origin for all rays.
+// d_points_ptr points to an array of Real3-like (.x, .y and .z members)
+//              co-ordinates, specifying the location of each ray's end point.
+template <typename Real, typename PointType>
+GRACE_HOST void one_to_many_rays(
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const PointType* const d_points_ptr,
+    const enum RaySortType sort_type = DirectionSort)
+{
+    if (sort_type == NoSort) {
+        detail::one_to_many_rays_nosort(d_rays_ptr, N_rays, ox, oy, oz,
+                                        d_points_ptr);
+    }
+    else if (sort_type == DirectionSort) {
+        detail::one_to_many_rays_dirsort(d_rays_ptr, N_rays, ox, oy, oz,
+                                         d_points_ptr);
+    }
+    else if (sort_type == EndPointSort) {
+        float3 AABB_bot, AABB_top;
+        min_vec3(d_points_ptr, N_rays, &AABB_bot);
+        max_vec3(d_points_ptr, N_rays, &AABB_top);
+        detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, ox, oy, oz,
+                                         d_points_ptr, AABB_bot, AABB_bot);
+    }
+    else {
+        std::stringstream msg_stream;
+        msg_stream << "Ray sort type not recognized";
+        const std::string msg = msg_stream.str();
+
+        throw std::invalid_argument(msg);
+    }
+}
+
+// If d_rays.size() < d_points.size(), d_rays will be resized.
+template <typename Real, typename PointType>
+GRACE_HOST void one_to_many_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const thrust::device_vector<PointType>& d_points,
+    const enum RaySortType sort_type = DirectionSort)
+{
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+    const PointType* const d_points_ptr
+        = thrust::raw_pointer_cast(d_points.data());
+    const size_t N_rays = d_points.size();
+    if (d_rays.size() < N_rays) {
+        d_rays.resize(N_rays);
+    }
+
+    one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr, sort_type);
+}
+
+// Generates rays emanating from a single point to N other points.
+// ox, oy and oz are the co-ordinates of the origin for all rays.
+// d_points_ptr points to an array of Real3-like (.x, .y and .z members)
+//              co-ordinates, specifying the location of each ray's end point.
+// When an endpoint sort is desired, and AABBs for the input points are already
+// known, this saves re-computing them, which would occur if calling
+// one_to_many_rays without providing AABBs.
+template <typename Real, typename Real3, typename PointType>
+GRACE_HOST void one_to_many_rays(
+    Ray* const d_rays_ptr,
+    const size_t N_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const PointType* const d_points_ptr,
+    const Real3 AABB_bot,
+    const Real3 AABB_top)
+{
+    detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, ox, oy, oz,
+                                     d_points_ptr, AABB_bot, AABB_top);
+}
+
+// If d_rays.size() < d_points.size(), d_rays will be resized.
+template <typename Real, typename Real3, typename PointType>
+GRACE_HOST void one_to_many_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const Real ox,
+    const Real oy,
+    const Real oz,
+    const thrust::device_vector<PointType>& d_points,
+    const Real3 AABB_bot,
+    const Real3 AABB_top)
+{
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+    const PointType* const d_points_ptr
+        = thrust::raw_pointer_cast(d_points.data());
+    const size_t N_rays = d_points.size();
+    if (d_rays.size() < N_rays) {
+        d_rays.resize(N_rays);
+    }
+
+    one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr, AABB_bot,
+                     AABB_top);
 }
 
 // width and height: the dimensions of the grid of rays to generate

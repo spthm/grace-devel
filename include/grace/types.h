@@ -44,4 +44,10 @@ enum Octants {
     MMM = 0
 };
 
+enum RaySortType {
+    NoSort,
+    DirectionSort,
+    EndPointSort
+};
+
 } // namespace grace

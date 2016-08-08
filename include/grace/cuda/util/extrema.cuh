@@ -140,6 +140,33 @@ struct max_xyzw
     }
 };
 
+//-----------------------------------------------------------------------------
+// Utilities for coping from vec{2,3,4} to compatible, but not necessarily
+// identical, objects. E.g. copying the .x and .y components of an int3 to the
+// .x and .y components of a float4.
+//-----------------------------------------------------------------------------
+
+template <typename Vec2, typename OutType>
+GRACE_HOST_DEVICE void copy_xy(const Vec2 src, OutType* const dst)
+{
+    dst->x = src.x;
+    dst->y = src.y;
+}
+
+template <typename Vec3, typename OutType>
+GRACE_HOST_DEVICE void copy_xyz(const Vec3 src, OutType* const dst)
+{
+    copy_xy(src, dst);
+    dst->z = src.z;
+}
+
+template <typename Vec4, typename OutType>
+GRACE_HOST_DEVICE void copy_xyzw(const Vec4 src, OutType* const dst)
+{
+    copy_xyz(src, dst);
+    dst->w = src.w;
+}
+
 // If TIter points to on-device data, then it should be one of
 //     Any thrust iterator accepted by thrust::minmax_element();
 //     thrust::device_ptr<T>;
@@ -416,24 +443,26 @@ GRACE_HOST void min_max_w(
 
 // Vec2Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec2Iter, typename Vec2>
+template <typename Vec2Iter, typename OutType>
 GRACE_HOST void min_vec2(
     Vec2Iter data_iter,
     const size_t N,
-    Vec2* mins)
+    OutType* mins)
 {
+    typedef typename std::iterator_traits<Vec2Iter>::value_type Vec2;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec2-compatible types.
     const Vec2 init = data_iter[0];
-    *mins = thrust::reduce(data_iter, data_iter + N, init, min_xy<Vec2>());
+    Vec2 res = thrust::reduce(data_iter, data_iter + N, init, min_xy<Vec2>());
+    copy_xy(res, mins);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void min_vec2(
     const Vec2* d_data,
     const size_t N,
-    Vec2* mins)
+    OutType* mins)
 {
     min_vec2(thrust::device_ptr<const Vec2>(d_data), N, mins);
 }
@@ -442,51 +471,53 @@ GRACE_HOST void min_vec2(
 // The compiler will chose the generic Vec2Iter template over the const Vec2*
 // when provided with a non-const Vec2*. This template is therefore needed to
 // correctly handle non-const Vec2* pointers.
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void min_vec2(
     Vec2* d_data,
     const size_t N,
-    Vec2* mins)
+    OutType* mins)
 {
     min_vec2(thrust::device_ptr<const Vec2>(d_data), N, mins);
 }
 
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void min_vec2(
     const thrust::device_vector<Vec2>& d_data,
-    Vec2* mins)
+    OutType* mins)
 {
     min_vec2(d_data.begin(), d_data.size(), mins);
 }
 
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void min_vec2(
     const thrust::host_vector<Vec2>& h_data,
-    Vec2* mins)
+    OutType* mins)
 {
     min_vec2(h_data.begin(), h_data.size(), mins);
 }
 
 // Vec3Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec3Iter, typename Vec3>
+template <typename Vec3Iter, typename OutType>
 GRACE_HOST void min_vec3(
     Vec3Iter data_iter,
     const size_t N,
-    Vec3* mins)
+    OutType* mins)
 {
+    typedef typename std::iterator_traits<Vec3Iter>::value_type Vec3;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec3-compatible types.
     const Vec3 init = data_iter[0];
-    *mins = thrust::reduce(data_iter, data_iter + N, init, min_xyz<Vec3>());
+    Vec3 res = thrust::reduce(data_iter, data_iter + N, init, min_xyz<Vec3>());
+    copy_xyz(res, mins);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void min_vec3(
     const Vec3* d_data,
     const size_t N,
-    Vec3* mins)
+    OutType* mins)
 {
     min_vec3(thrust::device_ptr<const Vec3>(d_data), N, mins);
 }
@@ -495,51 +526,53 @@ GRACE_HOST void min_vec3(
 // The compiler will chose the generic Vec3Iter template over the const Vec3*
 // when provided with a non-const Vec3*. This template is therefore needed to
 // correctly handle non-const Vec3* pointers.
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void min_vec3(
     Vec3* d_data,
     const size_t N,
-    Vec3* mins)
+    OutType* mins)
 {
     min_vec3(thrust::device_ptr<const Vec3>(d_data), N, mins);
 }
 
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void min_vec3(
     const thrust::device_vector<Vec3>& d_data,
-    Vec3* mins)
+    OutType* mins)
 {
     min_vec3(d_data.begin(), d_data.size(), mins);
 }
 
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void min_vec3(
     const thrust::host_vector<Vec3>& h_data,
-    Vec3* mins)
+    OutType* mins)
 {
     min_vec3(h_data.begin(), h_data.size(), mins);
 }
 
 // Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec4Iter, typename Vec4>
+template <typename Vec4Iter, typename OutType>
 GRACE_HOST void min_vec4(
     Vec4Iter data_iter,
     const size_t N,
-    Vec4* mins)
+    OutType* mins)
 {
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec4-compatible types.
     const Vec4 init = data_iter[0];
-    *mins = thrust::reduce(data_iter, data_iter + N, init, min_xyzw<Vec4>());
+    Vec4 res = thrust::reduce(data_iter, data_iter + N, init, min_xyzw<Vec4>());
+    copy_xyzw(res, mins);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void min_vec4(
     const Vec4* d_data,
     const size_t N,
-    Vec4* mins)
+    OutType* mins)
 {
     min_vec4(thrust::device_ptr<const Vec4>(d_data), N, mins);
 }
@@ -548,51 +581,53 @@ GRACE_HOST void min_vec4(
 // The compiler will chose the generic Vec4Iter template over the const Vec4*
 // when provided with a non-const Vec4*. This template is therefore needed to
 // correctly handle non-const Vec4* pointers.
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void min_vec4(
     Vec4* d_data,
     const size_t N,
-    Vec4* mins)
+    OutType* mins)
 {
     min_vec4(thrust::device_ptr<const Vec4>(d_data), N, mins);
 }
 
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void min_vec4(
     const thrust::device_vector<Vec4>& d_data,
-    Vec4* mins)
+    OutType* mins)
 {
     min_vec4(d_data.begin(), d_data.size(), mins);
 }
 
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void min_vec4(
     const thrust::host_vector<Vec4>& h_data,
-    Vec4* mins)
+    OutType* mins)
 {
     min_vec4(h_data.begin(), h_data.size(), mins);
 }
 
 // Vec2Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec2Iter, typename Vec2>
+template <typename Vec2Iter, typename OutType>
 GRACE_HOST void max_vec2(
     Vec2Iter data_iter,
     const size_t N,
-    Vec2* maxs)
+    OutType* maxs)
 {
+    typedef typename std::iterator_traits<Vec2Iter>::value_type Vec2;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec2-compatible types.
     const Vec2 init = data_iter[0];
-    *maxs = thrust::reduce(data_iter, data_iter + N, init, max_xy<Vec2>());
+    Vec2 res = thrust::reduce(data_iter, data_iter + N, init, max_xy<Vec2>());
+    copy_xy(res, maxs);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void max_vec2(
     const Vec2* d_data,
     const size_t N,
-    Vec2* maxs)
+    OutType* maxs)
 {
     max_vec2(thrust::device_ptr<const Vec2>(d_data), N, maxs);
 }
@@ -601,16 +636,16 @@ GRACE_HOST void max_vec2(
 // The compiler will chose the generic Vec2Iter template over the const Vec2*
 // when provided with a non-const Vec2*. This template is therefore needed to
 // correctly handle non-const Vec2* pointers.
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void max_vec2(
     Vec2* d_data,
     const size_t N,
-    Vec2* maxs)
+    OutType* maxs)
 {
     max_vec2(thrust::device_ptr<const Vec2>(d_data), N, maxs);
 }
 
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void max_vec2(
     const thrust::device_vector<Vec2>& d_data,
     Vec2* maxs)
@@ -618,34 +653,36 @@ GRACE_HOST void max_vec2(
     max_vec2(d_data.begin(), d_data.size(), maxs);
 }
 
-template <typename Vec2>
+template <typename Vec2, typename OutType>
 GRACE_HOST void max_vec2(
     const thrust::host_vector<Vec2>& h_data,
-    Vec2* maxs)
+    OutType* maxs)
 {
     max_vec2(h_data.begin(), h_data.size(), maxs);
 }
 
 // Vec3Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec3Iter, typename Vec3>
+template <typename Vec3Iter, typename OutType>
 GRACE_HOST void max_vec3(
     Vec3Iter data_iter,
     const size_t N,
-    Vec3* maxs)
+    OutType* maxs)
 {
+    typedef typename std::iterator_traits<Vec3Iter>::value_type Vec3;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec3-compatible types.
     const Vec3 init = data_iter[0];
-    *maxs = thrust::reduce(data_iter, data_iter + N, init, max_xyz<Vec3>());
+    Vec3 res = thrust::reduce(data_iter, data_iter + N, init, max_xyz<Vec3>());
+    copy_xyz(res, maxs);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void max_vec3(
     const Vec3* d_data,
     const size_t N,
-    Vec3* maxs)
+    OutType* maxs)
 {
     max_vec3(thrust::device_ptr<const Vec3>(d_data), N, maxs);
 }
@@ -654,51 +691,53 @@ GRACE_HOST void max_vec3(
 // The compiler will chose the generic Vec3Iter template over the const Vec3*
 // when provided with a non-const Vec3*. This template is therefore needed to
 // correctly handle non-const Vec3* pointers.
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void max_vec3(
     Vec3* d_data,
     const size_t N,
-    Vec3* maxs)
+    OutType* maxs)
 {
     max_vec3(thrust::device_ptr<const Vec3>(d_data), N, maxs);
 }
 
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void max_vec3(
     const thrust::device_vector<Vec3>& d_data,
-    Vec3* maxs)
+    OutType* maxs)
 {
     max_vec3(d_data.begin(), d_data.size(), maxs);
 }
 
-template <typename Vec3>
+template <typename Vec3, typename OutType>
 GRACE_HOST void max_vec3(
     const thrust::host_vector<Vec3>& h_data,
-    Vec3* maxs)
+    OutType* maxs)
 {
     max_vec3(h_data.begin(), h_data.size(), maxs);
 }
 
 // Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
-template <typename Vec4Iter, typename Vec4>
+template <typename Vec4Iter, typename OutType>
 GRACE_HOST void max_vec4(
     Vec4Iter data_iter,
     const size_t N,
-    Vec4* maxs)
+    OutType* maxs)
 {
+    typedef typename std::iterator_traits<Vec4Iter>::value_type Vec4;
     // This may incurr a non-negligible overhead, but it is guaranteed to
     // produce a corrrect result for all Vec4-compatible types.
     const Vec4 init = data_iter[0];
-    *maxs = thrust::reduce(data_iter, data_iter + N, init, max_xyzw<Vec4>());
+    Vec4 res = thrust::reduce(data_iter, data_iter + N, init, max_xyzw<Vec4>());
+    copy_xyzw(res, maxs);
 }
 
 // d_data must be a pointer to DEVICE memory.
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void max_vec4(
     const Vec4* d_data,
     const size_t N,
-    Vec4* maxs)
+    OutType* maxs)
 {
     max_vec4(thrust::device_ptr<const Vec4>(d_data), N, maxs);
 }
@@ -707,27 +746,27 @@ GRACE_HOST void max_vec4(
 // The compiler will chose the generic Vec4Iter template over the const Vec4*
 // when provided with a non-const Vec4*. This template is therefore needed to
 // correctly handle non-const Vec4* pointers.
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void max_vec4(
     Vec4* d_data,
     const size_t N,
-    Vec4* maxs)
+    OutType* maxs)
 {
     max_vec4(thrust::device_ptr<const Vec4>(d_data), N, maxs);
 }
 
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void max_vec4(
     const thrust::device_vector<Vec4>& d_data,
-    Vec4* maxs)
+    OutType* maxs)
 {
     max_vec4(d_data.begin(), d_data.size(), maxs);
 }
 
-template <typename Vec4>
+template <typename Vec4, typename OutType>
 GRACE_HOST void max_vec4(
     const thrust::host_vector<Vec4>& h_data,
-    Vec4* maxs)
+    OutType* maxs)
 {
     max_vec4(h_data.begin(), h_data.size(), maxs);
 }
