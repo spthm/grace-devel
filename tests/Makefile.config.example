@@ -5,7 +5,12 @@ CXX = g++
 # GLIBCXX_USE_CX11_ABI is for GCC 5+; it _may_ be using a new ABI be default
 # (e.g. Fedora 22 does not, but Fedora 23+ does) which will cause compilation
 # errors when using nvcc.
-GRACE_FLAGS = -DGRACE_DEBUG -D_GLIBCXX_USE_CXX11_ABI=0
+GRACE_FLAGS = -D_GLIBCXX_USE_CXX11_ABI=0
+
+# Set to 0 or comment out to turn off debug mode.
+# When in debug mode, -lineinfo is passed to nvcc, and GRACE_DEBUG and
+# THRUST_DEBUG are defined.
+GRACE_DEBUG = 1
 
 # SGPU REQUIRES that compilation targets devices you will run on.
 # DO NOT REMOVE THESE, only add to if neessary.

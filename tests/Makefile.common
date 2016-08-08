@@ -51,6 +51,12 @@ NVCCFLAGS += -Xcompiler -fopenmp
 endif
 endif
 
+ifdef GRACE_DEBUG
+ifeq ($(GRACE_DEBUG), 1)
+NVCCFLAGS += -DGRACE_DEBUG -DTHRUST_DEBUG -g -lineinfo
+endif
+endif
+
 NVCCLFLAGS += $(CUDA_LIB)
 
 NVCCLIBS = -lcuda -lcurand
