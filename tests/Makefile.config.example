@@ -21,7 +21,8 @@ CUARCH = $(GENCODE_30)
 USE_OPENMP = 1
 
 # CUDA toolkit
-CUDA_LIB = -L/opt/cuda/lib64
+CUDA_LIB = -L/opt/cuda/lib64/
+CUDA_INC = -I/opt/cuda/include/
 # GNU Multiple Precision Library
 GMP_LIB = -L/usr/lib64/
 GMP_INC = -I/usr/include/
