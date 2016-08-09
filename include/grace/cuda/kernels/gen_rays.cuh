@@ -6,6 +6,7 @@
 
 #include "grace/cuda/kernel_config.h"
 #include "grace/cuda/sort.cuh"
+#include "grace/cuda/kernels/morton.cuh"
 
 #include "grace/generic/morton.h"
 #include "grace/generic/vecmath.h"
