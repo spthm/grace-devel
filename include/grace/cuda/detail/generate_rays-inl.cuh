@@ -30,7 +30,7 @@ GRACE_HOST void uniform_random_rays(
     const Real oy,
     const Real oz,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     detail::uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
 }
@@ -42,7 +42,7 @@ GRACE_HOST void uniform_random_rays(
     const Real oy,
     const Real oz,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const size_t N_rays = d_rays.size();
@@ -67,8 +67,8 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const Real oy,
     const Real oz,
     const Real length,
-    const enum Octants octant = PPP,
-    const unsigned long long seed = 1234)
+    const enum Octants octant,
+    const unsigned long long seed)
 {
     detail::uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz,
                                               length, octant, seed);
@@ -81,8 +81,8 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const Real oy,
     const Real oz,
     const Real length,
-    const enum Octants octant = PPP,
-    const unsigned long long seed = 1234)
+    const enum Octants octant,
+    const unsigned long long seed)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const size_t N_rays = d_rays.size();
@@ -104,7 +104,7 @@ GRACE_HOST void one_to_many_rays(
     const Real oy,
     const Real oz,
     const PointType* const d_points_ptr,
-    const enum RaySortType sort_type = DirectionSort)
+    const enum RaySortType sort_type)
 {
     if (sort_type == NoSort) {
         detail::one_to_many_rays_nosort(d_rays_ptr, N_rays, ox, oy, oz,
@@ -138,7 +138,7 @@ GRACE_HOST void one_to_many_rays(
     const Real oy,
     const Real oz,
     const thrust::device_vector<PointType>& d_points,
-    const enum RaySortType sort_type = DirectionSort)
+    const enum RaySortType sort_type)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const PointType* const d_points_ptr
@@ -237,7 +237,7 @@ GRACE_HOST void plane_parallel_random_rays(
     const Real3 w,
     const Real3 h,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     detail::plane_parallel_random_rays(d_rays_ptr, width, height, base, w, h,
                                        length, seed);
@@ -252,7 +252,7 @@ GRACE_HOST void plane_parallel_random_rays(
     const Real3 w,
     const Real3 h,
     const Real length,
-    const unsigned long long seed = 1234)
+    const unsigned long long seed)
 {
     const size_t N_rays = (size_t)width * height;
     if (d_rays.size() < N_rays) {
