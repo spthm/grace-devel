@@ -1,6 +1,6 @@
 #include "aila_laine_karras.cuh"
 
-#include "grace/cuda/device/intrinsics.cuh"
+#include "grace/cuda/detail/device/intrinsics.cuh"
 
 #include <math.h>
 

@@ -6,9 +6,9 @@
 
 #include "intersection.cuh"
 
-#include "grace/cuda/device/intersect.cuh"
-#include "grace/cuda/gen_rays.cuh"
+#include "grace/cuda/generate_rays.cuh"
 #include "grace/generic/bits.h"
+#include "grace/generic/intersect.h"
 #include "grace/ray.h"
 #include "helper/random.cuh"
 

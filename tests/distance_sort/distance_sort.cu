@@ -5,7 +5,7 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/gen_rays.cuh"
+#include "grace/cuda/generate_rays.cuh"
 #include "grace/ray.h"
 #include "helper/tree.cuh"
 #include "helper/trace.cuh"

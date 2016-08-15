@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/gen_rays.cuh"
+#include "grace/cuda/generate_rays.cuh"
 
 #include "grace/ray.h"
 

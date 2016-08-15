@@ -6,7 +6,7 @@
 
 #include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/kernels/albvh.cuh"
+#include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/random.cuh"
