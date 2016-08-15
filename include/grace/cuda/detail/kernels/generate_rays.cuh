@@ -4,9 +4,10 @@
 // before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
-#include "grace/cuda/kernel_config.h"
+#include "grace/cuda/detail/kernel_config.h"
+#include "grace/cuda/detail/kernels/morton.cuh"
+
 #include "grace/cuda/sort.cuh"
-#include "grace/cuda/kernels/morton.cuh"
 
 #include "grace/generic/morton.h"
 #include "grace/generic/vecmath.h"

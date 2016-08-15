@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/device/intrinsics.cuh"
+#include "grace/cuda/detail/device/intrinsics.cuh"
 #include "grace/generic/intersect.h"
 
 #include "grace/types.h"

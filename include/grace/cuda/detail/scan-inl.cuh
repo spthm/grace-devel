@@ -2,7 +2,7 @@
 
 #include "grace/types.h"
 
-#include "grace/cuda/kernels/weights.cuh"
+#include "grace/cuda/detail/kernels/weights.cuh"
 
 #include "grace/external/sgpu/kernels/segscancsr.cuh"
 

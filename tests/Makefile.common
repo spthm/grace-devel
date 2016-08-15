@@ -26,8 +26,11 @@ NVCCDEPS = Makefile
 NVCCDEPS += $(abspath $(THIS_PATH)Makefile.common)
 NVCCDEPS += $(abspath $(THIS_PATH)Makefile.config)
 
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/device/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/kernels/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.h))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.hpp))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/device/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/kernels/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/util/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.h))

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/device/intersect.cuh"
+#include "grace/cuda/detail/device/intersect.cuh"
 
 #include "grace/cuda/util/bound_iter.cuh"
 

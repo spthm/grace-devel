@@ -1,10 +1,10 @@
 #pragma once
 
-#include "grace/cuda/kernels/aabb.cuh"
+#include "grace/cuda/detail/kernels/aabb.cuh"
+#include "grace/cuda/detail/kernel_config.h"
 
 #include "grace/cuda/util/extrema.cuh"
 
-#include "grace/cuda/kernel_config.h"
 
 #include "grace/generic/functors/aabb.h"
 #include "grace/generic/bits.h"

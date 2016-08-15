@@ -1,7 +1,9 @@
 #pragma once
 
-#include "grace/cuda/kernels/albvh.cuh"
-#include "grace/cuda/kernels/morton.cuh"
+#include "grace/cuda/detail/kernels/albvh.cuh"
+#include "grace/cuda/detail/kernels/morton.cuh"
+
+#include "grace/cuda/nodes.h"
 
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"

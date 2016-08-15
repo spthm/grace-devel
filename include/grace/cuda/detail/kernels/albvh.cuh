@@ -1,8 +1,8 @@
 #pragma once
 
-#include "grace/cuda/device/loadstore.cuh"
+#include "grace/cuda/detail/device/loadstore.cuh"
 
-#include "grace/cuda/kernel_config.h"
+#include "grace/cuda/detail/kernel_config.h"
 #include "grace/cuda/nodes.h"
 
 #include "grace/error.h"
