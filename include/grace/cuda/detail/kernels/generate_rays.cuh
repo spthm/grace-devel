@@ -147,7 +147,8 @@ __global__ void gen_uniform_rays_kernel(
         ray.ox = ol.x;
         ray.oy = ol.y;
         ray.oz = ol.z;
-        ray.length = ol.w;
+        ray.start = 0;
+        ray.end = ol.w;
 
         rays[tid] = ray;
 
@@ -189,7 +190,8 @@ __global__ void gen_uniform_rays_single_octant_kernel(
         ray.ox = ol.x;
         ray.oy = ol.y;
         ray.oz = ol.z;
-        ray.length = ol.w;
+        ray.start = 0;
+        ray.end = ol.w;
 
         rays[tid] = ray;
 
@@ -228,7 +230,8 @@ __global__ void one_to_many_rays_kernel(
         ray.ox = o.x;
         ray.oy = o.y;
         ray.oz = o.z;
-        ray.length = R;
+        ray.start = 0;
+        ray.end = R;
 
         rays[tid] = ray;
 
@@ -300,7 +303,8 @@ __global__ void plane_parallel_random_rays_kernel(
         ray.oy = base.y + w.y + h.y;
         ray.oz = base.z + w.z + h.z;
 
-        ray.length = length;
+        ray.start = 0;
+        ray.end = length;
 
         rays[tid] = ray;
     }
@@ -344,7 +348,8 @@ __global__ void orthographic_projection_rays_kernel(
         ray.oy = camera_position.y + im_coord.y;
         ray.oz = camera_position.z + im_coord.z;
 
-        ray.length = length;
+        ray.start = 0;
+        ray.end = length;
 
         rays[tid] = ray;
     }

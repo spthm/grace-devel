@@ -77,6 +77,6 @@ void isotropic_rays(
         h_rays[i].oy = h_grace_rays[i].oy;
         h_rays[i].oz = h_grace_rays[i].oz;
 
-        h_rays[i].length = h_grace_rays[i].length;
+        h_rays[i].end = h_grace_rays[i].end;
     }
 }

@@ -6,7 +6,7 @@ struct Ray
 {
     float dx, dy, dz;
     float ox, oy, oz;
-    float length;
+    float end;
 
     // Inverse of ray's direction components; only required for Williams and
     // Aila-Laine-Karras methods.

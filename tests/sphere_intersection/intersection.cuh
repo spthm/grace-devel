@@ -57,7 +57,7 @@ bool ray_sphere_intersection(
     const float4& sphere)
 {
     Interval<T> ray_interv
-        = Interval<T>(static_cast<T>(0), static_cast<T>(ray.length));
+        = Interval<T>(static_cast<T>(0), static_cast<T>(ray.end));
 
     VertexQuadratic<T> eqn = ray_sphere_equation<T>(ray, sphere);
 

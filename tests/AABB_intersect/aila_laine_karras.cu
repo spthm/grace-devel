@@ -23,8 +23,9 @@ __device__ int aila_laine_karras(const Ray& ray, const AABB& box)
     tz = (tz - ray.oz) * ray.invdz;
 
     float tmin, tmax;
+    // Assume start == 0.
     tmin = maxf_vmaxf( fmin(bx, tx), fmin(by, ty), maxf_vminf(bz, tz, 0) );
-    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ray.length) );
+    tmax = minf_vminf( fmax(bx, tx), fmax(by, ty), minf_vmaxf(bz, tz, ray.end) );
 
     return (tmax >= tmin ? HIT : MISS);
 }

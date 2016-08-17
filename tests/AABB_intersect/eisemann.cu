@@ -14,7 +14,8 @@ __host__ __device__ int eisemann(const Ray& ray, const AABB& box)
     float dy = ray.dy;
     float dz = ray.dz;
 
-    float l = ray.length;
+    // Assume start == 0.
+    float l = ray.end;
 
     float xbyy = ray.xbyy;
     float ybyx = ray.ybyx;

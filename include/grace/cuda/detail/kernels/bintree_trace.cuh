@@ -145,7 +145,7 @@ __global__ void trace_kernel(
                 GRACE_ASSERT(node.x < 2 * n_nodes);
                 GRACE_ASSERT(node.y <= 2 * n_nodes);
 
-                int lr_hit = AABBs_hit(invd, origin, ray.length,
+                int lr_hit = AABBs_hit(invd, origin, ray.start, ray.end,
                                        AABB_L, AABB_R, AABB_LR);
 
                 if (__any(lr_hit & 1u))

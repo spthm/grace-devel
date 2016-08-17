@@ -37,14 +37,14 @@ GRACE_HOST_DEVICE bool sphere_hit(
     if (b2 >= sphere.w * sphere.w)
         return false;
 
-    // If dot_p < 0, the ray origin must be inside the sphere for an
+    // If dot_p < ray start, the ray origin must be inside the sphere for an
     // intersection. We treat this edge-case as a miss.
-    if (dot_p < 0.0f)
+    if (dot_p < ray.start)
         return false;
 
-    // If dot_p > ray length, the ray terminus must be inside the sphere for
+    // If dot_p > ray end, the ray terminus must be inside the sphere for
     // an intersection. We treat this edge-case as a miss.
-    if (dot_p >= ray.length)
+    if (dot_p >= ray.end)
         return false;
 
     // Otherwise, assume we have a hit.  This counts the following partial

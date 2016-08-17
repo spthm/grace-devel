@@ -8,7 +8,8 @@
 namespace grace {
 
 GRACE_DEVICE int AABBs_hit(
-    const float3 invd, const float3 origin, const float len,
+    const float3 invd, const float3 origin,
+    const float start, const float end,
     const float4 AABB_L,
     const float4 AABB_R,
     const float4 AABB_LR)
@@ -28,13 +29,13 @@ GRACE_DEVICE int AABBs_hit(
     float tz_R = (AABB_LR.w - origin.z) * invd.z;
 
     float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
-                               maxf_vminf(bz_L, tz_L, 0) );
+                               maxf_vminf(bz_L, tz_L, start) );
     float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
-                               minf_vmaxf(bz_L, tz_L, len) );
+                               minf_vmaxf(bz_L, tz_L, end) );
     float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
-                               maxf_vminf(bz_R, tz_R, 0) );
+                               maxf_vminf(bz_R, tz_R, start) );
     float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
-                               minf_vmaxf(bz_R, tz_R, len) );
+                               minf_vmaxf(bz_R, tz_R, end) );
 
     return (int)(tmax_R >= tmin_R) + 2*((int)(tmax_L >= tmin_L));
 }

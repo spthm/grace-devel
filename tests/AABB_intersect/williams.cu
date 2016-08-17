@@ -31,8 +31,9 @@ __host__ __device__ int williams(const Ray& ray, const AABB& box)
     }
 
     float tmin, tmax;
+    // Assume start == 0.
     tmin = fmax( fmax(bx, by), fmax(bz, 0) );
-    tmax = fmin( fmin(tx, ty), fmin(tz, ray.length) );
+    tmax = fmin( fmin(tx, ty), fmin(tz, ray.end) );
 
     return (tmax >= tmin ? HIT : MISS);
 }
@@ -54,8 +55,9 @@ __host__ __device__ int williams_noif(const Ray& ray, const AABB& box)
     tz = (tz - ray.oz) * ray.invdz;
 
     float tmin, tmax;
+    // Assume start == 0.
     tmin = fmax( fmax(fmin(bx, tx), fmin(by, ty)), fmax(fmin(bz, tz), 0) );
-    tmax = fmin( fmin(fmax(bx, tx), fmax(by, ty)), fmin(fmax(bz, tz), ray.length) );
+    tmax = fmin( fmin(fmax(bx, tx), fmax(by, ty)), fmin(fmax(bz, tz), ray.end) );
 
     return (tmax >= tmin ? HIT : MISS);
 }

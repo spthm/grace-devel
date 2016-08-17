@@ -88,10 +88,11 @@ int main(int argc, char* argv[])
 
         outfile.open("indata/raydata.txt");
         for (int i=0; i<N_rays; i++) {
-            outfile << h_rays[i].dx << " " << h_rays[i].dy << " "
-                    << h_rays[i].dz << " " << h_rays[i].ox << " "
-                    << h_rays[i].oy << " " << h_rays[i].oz << " "
-                    << h_rays[i].length << std::endl;
+            outfile << h_rays[i].dx    << " " << h_rays[i].dy << " "
+                    << h_rays[i].dz    << " " << h_rays[i].ox << " "
+                    << h_rays[i].oy    << " " << h_rays[i].oz << " "
+                    << h_rays[i].start << " " << h_rays[i].end
+                    << std::endl;
         }
         outfile.close();
 
