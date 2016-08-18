@@ -22,46 +22,52 @@ SGPU_DIR := $(abspath $(GRACE_DIR)/include/grace/external/sgpu/)
 # We could do some of this on a Makefile-by-Makefile basis instead to save
 # re-compiling everything when only a few headers are changed, but that is
 # extremely error prone.
-NVCCDEPS = Makefile
-NVCCDEPS += $(abspath $(THIS_PATH)Makefile.common)
-NVCCDEPS += $(abspath $(THIS_PATH)Makefile.config)
+DEPS = Makefile
+DEPS += $(abspath $(THIS_PATH)Makefile.common)
+DEPS += $(abspath $(THIS_PATH)Makefile.config)
 
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.h))
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.hpp))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.hpp))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.h))
 
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.h))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.hpp))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.h))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.hpp))
+
+DEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
+DEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
+
+NVCCDEPS = $(DEPS)
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.h))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.hpp))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/device/*.cuh))
+NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/functors/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/kernels/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/util/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.cuh))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.h))
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/*.hpp))
 
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.h))
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.hpp))
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.h))
-NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.hpp))
-
 NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.cuh))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
-NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
 
-NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(SGPU_DIR)
+INCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/
+NVCCINCLUDES = $(INCLUDES) -I$(SGPU_DIR)
 
-# This is needed if GLIBCXX_USE_CXX11_ABI=0 is set.
 CXXFLAGS = $(GRACE_FLAGS)
+NVCCFLAGS = $(GRACE_FLAGS) $(CUARCH)
 
-NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 ifdef USE_OPENMP
 ifeq ($(USE_OPENMP), 1)
-NVCCFLAGS += -Xcompiler -fopenmp
+CXXFLAGS += -fopenmp
+NVCCFLAGS += -Xcompiler "-fopenmp"
 endif
 endif
 
+# NB: Do NOT use -G when in debug. It is not compatible with Thrust.
 ifdef GRACE_DEBUG
 ifeq ($(GRACE_DEBUG), 1)
+CXXFLAGS += -DGRACE_DEBUG -g
 NVCCFLAGS += -DGRACE_DEBUG -DTHRUST_DEBUG -g -lineinfo
 endif
 endif

@@ -2,7 +2,7 @@ include ../Makefile.common
 
 # Ensures float/double calculations obey IEEE binary32/64 rules, rather than
 # being computed by the x87 FPU.
-_FLAGS = -fopenmp -mfpmath=sse -msse2
+_FLAGS = -mfpmath=sse -msse2
 _INCLUDES = -I./ $(GMP_INC)
 _LFLAGS = $(GMP_LIB)
 _LIBS = -lgmp -lgmpxx
