@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/sphere.h"
 #include "grace/types.h"
 
 #include <thrust/device_vector.h>
@@ -57,6 +58,16 @@ struct less_w
       }
 };
 
+// Vec must be a grace::Sphere or similar.
+template <typename Vec>
+struct less_r
+{
+      GRACE_HOST_DEVICE bool operator()(const Vec a, const Vec b)
+      {
+          return a.r < b.r;
+      }
+};
+
 //-----------------------------------------------------------------------------
 // Utilities for finding the minimum and maximum of all x, y, z and w components
 // of the CUDA vector types, int{2,3,4}, float{2,3,4} etc.
@@ -101,6 +112,21 @@ struct min_xyzw
     }
 };
 
+// Specialization for when Vec4 is actually a grace::Sphere.
+template <typename T>
+struct min_xyzw<Sphere<T> >
+{
+    GRACE_HOST_DEVICE Sphere<T> operator()(const Sphere<T> a, const Sphere<T> b)
+    {
+        Sphere<T> res;
+        res.x = min(a.x, b.x);
+        res.y = min(a.y, b.y);
+        res.z = min(a.z, b.z);
+        res.r = min(a.r, b.r);
+        return res;
+    }
+};
+
 template <typename Vec2>
 struct max_xy
 {
@@ -140,6 +166,21 @@ struct max_xyzw
     }
 };
 
+// Specialization for when Vec4 is actually a grace::Sphere.
+template <typename T>
+struct max_xyzw<Sphere<T> >
+{
+    GRACE_HOST_DEVICE Sphere<T> operator()(const Sphere<T> a, const Sphere<T> b)
+    {
+        Sphere<T> res;
+        res.x = max(a.x, b.x);
+        res.y = max(a.y, b.y);
+        res.z = max(a.z, b.z);
+        res.r = max(a.r, b.r);
+        return res;
+    }
+};
+
 //-----------------------------------------------------------------------------
 // Utilities for coping from vec{2,3,4} to compatible, but not necessarily
 // identical, objects. E.g. copying the .x and .y components of an int3 to the
@@ -165,6 +206,14 @@ GRACE_HOST_DEVICE void copy_xyzw(const Vec4 src, OutType* const dst)
 {
     copy_xyz(src, dst);
     dst->w = src.w;
+}
+
+// More specialized overload when Vec4 is actually a grace::Sphere.
+template <typename T, typename U>
+GRACE_HOST_DEVICE void copy_xyzw(const Sphere<T> src, Sphere<U>* const dst)
+{
+    copy_xyz(src, dst);
+    dst->r = src.r;
 }
 
 // If TIter points to on-device data, then it should be one of
@@ -441,6 +490,66 @@ GRACE_HOST void min_max_w(
     min_max_w(h_data.begin(), h_data.size(), min_w, max_w);
 }
 
+// VecIter should be a thrust iterator, thrust::device_ptr, or any custom
+// iterator subject to the constraints described for TIter in grace::min_max().
+template <typename VecIter, typename T>
+GRACE_HOST void min_max_r(
+    VecIter data_iter,
+    const size_t N,
+    T* min_r,
+    T* max_r)
+{
+    typedef typename std::iterator_traits<VecIter>::value_type Vec;
+
+    Vec mins, maxs;
+    min_max(data_iter, N, &mins, &maxs, less_r<Vec>());
+    *min_r = mins.r;
+    *max_r = maxs.r;
+}
+
+// d_data must be a pointer to DEVICE memory.
+template <typename Vec, typename T>
+GRACE_HOST void min_max_r(
+    const Vec* d_data,
+    const size_t N,
+    T* min_r,
+    T* max_r)
+{
+    min_max_r(thrust::device_ptr<const Vec>(d_data), N, min_r, max_r);
+}
+
+// d_data must be a pointer to DEVICE memory.
+// The compiler will chose the generic VecIter template over the const Vec*
+// when provided with a non-const Vec*. This template is therefore needed to
+// correctly handle non-const Vec* pointers.
+template <typename Vec, typename T>
+GRACE_HOST void min_max_r(
+    Vec* d_data,
+    const size_t N,
+    T* min_r,
+    T* max_r)
+{
+    min_max_r(thrust::device_ptr<const Vec>(d_data), N, min_r, max_r);
+}
+
+template <typename Vec, typename T>
+GRACE_HOST void min_max_r(
+    const thrust::device_vector<Vec>& d_data,
+    T* min_r,
+    T* max_r)
+{
+    min_max_r(d_data.begin(), d_data.size(), min_r, max_r);
+}
+
+template <typename Vec, typename T>
+GRACE_HOST void min_max_r(
+    const thrust::host_vector<Vec>& h_data,
+    T* min_r,
+    T* max_r)
+{
+    min_max_r(h_data.begin(), h_data.size(), min_r, max_r);
+}
+
 // Vec2Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
 template <typename Vec2Iter, typename OutType>
@@ -553,6 +662,8 @@ GRACE_HOST void min_vec3(
 
 // Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
+// The iterator's value_type should have .x, .y, .z and .w components.
+// However, an iterator whose value_type is grace::Sphere<T> is also supported.
 template <typename Vec4Iter, typename OutType>
 GRACE_HOST void min_vec4(
     Vec4Iter data_iter,
@@ -718,6 +829,8 @@ GRACE_HOST void max_vec3(
 
 // Vec4Iter should be a thrust iterator, thrust::device_ptr, or any custom
 // iterator subject to the constraints described for TIter in grace::min_max().
+// The iterator's value_type should have .x, .y, .z and .w components.
+// However, an iterator whose value_type is grace::Sphere<T> is also supported.
 template <typename Vec4Iter, typename OutType>
 GRACE_HOST void max_vec4(
     Vec4Iter data_iter,

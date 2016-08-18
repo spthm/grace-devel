@@ -7,6 +7,7 @@
 #include "grace/generic/raydata.h"
 #include "grace/error.h"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "grace/types.h"
 
 #include <thrust/device_vector.h>
@@ -56,10 +57,11 @@ const static KernelIntegrals<double> lookup = {};
 // C-like convenience wrappers for common forms of the tracing kernel.
 //-----------------------------------------------------------------------------
 
-template <typename Real4>
+// T defines the internal precision of the intersection test.
+template <typename T>
 GRACE_HOST void trace_hitcounts_sph(
     const thrust::device_vector<Ray>& d_rays,
-    const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<Sphere<T> >& d_spheres,
     const Tree& d_tree,
     thrust::device_vector<int>& d_hit_counts)
 {
@@ -72,7 +74,7 @@ GRACE_HOST void trace_hitcounts_sph(
         d_tree,
         0,
         Init_null(),
-        Intersect_sphere_bool(),
+        Intersect_sphere_bool<T>(),
         OnHit_increment(),
         RayEntry_null(),
         RayExit_to_array<int>(
@@ -80,12 +82,14 @@ GRACE_HOST void trace_hitcounts_sph(
     );
 }
 
-template <typename Real4, typename Real>
+// T defines the internal precision of the intersection test, and of
+// intermediate computations for the output(s).
+template <typename T, typename OutType>
 GRACE_HOST void trace_cumulative_sph(
     const thrust::device_vector<Ray>& d_rays,
-    const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<Sphere<T> >& d_spheres,
     const Tree& d_tree,
-    thrust::device_vector<Real>& d_cumulated)
+    thrust::device_vector<OutType>& d_cumulated)
 {
     // TODO: Change it such that this is passed in, rather than copying it on
     // each call.
@@ -93,7 +97,7 @@ GRACE_HOST void trace_cumulative_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<Real, Real> RayData;
+    typedef RayData_sphere<OutType, OutType> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
@@ -102,24 +106,26 @@ GRACE_HOST void trace_cumulative_sph(
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        Intersect_sphere_b2dist(),
-        OnHit_sphere_cumulate(N_table),
+        Intersect_sphere_b2dist<T>(),
+        OnHit_sphere_cumulate<T>(N_table),
         RayEntry_null(),
-        RayExit_to_array<Real>(
+        RayExit_to_array<OutType>(
             thrust::raw_pointer_cast(d_cumulated.data()))
     );
 }
 
-template <typename Real4, typename IndexType, typename Real>
+// T defines the internal precision of the intersection test, and of
+// intermediate computations for the output(s).
+template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_sph(
     const thrust::device_vector<Ray>& d_rays,
-    const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<Sphere<T> >& d_spheres,
     const Tree& d_tree,
     // SGPU's segmented scans and sorts require ray offsets to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,
-    thrust::device_vector<Real>& d_hit_integrals,
-    thrust::device_vector<Real>& d_hit_distances)
+    thrust::device_vector<OutType>& d_hit_integrals,
+    thrust::device_vector<OutType>& d_hit_distances)
 {
     const size_t n_rays = d_rays.size();
 
@@ -148,7 +154,7 @@ GRACE_HOST void trace_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<int, Real> RayData;
+    typedef RayData_sphere<int, OutType> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
@@ -157,8 +163,8 @@ GRACE_HOST void trace_sph(
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        Intersect_sphere_b2dist(),
-        OnHit_sphere_individual<IndexType, Real>(
+        Intersect_sphere_b2dist<T>(),
+        OnHit_sphere_individual<T, IndexType, OutType>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),
@@ -169,19 +175,21 @@ GRACE_HOST void trace_sph(
     );
 }
 
-template <typename Real4, typename IndexType, typename Real>
+// T defines the internal precision of the intersection test, and of
+// intermediate computations for the output(s).
+template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_with_sentinels_sph(
     const thrust::device_vector<Ray>& d_rays,
-    const thrust::device_vector<Real4>& d_spheres,
+    const thrust::device_vector<Sphere<T> >& d_spheres,
     const Tree& d_tree,
     // SGPU's segmented scans and sorts require this to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,
     const int index_sentinel,
-    thrust::device_vector<Real>& d_hit_integrals,
-    const Real integral_sentinel,
-    thrust::device_vector<Real>& d_hit_distances,
-    const Real distance_sentinel)
+    thrust::device_vector<OutType>& d_hit_integrals,
+    const OutType integral_sentinel,
+    thrust::device_vector<OutType>& d_hit_distances,
+    const OutType distance_sentinel)
 {
     const size_t n_rays = d_rays.size();
 
@@ -221,7 +229,7 @@ GRACE_HOST void trace_with_sentinels_sph(
     const double* p_table = &(lookup.table[0]);
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
-    typedef RayData_sphere<int, Real> RayData;
+    typedef RayData_sphere<int, OutType> RayData;
     trace_texref<RayData>(
         d_rays,
         d_spheres,
@@ -230,8 +238,8 @@ GRACE_HOST void trace_with_sentinels_sph(
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
             N_table),
-        Intersect_sphere_b2dist(),
-        OnHit_sphere_individual<IndexType, Real>(
+        Intersect_sphere_b2dist<T>(),
+        OnHit_sphere_individual<T, IndexType, OutType>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),

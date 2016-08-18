@@ -8,6 +8,7 @@
 #include "grace/generic/meta.h"
 
 #include "grace/error.h"
+#include "grace/sphere.h"
 #include "grace/types.h"
 
 namespace grace {
@@ -115,31 +116,37 @@ public:
 // Intersection functors.
 
 // Discards impact parameter squared and distance to intersection.
+template <typename PrecisionType>
 class Intersect_sphere_bool
 {
 public:
-    template <typename Real4, typename RayData>
-    GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
+    template <typename T, typename RayData>
+    GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  const RayData&, const int /*lane*/,
                                  const gpu::BoundIter<char> /*smem_iter*/)
     {
-        typedef typename Real4ToRealMapper<Real4>::type Real;
-
-        Real dummy_b2, dummy_dist;
-        return sphere_hit(ray, sphere, dummy_b2, dummy_dist);
+        PrecisionType dummy_b2, dummy_dist;
+        return sphere_hit<PrecisionType>(ray, sphere, dummy_b2, dummy_dist);
     }
 };
 
 // Stores impact parameter squared and distance to intersection.
+template <typename PrecisionType>
 class Intersect_sphere_b2dist
 {
 public:
-    template <typename Real4, typename RayData>
-    GRACE_DEVICE bool operator()(const Ray& ray, const Real4& sphere,
+    template <typename T, typename RayData>
+    GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  RayData& ray_data, const int /*lane*/,
                                  const gpu::BoundIter<char> /*smem_iter*/)
     {
-        return sphere_hit(ray, sphere, ray_data.b2, ray_data.dist);
+        // Type of the b2, dist provided to sphere_hit must match the
+        // PrecisionType template parameter.
+        PrecisionType tmp_b2, tmp_dist;
+        bool result = sphere_hit<PrecisionType>(ray, sphere, tmp_b2, tmp_dist);
+        ray_data.b2 = tmp_b2;
+        ray_data.dist = tmp_dist;
+        return result;
     }
 };
 
@@ -160,6 +167,7 @@ public:
 };
 
 // Accumulating per-ray kernel integrals.
+template <typename PrecisionType>
 class OnHit_sphere_cumulate
 {
 private:
@@ -168,21 +176,20 @@ private:
 public:
     OnHit_sphere_cumulate(const int N_table) : N_table(N_table) {}
 
-    template <typename RayData, typename Real4>
+    template <typename RayData, typename T>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*sphere_idx*/,
-                                 const Real4& sphere, const int /*lane*/,
+                                 const Sphere<T>& sphere, const int /*lane*/,
                                  const gpu::BoundIter<char> smem_iter)
     {
-        typedef typename Real4ToRealMapper<Real4>::type Real;
-
-        // For simplicity, we do not template the type of the kernel integral
-        // lookup table; it is always required to be double.
+        // For implementation simplicity, we do not template the type of the
+        // kernel integral lookup table; it is always required to be double.
         gpu::BoundIter<double> Wk_lookup = smem_iter;
 
-        Real ir = 1.f / sphere.w;
-        Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
-        Real integral = lerp(b, Wk_lookup, N_table);
+        PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
+        PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
+        PrecisionType b = (N_table - 1) * (sqrt(b2) * ir);
+        PrecisionType integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         GRACE_ASSERT(integral >= 0);
@@ -193,34 +200,35 @@ public:
 };
 
 // Storing per-ray kernel integrals, sphere indices and ray-particle distances.
-template <typename IndexType, typename Real>
+template <typename PrecisionType, typename IndexType, typename OutType>
 class OnHit_sphere_individual
 {
 private:
     IndexType* const indices;
-    Real* const integrals;
-    Real* const distances;
+    OutType* const integrals;
+    OutType* const distances;
     const int N_table;
 
 public:
-    OnHit_sphere_individual(IndexType* const indices, Real* const integrals,
-                            Real* const distances, const int N_table) :
+    OnHit_sphere_individual(IndexType* const indices, OutType* const integrals,
+                            OutType* const distances, const int N_table) :
         indices(indices), integrals(integrals), distances(distances),
         N_table(N_table) {}
 
-    template <typename RayData, typename Real4>
+    template <typename RayData, typename T>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int sphere_idx,
-                                 const Real4& sphere, const int /*lane*/,
+                                 const Sphere<T>& sphere, const int /*lane*/,
                                  const gpu::BoundIter<char> smem_iter)
     {
-        // For simplicity, we do not template the type of the kernel integral
-        // lookup table; it is always required to be double.
+        // For implementation simplicity, we do not template the type of the
+        // kernel integral lookup table; it is always required to be double.
         gpu::BoundIter<double> Wk_lookup = smem_iter;
 
-        Real ir = 1.f / sphere.w;
-        Real b = (N_table - 1) * (sqrt(ray_data.b2) * ir);
-        Real integral = lerp(b, Wk_lookup, N_table);
+        PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
+        PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
+        PrecisionType b = (N_table - 1) * (sqrt(b2) * ir);
+        PrecisionType integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         indices[ray_data.data] = sphere_idx;

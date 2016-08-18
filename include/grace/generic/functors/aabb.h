@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/sphere.h"
 #include "grace/types.h"
 
 #include <iterator>
@@ -8,20 +9,20 @@ namespace grace {
 
 struct AABBSphere
 {
-    template <typename Real4>
+    template <typename T>
     GRACE_HOST_DEVICE void operator()(
-        Real4 sphere,
+        Sphere<T> sphere,
         float3* bot,
         float3* top) const
     {
-        bot->x = sphere.x - sphere.w;
-        top->x = sphere.x + sphere.w;
+        bot->x = sphere.x - sphere.r;
+        top->x = sphere.x + sphere.r;
 
-        bot->y = sphere.y - sphere.w;
-        top->y = sphere.y + sphere.w;
+        bot->y = sphere.y - sphere.r;
+        top->y = sphere.y + sphere.r;
 
-        bot->z = sphere.z - sphere.w;
-        top->z = sphere.z + sphere.w;
+        bot->z = sphere.z - sphere.r;
+        top->z = sphere.z + sphere.r;
     }
 };
 

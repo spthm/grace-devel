@@ -1,26 +1,26 @@
 #pragma once
 
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "grace/types.h"
 
 namespace grace {
 
-// Computations all happen with the precision of the type Real.
-template <typename Real4, typename Real>
+template <typename PrecisionType, typename T>
 GRACE_HOST_DEVICE bool sphere_hit(
     const Ray& ray,
-    const Real4& sphere,
-    Real& b2,
-    Real& dot_p)
+    const Sphere<T>& sphere,
+    PrecisionType& b2,
+    PrecisionType& dot_p)
 {
-    Real px = sphere.x - ray.ox;
-    Real py = sphere.y - ray.oy;
-    Real pz = sphere.z - ray.oz;
+    PrecisionType px = sphere.x - ray.ox;
+    PrecisionType py = sphere.y - ray.oy;
+    PrecisionType pz = sphere.z - ray.oz;
 
     // Already normalized.
-    Real rx = ray.dx;
-    Real ry = ray.dy;
-    Real rz = ray.dz;
+    PrecisionType rx = ray.dx;
+    PrecisionType ry = ray.dy;
+    PrecisionType rz = ray.dz;
 
     // Distance to intersection.
     dot_p = px * rx + py * ry + pz * rz;
@@ -28,13 +28,13 @@ GRACE_HOST_DEVICE bool sphere_hit(
 
     // Impact parameter.
     // negations mean -fma(a, b, -c) is not a clear win. Let the compiler decide.
-    Real bx = px - dot_p * rx;
-    Real by = py - dot_p * ry;
-    Real bz = pz - dot_p * rz;
+    PrecisionType bx = px - dot_p * rx;
+    PrecisionType by = py - dot_p * ry;
+    PrecisionType bz = pz - dot_p * rz;
     b2 = bx * bx + by * by + bz * bz;
     // b2 = fma(bx, bx, fma(by, by, bz * bz));
 
-    if (b2 >= sphere.w * sphere.w)
+    if (b2 >= sphere.r * sphere.r)
         return false;
 
     // If dot_p < ray start, the ray origin must be inside the sphere for an
