@@ -7,6 +7,7 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"
 
@@ -18,12 +19,14 @@
 #include <cstdlib>
 #include <iostream>
 
-void two_spheres(const float4 mins, const float4 maxs,
-                 thrust::device_vector<float4>& d_spheres)
-{
-    thrust::host_vector<float4> h_spheres(2);
+typedef grace::Sphere<float> SphereType;
 
-    float radius = (mins.w + maxs.w) / 2.0;
+void two_spheres(const SphereType mins, const SphereType maxs,
+                 thrust::device_vector<SphereType>& d_spheres)
+{
+    thrust::host_vector<SphereType> h_spheres(2);
+
+    float radius = (mins.r + maxs.r) / 2.0;
     float3 mid;
     mid.x = (mins.x + maxs.x) / 2.0;
     mid.y = (mins.y + maxs.y) / 2.0;
@@ -32,12 +35,12 @@ void two_spheres(const float4 mins, const float4 maxs,
     h_spheres[0].x = (mins.x + mid.x) / 2.0;
     h_spheres[0].y = (mins.y + mid.y) / 2.0;
     h_spheres[0].z = (mins.z + mid.z) / 2.0;
-    h_spheres[0].w = radius;
+    h_spheres[0].r = radius;
 
     h_spheres[1].x = (maxs.x + mid.x) / 2.0;
     h_spheres[1].y = (maxs.y + mid.y) / 2.0;
     h_spheres[1].z = (maxs.z + mid.z) / 2.0;
-    h_spheres[1].w = radius;
+    h_spheres[1].r = radius;
 
     d_spheres = h_spheres;
 }
@@ -70,16 +73,16 @@ int main(int argc, char* argv[])
               << std::endl;
 
     // Allocate permanent vectors before temporaries.
-    thrust::device_vector<float4> d_spheres(N);
+    thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<float> d_integrals(N_rays);
     grace::Tree d_tree(N, maxs_per_leaf);
 
     float area_per_ray;
-    float4 mins, maxs;
+    SphereType mins, maxs;
     maxs.x = maxs.y = maxs.z = 1.f;
     mins.x = mins.y = mins.z = -1.f;
-    maxs.w = mins.w = 0.2f; // Sphere radii
+    maxs.r = mins.r = 0.2f;
 
     two_spheres(mins, maxs, d_spheres);
     build_tree(d_spheres, mins, maxs, d_tree);

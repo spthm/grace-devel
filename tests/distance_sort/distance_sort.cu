@@ -6,6 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/sphere.h"
 #include "grace/ray.h"
 #include "helper/tree.cuh"
 #include "helper/trace.cuh"
@@ -18,6 +19,8 @@
 #include <iostream>
 #include <sstream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int verify_intersection_order(const thrust::host_vector<int>& offsets,
                               const thrust::host_vector<float>& distances,
@@ -110,20 +113,21 @@ int main(int argc, char* argv[]) {
               << std::endl;
 
     // Allocate permanent vectors before temporaries.
-    thrust::device_vector<float4> d_spheres(N);
+    thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<int> h_ray_offsets(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
     thrust::host_vector<float> h_distances; // Will be resized.
 
     // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
-    float4 high = make_float4(1.f, 1.f, 1.f, 0.1f);
-    float4 low = make_float4(0.f, 0.f, 0.f, 0.f);
+    SphereType high = SphereType(1.f, 1.f, 1.f, 0.1f);
+    SphereType low = SphereType(0.f, 0.f, 0.f, 0.f);
     // Rays emitted from box centre and of sufficient length to exit the box.
-    float4 O = make_float4(.5f, .5f, .5f, 2.f);
+    float3 origin = make_float3(.5f, .5f, .5f);
+    float length = 2.f;
 
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, O.x, O.y, O.z, O.w);
+    grace::uniform_random_rays(d_rays, origin.x, origin.y, origin.z, length);
     trace_distances(d_rays, d_spheres, d_tree, h_ray_offsets, h_distances);
 
     int failures = verify_intersection_order(h_ray_offsets, h_distances,

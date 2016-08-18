@@ -8,6 +8,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/rays.cuh"
 #include "helper/read_gadget.cuh"
 #include "helper/tree.cuh"
@@ -20,6 +21,8 @@
 #include <cstdlib>
 #include <iostream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -49,7 +52,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Gadget file:               " << fname << std::endl;
     // Vector is resized in read_gadget().
-    thrust::device_vector<float4> d_spheres;
+    thrust::device_vector<SphereType> d_spheres;
     read_gadget(fname, d_spheres);
     size_t N = d_spheres.size();
 
@@ -65,7 +68,7 @@ int main(int argc, char* argv[])
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
-    float4 mins, maxs;
+    SphereType mins, maxs;
     grace::min_vec4(d_spheres, &mins);
     grace::max_vec4(d_spheres, &maxs);
 

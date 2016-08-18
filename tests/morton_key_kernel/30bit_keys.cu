@@ -1,5 +1,6 @@
-#include "grace/cuda/build_sph.cuh"
+#include "grace/cuda/detail/kernels/morton.cuh"
 #include "grace/generic/morton.h"
+#include "grace/generic/functors/centroid.h"
 
 #include "helper/random.cuh"
 
@@ -36,12 +37,12 @@ int main(int argc, char* argv[])
     // Generate N random points with single precision co-ordinates in [-1, 1).
     float3 top = make_float3(1., 1., 1.);
     float3 bot = make_float3(-1., -1., -1.);
-    thrust::host_vector<float4> h_points(N);
+    thrust::host_vector<float3> h_points(N);
     thrust::transform(thrust::counting_iterator<size_t>(0),
                       thrust::counting_iterator<size_t>(N),
                       h_points.begin(),
-                      random_real4_functor<float4>(bot.x, top.x));
-    thrust::device_vector<float4> d_points = h_points;
+                      random_real3_functor<float3>());
+    thrust::device_vector<float3> d_points = h_points;
 
     // Compute keys on host.
     thrust::host_vector<KeyT> h_keys(N);
@@ -56,7 +57,7 @@ int main(int argc, char* argv[])
 
     // Compute keys on device.
     thrust::device_vector<KeyT> d_keys(N);
-    grace::morton_keys_sph(d_points, bot, top, d_keys);
+    grace::morton_keys(d_points, bot, top, d_keys, grace::CentroidSphere());
 
     // Check device keys against host keys.
     int errors = 0;

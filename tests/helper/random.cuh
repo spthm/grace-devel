@@ -1,6 +1,7 @@
 #pragma once
 
 #include "grace/generic/meta.h"
+#include "grace/sphere.h"
 
 #include <thrust/random.h>
 
@@ -53,59 +54,111 @@ public:
     }
 };
 
-template <typename Real4>
-class random_real4_functor
+template <typename Real3>
+class random_real3_functor
 {
-    typedef typename grace::Real4ToRealMapper<Real4>::type Real;
+    typedef typename grace::Real3ToRealMapper<Real3>::type Real;
 
     thrust::uniform_real_distribution<Real> x_uniform;
     thrust::uniform_real_distribution<Real> y_uniform;
     thrust::uniform_real_distribution<Real> z_uniform;
-    thrust::uniform_real_distribution<Real> w_uniform;
 
 public:
-    random_real4_functor() :
+    random_real3_functor() :
         x_uniform(0.0, 1.0),
         y_uniform(0.0, 1.0),
-        z_uniform(0.0, 1.0),
-        w_uniform(0.0, 1.0) {}
+        z_uniform(0.0, 1.0) {}
 
-    explicit random_real4_functor(const Real high) :
+    explicit random_real3_functor(const Real high) :
         x_uniform(0.0, high),
         y_uniform(0.0, high),
-        z_uniform(0.0, high),
-        w_uniform(0.0, high) {}
+        z_uniform(0.0, high) {}
 
-    explicit random_real4_functor(const Real low, const Real high) :
+    explicit random_real3_functor(const Real low, const Real high) :
         x_uniform(low, high),
         y_uniform(low, high),
-        z_uniform(low, high),
-        w_uniform(low, high) {}
+        z_uniform(low, high) {}
 
-    explicit random_real4_functor(const Real4 xyzw_high) :
-        x_uniform(0.0, xyzw_high.x),
-        y_uniform(0.0, xyzw_high.y),
-        z_uniform(0.0, xyzw_high.z),
-        w_uniform(0.0, xyzw_high.w) {}
+    explicit random_real3_functor(const Real3 high) :
+        x_uniform(0.0, high.x),
+        y_uniform(0.0, high.y),
+        z_uniform(0.0, high.z) {}
 
-    explicit random_real4_functor(const Real4 xyzw_low, const Real4 xyzw_high) :
-        x_uniform(xyzw_low.x, xyzw_high.x),
-        y_uniform(xyzw_low.y, xyzw_high.y),
-        z_uniform(xyzw_low.z, xyzw_high.z),
-        w_uniform(xyzw_low.w, xyzw_high.w) {}
+    explicit random_real3_functor(const Real3 low,
+                                   const Real3 high) :
+        x_uniform(low.x, high.x),
+        y_uniform(low.y, high.y),
+        z_uniform(low.z, high.z) {}
 
-    GRACE_HOST_DEVICE Real4 operator()(unsigned int n)
+    GRACE_HOST_DEVICE Real3 operator()(unsigned int n)
     {
         unsigned int seed = hash(n);
 
         thrust::default_random_engine rng(seed);
 
-        Real4 xyzw;
-        xyzw.x = x_uniform(rng);
-        xyzw.y = y_uniform(rng);
-        xyzw.z = z_uniform(rng);
-        xyzw.w = w_uniform(rng);
+        Real3 xyz;
+        xyz.x = x_uniform(rng);
+        xyz.y = y_uniform(rng);
+        xyz.z = z_uniform(rng);
 
-        return xyzw;
+        return xyz;
+    }
+};
+
+template <typename SphereType>
+class random_sphere_functor
+{
+    typedef typename SphereType::base_type Real;
+
+    thrust::uniform_real_distribution<Real> x_uniform;
+    thrust::uniform_real_distribution<Real> y_uniform;
+    thrust::uniform_real_distribution<Real> z_uniform;
+    thrust::uniform_real_distribution<Real> r_uniform;
+
+public:
+    random_sphere_functor() :
+        x_uniform(0.0, 1.0),
+        y_uniform(0.0, 1.0),
+        z_uniform(0.0, 1.0),
+        r_uniform(0.0, 1.0) {}
+
+    explicit random_sphere_functor(const Real high) :
+        x_uniform(0.0, high),
+        y_uniform(0.0, high),
+        z_uniform(0.0, high),
+        r_uniform(0.0, high) {}
+
+    explicit random_sphere_functor(const Real low, const Real high) :
+        x_uniform(low, high),
+        y_uniform(low, high),
+        z_uniform(low, high),
+        r_uniform(low, high) {}
+
+    explicit random_sphere_functor(const SphereType sphere_high) :
+        x_uniform(0.0, sphere_high.x),
+        y_uniform(0.0, sphere_high.y),
+        z_uniform(0.0, sphere_high.z),
+        r_uniform(0.0, sphere_high.r) {}
+
+    explicit random_sphere_functor(const SphereType sphere_low,
+                                   const SphereType sphere_high) :
+        x_uniform(sphere_low.x, sphere_high.x),
+        y_uniform(sphere_low.y, sphere_high.y),
+        z_uniform(sphere_low.z, sphere_high.z),
+        r_uniform(sphere_low.r, sphere_high.r) {}
+
+    GRACE_HOST_DEVICE SphereType operator()(unsigned int n)
+    {
+        unsigned int seed = hash(n);
+
+        thrust::default_random_engine rng(seed);
+
+        SphereType sphere;
+        sphere.x = x_uniform(rng);
+        sphere.y = y_uniform(rng);
+        sphere.z = z_uniform(rng);
+        sphere.r = r_uniform(rng);
+
+        return sphere;
     }
 };

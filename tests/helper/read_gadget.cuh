@@ -1,5 +1,7 @@
 #pragma once
 
+#include "grace/sphere.h"
+
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
@@ -7,6 +9,8 @@
 #include <sstream>
 #include <stdexcept>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 //-----------------------------------------------------------------------------
 // Utilities for reading in Gadget-2 (type 1) files
@@ -67,7 +71,7 @@ inline gadget_header read_gadget_header(std::ifstream& file)
 }
 
 inline void read_gadget(const std::string fname,
-                        thrust::host_vector<float4>& h_pos)
+                        thrust::host_vector<SphereType>& h_spheres)
 {
     const int GAS_TYPE = 0;
     int N_withmass = 0;
@@ -80,7 +84,7 @@ inline void read_gadget(const std::string fname,
     // Calculate particle number counts and read in positions block for gas
     // particles only.
     int N_gas = header.npart[0];
-    h_pos.resize(N_gas);
+    h_spheres.resize(N_gas);
 
     if (N_gas == 0) {
         std::stringstream msg_stream;
@@ -100,9 +104,9 @@ inline void read_gadget(const std::string fname,
         for(int n = 0; n < header.npart[i]; ++n)
         {
             if (i == GAS_TYPE) {
-                file.read((char*)&h_pos[n].x, sizeof(float));
-                file.read((char*)&h_pos[n].y, sizeof(float));
-                file.read((char*)&h_pos[n].z, sizeof(float));
+                file.read((char*)&h_spheres[n].x, sizeof(float));
+                file.read((char*)&h_spheres[n].y, sizeof(float));
+                file.read((char*)&h_spheres[n].z, sizeof(float));
             }
             else {
                 file.read((char*)&f_dummy, sizeof(float));
@@ -150,7 +154,7 @@ inline void read_gadget(const std::string fname,
         // Smoothing lengths.
         skip_blockmarker(file);
         for (int n = 0; n < N_gas; ++n) {
-            file.read((char*)&h_pos[n].w, sizeof(float));
+            file.read((char*)&h_spheres[n].r, sizeof(float));
         }
         skip_blockmarker(file);
     }
@@ -159,9 +163,9 @@ inline void read_gadget(const std::string fname,
 }
 
 inline void read_gadget(const std::string fname,
-                        thrust::device_vector<float4>& d_pos)
+                        thrust::device_vector<SphereType>& d_spheres)
 {
-    thrust::host_vector<float4> h_pos;
-    read_gadget(fname, h_pos);
-    d_pos = h_pos;
+    thrust::host_vector<SphereType> h_spheres;
+    read_gadget(fname, h_spheres);
+    d_spheres = h_spheres;
 }

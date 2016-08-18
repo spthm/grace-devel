@@ -8,6 +8,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
@@ -17,6 +18,8 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -44,19 +47,20 @@ int main(int argc, char* argv[])
               << "Max particles per leaf: " << max_per_leaf << std::endl
               << std::endl;
 
-    thrust::device_vector<float4> d_spheres(N);
+    thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
 
     // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
-    float4 high = make_float4(1.f, 1.f, 1.f, 0.1f);
-    float4 low = make_float4(0.f, 0.f, 0.f, 0.f);
-    // Rays emitted from box centre and of length 2.
-    float4 O = make_float4(.5f, .5f, .5f, 2.f);
+    SphereType high = SphereType(1.f, 1.f, 1.f, 0.1f);
+    SphereType low = SphereType(0.f, 0.f, 0.f, 0.f);
+    // Rays emitted from box centre and of sufficient length to exit the box.
+    float3 origin = make_float3(.5f, .5f, .5f);
+    float length = 2.f;
 
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, O.x, O.y, O.z, O.w);
+    grace::uniform_random_rays(d_rays, origin.x, origin.y, origin.z, length);
     grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
 
     int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,
@@ -75,13 +79,13 @@ int main(int argc, char* argv[])
         outfile.setf(std::ios::fixed, std::ios::floatfield);
         outfile.precision(8);
 
-        thrust::host_vector<float4> h_spheres_xyzr = d_spheres;
+        thrust::host_vector<SphereType> h_spheres_xyzr = d_spheres;
         thrust::host_vector<grace::Ray> h_rays = d_rays;
 
         outfile.open("indata/spheredata.txt");
         for (int i=0; i<N; i++) {
             outfile << h_spheres_xyzr[i].x << " " << h_spheres_xyzr[i].y << " "
-                    << h_spheres_xyzr[i].z << " " << h_spheres_xyzr[i].w
+                    << h_spheres_xyzr[i].z << " " << h_spheres_xyzr[i].r
                     << std::endl;
         }
         outfile.close();

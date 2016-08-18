@@ -4,16 +4,16 @@
 #include "grace/cuda/sort.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
 
 // Returns host vectors containing ray-particle intersection distances and
 // per-ray offsets into that vector.
-// Real4 and Real must be same precision.
-template <typename Real, typename Real4>
+template <typename T, typename Real>
 void trace_distances(const thrust::device_vector<grace::Ray>& d_rays,
-                     const thrust::device_vector<Real4>& d_spheres,
+                     const thrust::device_vector<grace::Sphere<T> >& d_spheres,
                      const grace::Tree& d_tree,
                      thrust::host_vector<int>& h_offsets,
                      thrust::host_vector<Real>& h_distances)

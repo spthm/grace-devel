@@ -8,6 +8,7 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
+#include "grace/sphere.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/random.cuh"
 
@@ -19,6 +20,8 @@
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -76,14 +79,14 @@ int main(int argc, char* argv[])
     {
         size_t N = 1u << p;
 
-        float4 high = make_float4(1.0f, 1.0f, 1.0f, 0.1f);
-        float4 low = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
+        SphereType high = SphereType(1.0f, 1.0f, 1.0f, 0.1f);
+        SphereType low = SphereType(0.0f, 0.0f, 0.0f, 0.0f);
 
-        thrust::host_vector<float4> h_spheres(N);
+        thrust::host_vector<SphereType> h_spheres(N);
         thrust::transform(thrust::counting_iterator<unsigned int>(0),
                           thrust::counting_iterator<unsigned int>(N),
                           h_spheres.begin(),
-                          random_real4_functor<float4>(low, high));
+                          random_sphere_functor<SphereType>(low, high));
 
         CUDATimer timer;
         double t_all, t_morton, t_sort, t_deltas, t_leaves, t_leaf_deltas, t_nodes;
@@ -92,7 +95,7 @@ int main(int argc, char* argv[])
         {
             timer.start();
 
-            thrust::device_vector<float4> d_spheres = h_spheres;
+            thrust::device_vector<SphereType> d_spheres = h_spheres;
             thrust::device_vector<grace::uinteger32> d_keys(N);
             thrust::device_vector<float> d_deltas(N + 1);
             grace::Tree d_tree(N, max_per_leaf);

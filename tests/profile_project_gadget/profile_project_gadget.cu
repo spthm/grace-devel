@@ -8,6 +8,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/rays.cuh"
 #include "helper/read_gadget.cuh"
@@ -21,6 +22,8 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -65,7 +68,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Gadget file:            " << fname << std::endl;
     // Vector is resized in read_gadget().
-    thrust::device_vector<float4> d_spheres;
+    thrust::device_vector<SphereType> d_spheres;
     read_gadget(fname, d_spheres);
     const size_t N = d_spheres.size();
 
@@ -84,7 +87,7 @@ int main(int argc, char* argv[])
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
-    float4 mins, maxs;
+    SphereType mins, maxs;
     grace::min_vec4(d_spheres, &mins);
     grace::max_vec4(d_spheres, &maxs);
 
@@ -110,7 +113,7 @@ int main(int argc, char* argv[])
             // (straightforwardly) compute, so below we only include the
             // 'permanently' allocated memory.
             size_t trace_bytes = 0;
-            trace_bytes += d_spheres.size() * sizeof(float4);
+            trace_bytes += d_spheres.size() * sizeof(SphereType);
             trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);

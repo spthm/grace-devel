@@ -10,6 +10,7 @@
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"
+#include "grace/sphere.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 
@@ -21,6 +22,8 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -58,7 +61,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Gadget file:            " << fname << std::endl;
     // Vector is resized in read_gadget().
-    thrust::host_vector<float4> h_spheres;
+    thrust::host_vector<SphereType> h_spheres;
     read_gadget(fname, h_spheres);
     const size_t N = h_spheres.size();
 
@@ -77,7 +80,7 @@ int main(int argc, char* argv[])
     {
         timer.start();
 
-        thrust::device_vector<float4> d_spheres = h_spheres;
+        thrust::device_vector<SphereType> d_spheres = h_spheres;
         thrust::device_vector<float3> d_centroids(N);
         thrust::device_vector<grace::uinteger32> d_keys(N);
         thrust::device_vector<float> d_deltas(N + 1);

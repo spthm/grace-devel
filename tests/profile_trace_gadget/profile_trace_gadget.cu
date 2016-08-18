@@ -9,6 +9,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 #include "helper/tree.cuh"
@@ -19,6 +20,8 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -58,7 +61,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Gadget file:            " << fname << std::endl;
     // Vector is resized in read_gadget().
-    thrust::device_vector<float4> d_spheres;
+    thrust::device_vector<SphereType> d_spheres;
     read_gadget(fname, d_spheres);
     const size_t N = d_spheres.size();
 
@@ -140,7 +143,7 @@ int main(int argc, char* argv[])
             // (straightforwardly) compute, so below we only include the
             // 'permanently' allocated memory.
             float trace_bytes = 0.0;
-            trace_bytes += d_spheres.size() * sizeof(float4);
+            trace_bytes += d_spheres.size() * sizeof(SphereType);
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);

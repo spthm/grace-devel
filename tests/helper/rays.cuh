@@ -8,7 +8,9 @@
 #include <thrust/host_vector.h>
 #include <thrust/sort.h>
 
-GRACE_HOST float3 box_center(const float4 mins, const float4 maxs)
+template <typename T>
+GRACE_HOST float3 box_center(const grace::Sphere<T> mins,
+                             const grace::Sphere<T> maxs)
 {
     float3 center = make_float3((mins.x + maxs.x) / 2.,
                                 (mins.y + maxs.y) / 2.,
@@ -16,14 +18,16 @@ GRACE_HOST float3 box_center(const float4 mins, const float4 maxs)
     return center;
 }
 
-GRACE_HOST float3 box_span(const float4 mins, const float4 maxs)
+template <typename T>
+GRACE_HOST float3 box_span(const grace::Sphere<T> mins,
+                           const grace::Sphere<T> maxs)
 {
-    // maxs.w == padding beyond bounds (e.g. maximum SPH radius).
+    // maxs.r == padding beyond bounds (e.g. maximum SPH radius).
     // Offset x, y and z on all sides by this value to avoid clipping (e.g. of
     // SPH particle volumes).
-    float3 span = make_float3(maxs.x - mins.x + 2 * maxs.w,
-                              maxs.y - mins.y + 2 * maxs.w,
-                              maxs.z - mins.z + 2 * maxs.w);
+    float3 span = make_float3(maxs.x - mins.x + 2 * maxs.r,
+                              maxs.y - mins.y + 2 * maxs.r,
+                              maxs.z - mins.z + 2 * maxs.r);
     return span;
 }
 
@@ -52,9 +56,10 @@ GRACE_HOST float per_ray_area(const float3 span, const size_t N_side)
 // Rays are ordered to increase along x first, then y, hence are suitable for
 // image generation.
 // min/maxs.w may be safely set to zero.
+template <typename T>
 GRACE_HOST void orthogonal_rays_z(
     const size_t N_side,
-    const float4 mins, const float4 maxs,
+    const grace::Sphere<T> mins, const grace::Sphere<T> maxs,
     thrust::device_vector<grace::Ray>& d_rays,
     float* area = NULL)
 {
@@ -78,23 +83,17 @@ GRACE_HOST void orthogonal_rays_z(
                                         look_at, view_up, span.y, length);
 }
 
-// Generates semi-randomized plane-parallel rays in the -z direction.
-// Rays are emitted from box side (x, y, maxs.z + maxs.w) and are of length >=
-// (maxs.z + maxs.w) - (mins.z - maxs.w); maxs.w is a padding term.
-// Since we generally want to fully include all primitives, the ray (ox, oy)
-// limits are set by
-//   [mins.x - maxs.w, maxs.x + maxs.w] and
-//   [mins.y - maxs.w, maxs.y + maxs.w],
-// but rays at the edges are likely to have no hits.
+// Generates semi-randomized plane-parallel rays in the +z direction, covering
+// all ray-grid cells in range (mins.x/y/z - maxs.r) to (maxs.x/y/z + maxs.r).
 // Ray origins are randomized with each ray's cell, and ray order is not
-// specified (i.e. may not be appropriate for image generation).
-// min/maxs.w may be safely set to zero.
-GRACE_HOST void plane_parallel_rays_z(
-    const size_t N_side,
-    const float4 mins, const float4 maxs,
-    thrust::device_vector<grace::Ray>& d_rays,
-    float* area = NULL,
-    unsigned int seed = 1234)
+// specified (i.e. may not be useful for image generation).
+template <typename T>
+void plane_parallel_rays_z(const size_t N_side,
+                           const grace::Sphere<T> mins,
+                           const grace::Sphere<T> maxs,
+                           thrust::device_vector<grace::Ray>& d_rays,
+                           float* area = NULL,
+                           unsigned int seed = 1234)
 {
     float3 span = box_span(mins, maxs);
 

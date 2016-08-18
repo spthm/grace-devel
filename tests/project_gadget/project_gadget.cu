@@ -9,6 +9,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/images.hpp"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"
@@ -23,6 +24,8 @@
 #include <cmath>
 #include <iostream>
 #include <string>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -45,7 +48,7 @@ int main(int argc, char* argv[])
 
     std::cout << "Gadget file:             " << fname << std::endl;
     // Vector is resized in read_gadget().
-    thrust::device_vector<float4> d_spheres;
+    thrust::device_vector<SphereType> d_spheres;
     read_gadget(fname, d_spheres);
     const size_t N = d_spheres.size();
 
@@ -61,14 +64,14 @@ int main(int argc, char* argv[])
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
-    float4 mins, maxs;
+    SphereType mins, maxs;
     grace::min_vec4(d_spheres, &mins);
     grace::max_vec4(d_spheres, &maxs);
     // orthogonal_rays_z() takes the maximum and minimum particle radii into
     // account - useful when integrating over the entire SPH field, but not
     // useful when creating images, as it leads to rays with zero integral-
     // values, and hence requires introduces a huge dynamic range.
-    mins.w = maxs.w = 0;
+    mins.r = maxs.r = 0;
 
     build_tree(d_spheres, mins, maxs, d_tree);
     orthogonal_rays_z(N_per_side, mins, maxs, d_rays);

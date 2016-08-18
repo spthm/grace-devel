@@ -9,6 +9,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
@@ -17,6 +18,8 @@
 
 #include <cstdlib>
 #include <iostream>
+
+typedef grace::Sphere<float> SphereType;
 
 int main(int argc, char* argv[])
 {
@@ -43,13 +46,13 @@ int main(int argc, char* argv[])
               << "Max particles per leaf:  " << max_per_leaf << std::endl
               << std::endl;
 
-    thrust::device_vector<float4> d_spheres(N);
+    thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
 
-    float4 low = make_float4(-1E4f, -1E4f, -1E4f, 80.f);
-    float4 high = make_float4(1E4f, 1E4f, 1E4f, 400.f);
+    SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
+    SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
     random_spheres_tree(low, high, N, d_spheres, d_tree);
     grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 2E4f);
 
@@ -59,7 +62,7 @@ int main(int argc, char* argv[])
     std::cout << "Mean of " << mean_hits << " hits per ray (device)."
               << std::endl << std::endl;
 
-    thrust::host_vector<float4> h_spheres = d_spheres;
+    thrust::host_vector<SphereType> h_spheres = d_spheres;
     thrust::host_vector<grace::Ray> h_rays = d_rays;
     thrust::host_vector<int> ref_hit_counts(N_rays);
     #pragma omp parallel for
