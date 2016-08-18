@@ -4,12 +4,13 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "intersection.cuh"
+#include "intersection.h"
 
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/generic/bits.h"
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
+#include "grace/sphere.h"
 #include "helper/random.cuh"
 
 #include <thrust/iterator/counting_iterator.h>
@@ -21,15 +22,17 @@
 #include <iostream>
 #include <gmpxx.h>
 
+typedef grace::Sphere<float> SphereType;
+
 struct expand_functor
 {
     float d;
 
     __host__ __device__ expand_functor(float distance): d(distance) {}
 
-    __host__ __device__ float4 operator()(const float4& sphere)
+    __host__ __device__ SphereType operator()(const SphereType& sphere)
     {
-        float4 s = sphere;
+        SphereType s = sphere;
         // Centre assumed (0, 0).
         s.x += d * grace::sgn(s.x);
         s.y += d * grace::sgn(s.y);
@@ -68,20 +71,20 @@ int main(int argc, char* argv[])
               << std::endl;
 
 
-    float4 low = make_float4(-1E4f, -1E4f, -1E4f, 80.f);
-    float4 high = make_float4(1E4f, 1E4f, 1E4f, 400.f);
-    thrust::host_vector<float4> h_spheres(N);
+    SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
+    SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
+    thrust::host_vector<SphereType> h_spheres(N);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
                       h_spheres.begin(),
-                      random_real4_functor<float4>(low, high));
+                      random_sphere_functor<SphereType>(low, high));
 
     // Reference intersection function does not discriminate around start
     // (and end) points of the ray, but GRACE's sphere intersection function
     // does. To avoid this inconsistency, we ensure no particles contain the
     // rays' common origin (0, 0).
     thrust::transform(h_spheres.begin(), h_spheres.end(), h_spheres.begin(),
-                      expand_functor(high.w));
+                      expand_functor(high.r));
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 2E4f);
@@ -96,7 +99,7 @@ int main(int argc, char* argv[])
 
         for (size_t si = 0; si < N;  ++si)
         {
-            float4 sphere = h_spheres[si];
+            SphereType sphere = h_spheres[si];
             float b2, d;
             bool hit = grace::sphere_hit(ray, sphere, b2, d);
             bool ref_hit = ray_sphere_intersection<mpq_class>(ray, sphere);
@@ -104,7 +107,7 @@ int main(int argc, char* argv[])
             if (ref_hit != hit)
             {
                 double ref_b2 = impact_parameter2(ray, sphere);
-                double R2 = static_cast<double>(sphere.w) * sphere.w;
+                double R2 = static_cast<double>(sphere.r) * sphere.r;
 
                 if (std::abs(1.0 - ref_b2 / R2) > tolerance)
                 {

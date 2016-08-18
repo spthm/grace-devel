@@ -6,7 +6,7 @@ _FLAGS = -fopenmp -mfpmath=sse -msse2
 _INCLUDES = -I./ $(GMP_INC)
 _LFLAGS = $(GMP_LIB)
 _LIBS = -lgmp -lgmpxx
-_DEPS = interval.h quadratic.h intersection.cuh Makefile
+_DEPS = interval.h quadratic.h intersection.h Makefile
 
 CXXFLAGS += $(_FLAGS)
 INCLUDES += $(_INCLUDES)
