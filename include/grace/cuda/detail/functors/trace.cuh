@@ -63,14 +63,14 @@ public:
 
 // RayExit functors.
 
-template <typename T>
+template <typename OutType>
 class RayExit_to_array
 {
 private:
-    T* const store;
+    OutType* const store;
 
 public:
-    RayExit_to_array(T* const ray_data_store) : store(ray_data_store) {}
+    RayExit_to_array(OutType* const ray_data_store) : store(ray_data_store) {}
 
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
@@ -85,15 +85,15 @@ public:
 // Init functors.
 
 // Copying a contiguous set of data to SMEM.
-template <typename T>
+template <typename InType>
 class InitGlobalToSmem
 {
 private:
-    const T* const data_global;
+    const InType* const data_global;
     const int count;
 
 public:
-    InitGlobalToSmem(const T* const global_addr, const int count) :
+    InitGlobalToSmem(const InType* const global_addr, const int count) :
         data_global(global_addr), count(count) {}
 
     GRACE_DEVICE void operator()(const gpu::BoundIter<char> smem_iter)
@@ -101,11 +101,11 @@ public:
         // We *must* cast from the default pointer-to-char to the data type we
         // wish to store in shared memory for dereferencing and indexing
         // operators to work correctly.
-        gpu::BoundIter<T> T_iter = smem_iter;
+        gpu::BoundIter<InType> in_iter = smem_iter;
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
         {
-            T_iter[i] = data_global[i];
+            in_iter[i] = data_global[i];
         }
 
         // __syncthreads() is called by the trace kernel.
