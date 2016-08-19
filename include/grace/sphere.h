@@ -7,7 +7,7 @@ namespace grace {
 template <typename T>
 GRACE_ALIGNED_STRUCT(16) Sphere
 {
-    typedef T base_type;
+    typedef T value_type;
 
     T x, y, z, r;
 

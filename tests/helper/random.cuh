@@ -108,7 +108,7 @@ public:
 template <typename SphereType>
 class random_sphere_functor
 {
-    typedef typename SphereType::base_type Real;
+    typedef typename SphereType::value_type Real;
 
     thrust::uniform_real_distribution<Real> x_uniform;
     thrust::uniform_real_distribution<Real> y_uniform;
