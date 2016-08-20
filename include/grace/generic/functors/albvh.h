@@ -72,8 +72,8 @@ struct DeltaEuclidean
         TPrimitive pi = primitives[i];
         TPrimitive pj = primitives[i+1];
 
-        float3 ci = centroid(pi);
-        float3 cj = centroid(pj);
+        Vector<3, float> ci = centroid(pi);
+        Vector<3, float> cj = centroid(pj);
 
         return (pi.x - pj.x) * (pi.x - pj.x)
                + (pi.y - pj.y) * (pi.y - pj.y)

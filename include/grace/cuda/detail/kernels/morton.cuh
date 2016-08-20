@@ -35,13 +35,13 @@ __global__ void morton_keys_kernel(
     KeyIter keys,
     const CentroidFunc centroid)
 {
-    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
     typedef typename std::iterator_traits<KeyIter>::value_type KeyType;
+    typedef typename CentroidFunc::result_type CentroidType;
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_primitives) {
-        float3 centre = centroid(primitives[tid]);
+        CentroidType centre = centroid(primitives[tid]);
 
         KeyType x = static_cast<KeyType>(norm_scale.x * (centre.x - mins.x));
         KeyType y = static_cast<KeyType>(norm_scale.y * (centre.y - mins.y));
@@ -152,13 +152,13 @@ GRACE_HOST void morton_keys(
     // dereference the result on the host. This will work if PrimitiveIter is
     // actually a Thrust iterator, but not otherwise!
 
-    thrust::device_vector<float3> d_centroids(N_primitives);
-    float3* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
+    thrust::device_vector<Vector<3, float> > d_centroids(N_primitives);
+    Vector<3, float>* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
 
     AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr,
                             centroid);
 
-    float3 mins, maxs;
+    Vector<3, float> mins, maxs;
     min_vec3(d_centroids_ptr, N_primitives, &mins);
     max_vec3(d_centroids_ptr, N_primitives, &maxs);
 

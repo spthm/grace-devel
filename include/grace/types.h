@@ -22,6 +22,23 @@
 #endif
 
 // C++11 has the portable syntax
+//   alignof(T)
+// which should preferentially be used where available.
+#if __cplusplus >= 201103L
+#define GRACE_ALIGNOF(T) alignof(T)
+#elif defined(__GNUC__)
+#define GRACE_ALIGNOF(T) __alignof__ (T)
+#elif defined(__clang__)
+#define GRACE_ALIGNOF(T) __alignof__(T)
+#elif defined(__INTEL_COMPILER)
+#define GRACE_ALIGNOF(T) __alignof(T)
+#elif defined(_MSC_VER)
+#define GRACE_ALIGNOF(T) __alignof(T)
+#else
+#error Compiler not detected, no alignof function available.
+#endif
+
+// C++11 has the portable syntax
 //   struct alignas(16) foo { ... }
 // which should preferentially be used where available.
 // NVCC, where this is most important (to enable efficient 2- and 4-wide loads
@@ -35,8 +52,10 @@
 #define GRACE_ALIGNED_STRUCT(x) struct alignas(x)
 #elif defined(__CUDACC__)
 #define GRACE_ALIGNED_STRUCT(x) struct __align__(x)
-#elif defined(__GNUC__)
-#define GRACE_ALIGNED_STRUCT(x) struct __attribute__ ((__aligned__(x)))
+#elif defined(__GNUC__) || defined (__clang__)
+#define GRACE_ALIGNED_STRUCT(x) struct __attribute__ ((aligned(x)))
+#elif defined(__INTEL_COMPILER)
+#define GRACE_ALIGNED_STRUCT(x) __attribute__((align(x))) struct
 #elif defined(_MSC_VER)
 #define GRACE_ALIGNED_STRUCT(x) __declspec(align(x)) struct
 #else

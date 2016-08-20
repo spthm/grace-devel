@@ -16,6 +16,7 @@
 #include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
@@ -119,10 +120,11 @@ __global__ void init_PRNG_kernel(
  * hypersphere. See e.g. Wolfram "[Hyper]Sphere Point Picking" and
  * http://www.math.niu.edu/~rusin/known-math/96/sph.rand
  */
-template <typename Real4, typename KeyType>
+template <typename T, typename KeyType>
 __global__ void gen_uniform_rays_kernel(
     const curandState* const prng_states,
-    const Real4 ol, // ox, oy, oz, length.
+    const Vector<3, T> origin,
+    const T length,
     Ray* const rays,
     KeyType* const keys,
     const size_t N_rays)
@@ -144,11 +146,11 @@ __global__ void gen_uniform_rays_kernel(
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
         keys[tid] = ray_dir_morton_key(ray);
 
-        ray.ox = ol.x;
-        ray.oy = ol.y;
-        ray.oz = ol.z;
+        ray.ox = origin.x;
+        ray.oy = origin.y;
+        ray.oz = origin.z;
         ray.start = 0;
-        ray.end = ol.w;
+        ray.end = length;
 
         rays[tid] = ray;
 
@@ -156,10 +158,11 @@ __global__ void gen_uniform_rays_kernel(
     }
 }
 
-template <typename Real4, typename KeyType>
+template <typename T, typename KeyType>
 __global__ void gen_uniform_rays_single_octant_kernel(
     const curandState* const prng_states,
-    const Real4 ol, // ox, oy, oz, length.
+    const Vector<3, T> origin,
+    const T length,
     Ray* const rays,
     KeyType* const keys,
     const size_t N_rays,
@@ -187,11 +190,11 @@ __global__ void gen_uniform_rays_single_octant_kernel(
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
         keys[tid] = ray_dir_morton_key(ray);
 
-        ray.ox = ol.x;
-        ray.oy = ol.y;
-        ray.oz = ol.z;
+        ray.ox = origin.x;
+        ray.oy = origin.y;
+        ray.oz = origin.z;
         ray.start = 0;
-        ray.end = ol.w;
+        ray.end = length;
 
         rays[tid] = ray;
 
@@ -199,11 +202,10 @@ __global__ void gen_uniform_rays_single_octant_kernel(
     }
 }
 
-template <RaySortType SortType, typename Real3, typename PointType,
-          typename KeyType>
+template <RaySortType SortType, typename T, typename KeyType>
 __global__ void one_to_many_rays_kernel(
-    const Real3 o, // ox, oy, oz.
-    const PointType* const points,
+    const Vector<3, T> origin,
+    const Vector<3, T>* const points,
     Ray* const rays,
     KeyType* const keys,
     const size_t N_rays)
@@ -215,11 +217,11 @@ __global__ void one_to_many_rays_kernel(
         float dx, dy, dz, R, invR;
         Ray ray;
 
-        PointType point = points[tid];
+        Vector<3, T> point = points[tid];
 
-        dx = point.x - o.x;
-        dy = point.y - o.y;
-        dz = point.z - o.z;
+        dx = point.x - origin.x;
+        dy = point.y - origin.y;
+        dz = point.z - origin.z;
         invR = set_normalized_ray_direction(dx, dy, dz, ray);
         R = 1.0 / static_cast<double>(invR);
 
@@ -227,9 +229,9 @@ __global__ void one_to_many_rays_kernel(
             keys[tid] = ray_dir_morton_key(ray);
         }
 
-        ray.ox = o.x;
-        ray.oy = o.y;
-        ray.oz = o.z;
+        ray.ox = origin.x;
+        ray.oy = origin.y;
+        ray.oz = origin.z;
         ray.start = 0;
         ray.end = R;
 
@@ -239,17 +241,17 @@ __global__ void one_to_many_rays_kernel(
     }
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 __global__ void plane_parallel_random_rays_kernel(
     const curandState* const prng_states,
     const int width,
     const int height,
     const size_t n_rays,
-    const Real3 base,
-    const Real3 delta_w,
-    const Real3 delta_h,
+    const Vector<3, Real> base,
+    const Vector<3, Real> delta_w,
+    const Vector<3, Real> delta_h,
     const Real length,
-    const Real3 normal,
+    const Vector<3, Real> normal,
     Ray* const rays)
 {
     GRACE_ASSERT(grace::WARP_SIZE == warpSize);
@@ -310,15 +312,15 @@ __global__ void plane_parallel_random_rays_kernel(
     }
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 __global__ void orthographic_projection_rays_kernel(
     const int resolution_x,
     const int resolution_y,
     const size_t n_rays,
-    const Real3 camera_position,
-    const Real3 view_direction,
-    const Real3 v,
-    const Real3 u,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> view_direction,
+    const Vector<3, Real> v,
+    const Vector<3, Real> u,
     const Real length,
     Ray* const rays)
 {
@@ -333,8 +335,7 @@ __global__ void orthographic_projection_rays_kernel(
         // im_coord is not offset in the direction view_direction.
         // The aspect ratio is rolled into the vectors v and u; image plane
         // co-ordinates should both cover the range (1, -1).
-        Real3 zero3;
-        zero3.x = zero3.y = zero3.z = 0;
+        Vector<3, Real> zero3(0., 0., 0.);
         float3 im_coord = image_plane_coord(i, j, v, u, zero3,
                                             resolution_x, resolution_y,
                                             (Real)1);
@@ -355,16 +356,16 @@ __global__ void orthographic_projection_rays_kernel(
     }
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 __global__ void perspective_projection_rays_kernel(
     const int resolution_x,
     const int resolution_y,
     const size_t n_rays,
     const Real aspect_ratio,
-    const Real3 camera_position,
-    const Real3 v,
-    const Real3 u,
-    const Real3 n,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> v,
+    const Vector<3, Real> u,
+    const Vector<3, Real> n,
     const Real length,
     Ray* const rays)
 {
@@ -450,14 +451,10 @@ template <typename Real>
 GRACE_HOST void uniform_random_rays(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const unsigned long long seed)
 {
-    const float4 origin = make_float4(ox, oy, oz, length);
-
     curandState* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
@@ -469,6 +466,7 @@ GRACE_HOST void uniform_random_rays(
     gen_uniform_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         d_prng_states,
         origin,
+        length,
         d_rays_ptr,
         thrust::raw_pointer_cast(d_keys.data()),
         N_rays);
@@ -484,9 +482,7 @@ template <typename Real>
 GRACE_HOST void uniform_random_rays_single_octant(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const enum Octants octant,
     const unsigned long long seed)
@@ -505,6 +501,7 @@ GRACE_HOST void uniform_random_rays_single_octant(
         <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
             d_prng_states,
             origin,
+            length,
             d_rays_ptr,
             thrust::raw_pointer_cast(d_keys.data()),
             N_rays,
@@ -518,17 +515,13 @@ GRACE_HOST void uniform_random_rays_single_octant(
 }
 
 // No sorting of rays (useful when particles are already spatially sorted).
-template <typename Real, typename PointType>
+template <typename Reale>
 GRACE_HOST void one_to_many_rays_nosort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
-    const PointType* const d_points_ptr)
+    const Vector<3, Real> origin,
+    const Vector<3, Real>* const d_points_ptr)
 {
-    const float3 origin = make_float3(ox, oy, oz);
-
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                        / RAYS_THREADS_PER_BLOCK));
@@ -544,17 +537,13 @@ GRACE_HOST void one_to_many_rays_nosort(
 
 // No bounding box information for points; just sort rays based on their
 // direction vectors.
-template <typename Real, typename PointType>
+template <typename Real>
 GRACE_HOST void one_to_many_rays_dirsort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
-    const PointType* const d_points_ptr)
+    const Vector<3, Real> origin,
+    const Vector<3, Real>* const d_points_ptr)
 {
-    const float3 origin = make_float3(ox, oy, oz);
-
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                        / RAYS_THREADS_PER_BLOCK));
@@ -576,19 +565,15 @@ GRACE_HOST void one_to_many_rays_dirsort(
 
 // Have bounding box information for points; sort rays based on their end
 // points.
-template <typename Real, typename Real3, typename PointType>
+template <typename Real, typename Real3>
 GRACE_HOST void one_to_many_rays_endsort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
-    const PointType* const d_points_ptr,
+    const Vector<3, Real> origin,
+    const Vector<3, Real>* const d_points_ptr,
     const Real3 AABB_bot,
     const Real3 AABB_top)
 {
-    const float3 origin = make_float3(ox, oy, oz);
-
     thrust::device_vector<uinteger32> d_keys(N_rays);
     uinteger32* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
@@ -612,14 +597,14 @@ GRACE_HOST void one_to_many_rays_endsort(
                         thrust::device_ptr<Ray>(d_rays_ptr));
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void plane_parallel_random_rays(
     Ray* const d_rays_ptr,
     const int width,
     const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
+    const Vector<3, Real> base,
+    const Vector<3, Real> w,
+    const Vector<3, Real> h,
     const Real length,
     const unsigned long long seed)
 {
@@ -629,17 +614,12 @@ GRACE_HOST void plane_parallel_random_rays(
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
-    Real3 delta_w, delta_h, direction;
+    Vector<3, Real> delta_w, delta_h, direction;
 
-    delta_w.x = w.x / width;
-    delta_w.y = w.y / width;
-    delta_w.z = w.z / width;
+    delta_w = w / static_cast<Real>(width);
+    delta_h = h / static_cast<Real>(height);
 
-    delta_h.x = h.x / height;
-    delta_h.y = h.y / height;
-    delta_h.z = h.z / height;
-
-    direction = normalize3(cross(w, h));
+    direction = normalize(cross(w, h));
 
     // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
     const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
@@ -659,14 +639,14 @@ GRACE_HOST void plane_parallel_random_rays(
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void orthographic_projection_rays(
     Ray* const d_rays_ptr,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real vertical_extent,
     const Real length)
 {
@@ -684,25 +664,17 @@ GRACE_HOST void orthographic_projection_rays(
     const Real aspect_ratio = (Real)resolution_x / resolution_y;
     const Real horizontal_extent = vertical_extent * aspect_ratio;
 
-    Real3 view_direction;
-    view_direction.x = look_at.x - camera_position.x;
-    view_direction.y = look_at.y - camera_position.y;
-    view_direction.z = look_at.z - camera_position.z;
-    view_direction = normalize3(view_direction);
+    Vector<3, Real> view_direction = normalize(look_at - camera_position);
 
     // Construct v, u, basis of image plane. +u is upward in plane, +v is
     // rightward in plane. A left-handed system.
-    Real3 v = normalize3(cross(view_direction, view_up));
-    Real3 u = normalize3(cross(v, view_direction));
+    Vector<3, Real> v = normalize(cross(view_direction, view_up));
+    Vector<3, Real> u = normalize(cross(v, view_direction));
 
     // Do this here once rather than by each thread in the kernel.
     // Halved because kernel generates image plane x, y co-ordinates in (-1, 1).
-    v.x *= horizontal_extent / 2.;
-    v.y *= horizontal_extent / 2.;
-    v.z *= horizontal_extent / 2.;
-    u.x *= vertical_extent / 2.;
-    u.y *= vertical_extent / 2.;
-    u.z *= vertical_extent / 2.;
+    v *= horizontal_extent / 2.;
+    u *= vertical_extent / 2.;
 
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -720,14 +692,14 @@ GRACE_HOST void orthographic_projection_rays(
     GRACE_KERNEL_CHECK();
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void pinhole_camera_rays(
     Ray* const d_rays_ptr,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real FOVy,
     const Real length)
 {
@@ -746,24 +718,19 @@ GRACE_HOST void pinhole_camera_rays(
     const size_t N_rays = (size_t)resolution_x * resolution_y;
     const Real aspect_ratio = (Real)resolution_x / resolution_y;
 
-    Real3 view_direction;
-    view_direction.x = look_at.x - camera_position.x;
-    view_direction.y = look_at.y - camera_position.y;
-    view_direction.z = look_at.z - camera_position.z;
+    Vector<3, Real> view_direction = look_at - camera_position;
 
     // Construct v, u, n basis of image plane. +u is upward in plane, +v is
     // rightward in plane, and +n is into plane. A left-handed system.
-    Real3 v = normalize3(cross(view_direction, view_up));
-    Real3 u = normalize3(cross(v, view_direction));
-    Real3 n = normalize3(view_direction);
+    Vector<3, Real> v = normalize(cross(view_direction, view_up));
+    Vector<3, Real> u = normalize(cross(v, view_direction));
+    Vector<3, Real> n = normalize(view_direction);
 
     // Do this once here rather than by each thread in the kernel.
     // In the camera's co-ordinate system, the image plane is at
     // -1 / tan(FOVy/2), but we're swapping from a RH to a LH system.
     Real n_prefactor = 1. / std::tan(FOVy / 2.);
-    n.x *= n_prefactor;
-    n.y *= n_prefactor;
-    n.z *= n_prefactor;
+    n *= n_prefactor;
 
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)

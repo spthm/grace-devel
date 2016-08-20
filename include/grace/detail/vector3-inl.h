@@ -76,7 +76,7 @@ Vector<3, T>& Vector<3, T>::operator=(const Vector<3, U>& rhs)
 
 template <typename T>
 GRACE_HOST_DEVICE
-T* Vector<3, T>::get()
+T* Vector<3, T>::data()
 {
     // Element order in memory guaranteed identical to order of declaration.
     // However, depending on the architecture and compiler, this may be unsafe
@@ -86,39 +86,39 @@ T* Vector<3, T>::get()
 
 template <typename T>
 GRACE_HOST_DEVICE
-const T* Vector<3, T>::get() const
+const T* Vector<3, T>::data() const
 {
-    return const_cast<const T*>(this->get());
+    return const_cast<const T*>(this->data());
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
 T& Vector<3, T>::operator[](size_t i)
 {
-    return this->get()[i];
+    return this->data()[i];
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
 const T& vector<3, T>::operator[](size_t i) const
 {
-    // Overloads to const get().
-    return this->get()[i];
+    // Overloads to const data().
+    return this->data()[i];
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
 Vector<3, T>& Vector<3, T>::vec3()
 {
-    return *reinterpret_cast<Vector<3, T>*>(this->get());
+    return *reinterpret_cast<Vector<3, T>*>(this->data());
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
 const Vector<3, T>& Vector<3, T>::vec3() const
 {
-    // Overloads to const get().
-    return *reinterpret_cast<const Vector<3, T>*>(this->get());
+    // Overloads to const data().
+    return *reinterpret_cast<const Vector<3, T>*>(this->data());
 }
 
 } // namespace grace
