@@ -21,6 +21,20 @@
     #define GRACE_HOST_DEVICE inline
 #endif
 
+// C++11 has the portable function aligned_alloc(), which should be used where
+// available.
+#if __cplusplus >= 201103L || defined(_ISOC11_SOURCE)
+#define GRACE_USE_CPP11_ALIGNED_ALLOC
+#elif _POSIX_C_SOURCE >= 200112L || (defined(__APPLE__) && defined(__MACH__))
+#define GRACE_USE_POSIX_MEMALIGN
+#elif defined(__INTEL_COMPILER)
+#define GRACE_USE_MM_MALLOC
+#elif defined (MSC_VER)
+#define GRACE_USE_MS_ALIGNED_MALLOC
+#else
+#error Compiler or system not detected, no aligned malloc available.
+#endif
+
 // C++11 has the portable syntax
 //   alignof(T)
 // which should preferentially be used where available.
