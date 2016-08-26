@@ -45,7 +45,7 @@ GRACE_ALIGNED_STRUCT(16) Sphere
 
     // vec.w == vec[3] is radius.
     // U must be convertible to T.
-    template <typename U, typename S>
+    template <typename U>
     GRACE_HOST_DEVICE Sphere(const Vector<4, U>& vec);
 
 #ifdef __CUDACC__

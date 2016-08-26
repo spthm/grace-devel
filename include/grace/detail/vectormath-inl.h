@@ -29,7 +29,7 @@ Vector<Dims, T> operator_loop(const Vector<Dims, T>& v,
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
+    for (size_t i = 0; i < Dims; ++i) {
         result[i] = op(v[i]);
     }
 
@@ -45,7 +45,7 @@ Vector<3, T> operator_loop(const Vector<3, T>& v,
     Vector<3, T> result;
 
     result.x = op(v.x);
-    resuly.y = op(v.y);
+    result.y = op(v.y);
     result.z = op(v.z);
 
     return result;
@@ -60,7 +60,7 @@ Vector<4, T> operator_loop(const Vector<4, T>& v,
     Vector<4, T> result;
 
     result.x = op(v.x);
-    resuly.y = op(v.y);
+    result.y = op(v.y);
     result.z = op(v.z);
     result.w = op(v.w);
 
@@ -83,7 +83,7 @@ Vector<Dims, T> operator_loop(const Vector<Dims, T>& u,
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
+    for (size_t i = 0; i < Dims; ++i) {
         result[i] = op(u[i], v[i]);
     }
 
@@ -100,7 +100,7 @@ Vector<3, T> operator_loop(const Vector<3, T>& u,
     Vector<3, T> result;
 
     result.x = op(u.x, v.x);
-    resuly.y = op(u.y, v.y);
+    result.y = op(u.y, v.y);
     result.z = op(u.z, v.z);
 
     return result;
@@ -116,7 +116,7 @@ Vector<4, T> operator_loop(const Vector<4, T>& u,
     Vector<4, T> result;
 
     result.x = op(u.x, v.x);
-    resuly.y = op(u.y, v.y);
+    result.y = op(u.y, v.y);
     result.z = op(u.z, v.z);
     result.w = op(u.w, v.w);
 
@@ -139,7 +139,7 @@ Vector<Dims, T> operator_loop(const Vector<Dims, T>& v,
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
+    for (size_t i = 0; i < Dims; ++i) {
         result[i] = op(v[i], s);
     }
 
@@ -156,7 +156,7 @@ Vector<3, T> operator_loop(const Vector<3, T>& v,
     Vector<3, T> result;
 
     result.x = op(v.x, s);
-    resuly.y = op(v.y, s);
+    result.y = op(v.y, s);
     result.z = op(v.z, s);
 
     return result;
@@ -172,7 +172,7 @@ Vector<4, T> operator_loop(const Vector<4, T>& v,
     Vector<4, T> result;
 
     result.x = op(v.x, s);
-    resuly.y = op(v.y, s);
+    result.y = op(v.y, s);
     result.z = op(v.z, s);
     result.w = op(v.w, s);
 
@@ -195,7 +195,7 @@ Vector<Dims, T> operator_loop(const T s,
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
+    for (size_t i = 0; i < Dims; ++i) {
         result[i] = op(s, v[i]);
     }
 
@@ -212,7 +212,7 @@ Vector<3, T> operator_loop(const T s,
     Vector<3, T> result;
 
     result.x = op(s, v.x);
-    resuly.y = op(s, v.y);
+    result.y = op(s, v.y);
     result.z = op(s, v.z);
 
     return result;
@@ -228,7 +228,7 @@ Vector<4, T> operator_loop(const T s,
     Vector<4, T> result;
 
     result.x = op(s, v.x);
-    resuly.y = op(s, v.y);
+    result.y = op(s, v.y);
     result.z = op(s, v.z);
     result.w = op(s, v.w);
 
@@ -250,8 +250,8 @@ T operator_reduce(const Vector<Dims, T>& v,
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
-        result = op(result, v[i])
+    for (size_t i = 0; i < Dims; ++i) {
+        result = op(result, v[i]);
     }
 
     return result;
@@ -296,18 +296,18 @@ T operator_reduce(const Vector<4, T>& v,
 template <size_t Dims, typename T,
           typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
-Toperator_reduce(const Vector<Dims, T>& u,
-                 const Vector<Dims, T>& v,
-                 const OperatorInner& op_inner,
-                 const OperatorOuter& op_outer,
-                 const T outer_init)
+T operator_reduce(const Vector<Dims, T>& u,
+                  const Vector<Dims, T>& v,
+                  const OperatorInner& op_inner,
+                  const OperatorOuter& op_outer,
+                  const T outer_init)
 {
     T result(outer_init);
 
 #ifdef __CUDA_ARCH__
     #pragma unroll
 #endif
-    for (size_t i = 0; i < Dims, ++i) {
+    for (size_t i = 0; i < Dims; ++i) {
         result = op_outer(result, op_inner(u[i], v[i]));
     }
 
@@ -315,7 +315,7 @@ Toperator_reduce(const Vector<Dims, T>& u,
 }
 
 // Overload for Vector<3, > to avoid potentially-unsafe array-accessor.
-template <typename T, typename Operator>
+template <typename T, typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
 T operator_reduce(const Vector<3, T>& v,
                   const Vector<3, T>& u,
@@ -333,7 +333,7 @@ T operator_reduce(const Vector<3, T>& v,
 }
 
 // Overload for Vector<4, > to avoid potentially-unsafe array-accessor.
-template <typename T, typename Operator>
+template <typename T, typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
 T operator_reduce(const Vector<4, T>& v,
                   const Vector<4, T>& u,
@@ -454,7 +454,7 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator+(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std:plus<T>());
+    return detail::operator_loop(u, v, std::plus<T>());
 }
 
 template <size_t Dims, typename T>
