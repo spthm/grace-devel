@@ -225,7 +225,7 @@ Vector<3, T> cross(const Vector<3, T>& u, const Vector<3, T>& v);
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
-Vector<Dims, T> dot(const Vector<Dims, T>& u, const Vector<Dims, T>& v);
+T dot(const Vector<Dims, T>& u, const Vector<Dims, T>& v);
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE

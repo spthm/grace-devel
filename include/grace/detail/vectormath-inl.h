@@ -2,13 +2,10 @@
 
 #include "grace/vector.h"
 
-#ifdef __CUDACC__
-#include <math.h>
-#else
-#include <cmath>
-#endif
+#include "grace/generic/functional.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 
 namespace grace {
@@ -362,21 +359,21 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator-(const Vector<Dims, T>& vec)
 {
-    return detail::operator_loop(vec, std::negate<T>());
+    return detail::operator_loop(vec, negate<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 T max_element(const Vector<Dims, T>& vec)
 {
-    return operator_reduce(vec, std::max<T>(), vec[0]);
+    return detail::operator_reduce(vec, maximum<T>(), vec[0]);
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 T min_element(const Vector<Dims, T>& vec)
 {
-    return operator_reduce(vec, std::min<T>(), vec[0]);
+    return detail::operator_reduce(vec, minimum<T>(), vec[0]);
 }
 
 template <size_t Dims, typename T>
@@ -390,7 +387,7 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 T norm(const Vector<Dims, T>& vec)
 {
-#ifdef __CUDACC__
+#ifdef __CUDA_ARCH__
     return sqrt(norm2(vec));
 #else
     return std::sqrt(norm2(vec));
@@ -401,7 +398,7 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> normalize(const Vector<Dims, T>& vec)
 {
-#ifdef __CUDACC__
+#ifdef __CUDA_ARCH__
     T s = rsqrt(norm2(vec));
 #else
     T s = 1.0 / std::sqrt(norm2(vec));
@@ -431,24 +428,23 @@ Vector<3, T> cross(const Vector<3, T>& u, const Vector<3, T>& v)
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
-Vector<Dims, T> dot(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
+T dot(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_reduce(u, v, std::multiplies<T>(), std::plus<T>(),
-                                   (T)0);
+    return detail::operator_reduce(u, v, multiplies<T>(), plus<T>(), (T)0);
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> max(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::max<T>());
+    return detail::operator_loop(u, v, maximum<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> min(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::min<T>());
+    return detail::operator_loop(u, v, minimum<T>());
 }
 
 
@@ -460,28 +456,28 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator+(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::plus<T>());
+    return detail::operator_loop(u, v, plus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator-(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::minus<T>());
+    return detail::operator_loop(u, v, minus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator*(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::multiplies<T>());
+    return detail::operator_loop(u, v, multiplies<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(u, v, std::divides<T>());
+    return detail::operator_loop(u, v, divides<T>());
 }
 
 
@@ -493,28 +489,28 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator+(const Vector<Dims, T>& v, const T s)
 {
-    return detail::operator_loop(v, s, std::plus<T>());
+    return detail::operator_loop(v, s, plus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator-(const Vector<Dims, T>& v, const T s)
 {
-    return detail::operator_loop(v, s, std::minus<T>());
+    return detail::operator_loop(v, s, minus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator*(const Vector<Dims, T>& v, const T s)
 {
-    return detail::operator_loop(v, s, std::multiplies<T>());
+    return detail::operator_loop(v, s, multiplies<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const Vector<Dims, T>& v, const T s)
 {
-    return detail::operator_loop(v, s, std::divides<T>());
+    return detail::operator_loop(v, s, divides<T>());
 }
 
 
@@ -526,28 +522,28 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator+(const T s, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(s, v, std::plus<T>());
+    return detail::operator_loop(s, v, plus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator-(const T s, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(s, v, std::minus<T>());
+    return detail::operator_loop(s, v, minus<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator*(const T s, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(s, v, std::multiplies<T>());
+    return detail::operator_loop(s, v, multiplies<T>());
 }
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const T s, const Vector<Dims, T>& v)
 {
-    return detail::operator_loop(s, v, std::divides<T>());
+    return detail::operator_loop(s, v, divides<T>());
 }
 
 } // namespace grace
