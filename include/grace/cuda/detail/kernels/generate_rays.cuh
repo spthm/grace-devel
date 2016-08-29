@@ -589,7 +589,7 @@ GRACE_HOST void one_to_many_rays_endsort(
     GRACE_KERNEL_CHECK();
 
     morton_keys(d_points_ptr, N_rays, AABB_bot, AABB_top, d_keys_ptr,
-                CentroidSphere());
+                CentroidPassThrough<PointType, Real>());
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));

@@ -44,4 +44,15 @@ struct CentroidSphere : public std::unary_function<const Sphere<T>&, Vector<3, T
     }
 };
 
+// Useful for any primitive which has .x, .y and .z data members.
+// Returns a Vector<3, OutType> instance.
+template <typename InType, typename OutType>
+struct CentroidPassThrough : public std::unary_function<const InType&, Vector<3, OutType> >
+{
+    GRACE_HOST_DEVICE Vector<3, OutType> operator()(const InType& primitive) const
+    {
+        return Vector<3, OutType>(primitive.x, primitive.y, primitive.z);
+    }
+};
+
 } // namespace grace
