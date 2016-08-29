@@ -8,6 +8,7 @@
 #include "grace/types.h"
 #include "grace/vector.h"
 
+#include <algorithm>
 #include <iterator>
 
 namespace grace {
@@ -42,7 +43,7 @@ GRACE_HOST void compute_centroids(
     const CentroidFunc centroid)
 {
     const int NT = 256;
-    int blocks = min(MAX_BLOCKS, (int) ((N_primitives + NT - 1) / NT));
+    int blocks = std::min(MAX_BLOCKS, (int) ((N_primitives + NT - 1) / NT));
     compute_centroids_kernel<<<blocks, NT>>>(
         d_prims_iter,
         N_primitives,

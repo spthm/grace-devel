@@ -19,6 +19,7 @@
 // CUDA math constants.
 #include <math_constants.h>
 
+#include <algorithm>
 #include <stdexcept>
 #include <string>
 
@@ -772,8 +773,8 @@ GRACE_HOST void copy_leaf_deltas(
     DeltaIter d_all_deltas_iter,
     LeafDeltaIter d_leaf_deltas_iter)
 {
-    const int blocks = min(grace::MAX_BLOCKS,
-                           static_cast<int>((d_leaves.size() + 511) / 512 ));
+    const int blocks = std::min(grace::MAX_BLOCKS,
+                                (int)((d_leaves.size() + 511) / 512 ));
     copy_leaf_deltas_kernel<<<blocks, 512>>>(
         thrust::raw_pointer_cast(d_leaves.data()),
         d_leaves.size(),
@@ -799,9 +800,9 @@ GRACE_HOST void build_leaves(
         throw std::invalid_argument(msg);
     }
 
-    int blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
+    int blocks = std::min(grace::MAX_BLOCKS,
+                          (int)((n_leaves + grace::BUILD_THREADS_PER_BLOCK - 1)
+                                 / grace::BUILD_THREADS_PER_BLOCK));
     int smem_size = sizeof(int) * (grace::BUILD_THREADS_PER_BLOCK + max_per_leaf);
 
     build_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
@@ -812,9 +813,9 @@ GRACE_HOST void build_leaves(
         delta_comp);
     GRACE_KERNEL_CHECK();
 
-    blocks = min(grace::MAX_BLOCKS,
-                 (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
-                         / grace::BUILD_THREADS_PER_BLOCK));
+    blocks = std::min(grace::MAX_BLOCKS,
+                      (int)((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
+                             / grace::BUILD_THREADS_PER_BLOCK));
 
     write_leaves_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
         thrust::raw_pointer_cast(d_tmp_nodes.data()),
@@ -885,9 +886,9 @@ GRACE_HOST void build_nodes(
         // and use it as an input in the next iteration.
         thrust::fill(out_q_begin, out_q_end, -1);
 
-        int blocks = min(grace::MAX_BLOCKS,
-                         (int) ((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
-                                 / grace::BUILD_THREADS_PER_BLOCK));
+        int blocks = std::min(grace::MAX_BLOCKS,
+                              (int)((n_in + grace::BUILD_THREADS_PER_BLOCK - 1)
+                                     / grace::BUILD_THREADS_PER_BLOCK));
         // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
         // AND int2 nodes.
         int smem_size = (sizeof(int) + sizeof(int2))
@@ -910,9 +911,9 @@ GRACE_HOST void build_nodes(
             AABB);
         GRACE_KERNEL_CHECK();
 
-        blocks = min(grace::MAX_BLOCKS,
-                     (int) ((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
-                             / grace::BUILD_THREADS_PER_BLOCK));
+        blocks = std::min(grace::MAX_BLOCKS,
+                          (int)((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
+                                 / grace::BUILD_THREADS_PER_BLOCK));
         fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(d_tree.nodes.data()),
             n_nodes,
@@ -955,7 +956,7 @@ GRACE_HOST void compute_deltas(
     const DeltaFunc delta_func)
 {
     const size_t N_deltas = N_keys + 1;
-    int blocks = min(grace::MAX_BLOCKS, (int)((N_deltas + 512 - 1) / 512));
+    int blocks = std::min(grace::MAX_BLOCKS, (int)((N_deltas + 512 - 1) / 512));
     ALBVH::compute_deltas_kernel<<<blocks, 512>>>(
         d_keys_iter,
         N_keys,

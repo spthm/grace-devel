@@ -21,6 +21,7 @@
 #include <thrust/sort.h>
 
 #include <cmath>
+#include <algorithm>
 
 namespace grace {
 
@@ -519,9 +520,9 @@ GRACE_HOST void one_to_many_rays_nosort(
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr)
 {
-    const int num_blocks = min(grace::MAX_BLOCKS,
-                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
-                                       / RAYS_THREADS_PER_BLOCK));
+    const int num_blocks = std::min(grace::MAX_BLOCKS,
+                                    (int)((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                           / RAYS_THREADS_PER_BLOCK));
 
     one_to_many_rays_kernel<NoSort><<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         origin,
@@ -541,9 +542,9 @@ GRACE_HOST void one_to_many_rays_dirsort(
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr)
 {
-    const int num_blocks = min(grace::MAX_BLOCKS,
-                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
-                                       / RAYS_THREADS_PER_BLOCK));
+    const int num_blocks = std::min(grace::MAX_BLOCKS,
+                                    (int)((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                           / RAYS_THREADS_PER_BLOCK));
 
     thrust::device_vector<uinteger32> d_keys(N_rays);
 
@@ -574,9 +575,9 @@ GRACE_HOST void one_to_many_rays_endsort(
     thrust::device_vector<uinteger32> d_keys(N_rays);
     uinteger32* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    const int num_blocks = min(grace::MAX_BLOCKS,
-                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
-                                       / RAYS_THREADS_PER_BLOCK));
+    const int num_blocks = std::min(grace::MAX_BLOCKS,
+                                    (int)((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                           / RAYS_THREADS_PER_BLOCK));
 
     one_to_many_rays_kernel<EndPointSort>
         <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
@@ -673,7 +674,7 @@ GRACE_HOST void orthographic_projection_rays(
     v *= horizontal_extent / 2.;
     u *= vertical_extent / 2.;
 
-    const int num_blocks = min(grace::MAX_BLOCKS,
+    const int num_blocks = std::min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                        / RAYS_THREADS_PER_BLOCK));
     orthographic_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
@@ -729,9 +730,6 @@ GRACE_HOST void pinhole_camera_rays(
     Real n_prefactor = 1. / std::tan(FOVy / 2.);
     n *= n_prefactor;
 
-    const int num_blocks = min(grace::MAX_BLOCKS,
-                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
-                                       / RAYS_THREADS_PER_BLOCK));
     perspective_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         resolution_x,
         resolution_y,

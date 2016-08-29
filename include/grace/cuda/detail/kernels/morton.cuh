@@ -16,6 +16,7 @@
 
 #include <thrust/device_vector.h>
 
+#include <algorithm>
 #include <iterator>
 
 namespace grace {
@@ -70,8 +71,9 @@ GRACE_HOST void morton_keys(
     KeyIter d_keys_iter,
     const CentroidFunc& centroid)
 {
-    int blocks = min(MAX_BLOCKS, (int) ((N_primitives + MORTON_THREADS_PER_BLOCK-1)
-                                        / MORTON_THREADS_PER_BLOCK));
+    int blocks = std::min(MAX_BLOCKS,
+                          (int)((N_primitives + MORTON_THREADS_PER_BLOCK-1)
+                                 / MORTON_THREADS_PER_BLOCK));
 
     morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
         d_prims_iter,

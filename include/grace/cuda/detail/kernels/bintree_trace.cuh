@@ -16,6 +16,7 @@
 
 #include <thrust/device_vector.h>
 
+#include <algorithm>
 #include <iterator>
 #include <sstream>
 #include <stdexcept>
@@ -252,8 +253,8 @@ GRACE_HOST void trace(
     GRACE_CUDA_CHECK(cuerr);
 
     const int NT = grace::TRACE_THREADS_PER_BLOCK;
-    const int blocks = min(static_cast<int>((N_rays + NT - 1) / NT),
-                           grace::MAX_BLOCKS);
+    const int blocks = std::min((int)((N_rays + NT - 1) / NT),
+                                grace::MAX_BLOCKS);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
     const size_t sm_size = sizeof(TPrimitive) * d_tree.max_per_leaf * N_warps
                            + sizeof(TPrimitive) - 1 // For alignment correction.
