@@ -9,6 +9,7 @@
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
@@ -56,11 +57,11 @@ int main(int argc, char* argv[])
     SphereType high = SphereType(1.f, 1.f, 1.f, 0.1f);
     SphereType low = SphereType(0.f, 0.f, 0.f, 0.f);
     // Rays emitted from box centre and of sufficient length to exit the box.
-    float3 origin = make_float3(.5f, .5f, .5f);
+    grace::Vector<3, float> origin = grace::Vector<3, float>(.5f, .5f, .5f);
     float length = 2.f;
 
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, origin.x, origin.y, origin.z, length);
+    grace::uniform_random_rays(d_rays, origin, length);
     grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
 
     int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,

@@ -8,6 +8,7 @@
 
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/ray.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -43,9 +44,9 @@ int main(int argc, char* argv[])
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<grace::Ray> h_rays(N_rays);
 
-    float3 O = make_float3(0.f, 0.f, 0.f);
+    grace::Vector<3, float> origin = grace::Vector<3, float>(0.f, 0.f, 0.f);
     float length = 1;
-    grace::uniform_random_rays(d_rays, O.x, O.y, O.z, length);
+    grace::uniform_random_rays(d_rays, origin, length);
 
     h_rays = d_rays;
 
@@ -68,7 +69,7 @@ int main(int argc, char* argv[])
 
         for (int i = 0; i < N_rays; ++i)
         {
-            float3 p;
+            grace::Vector<3, double> p; // double type for precision
             p.x = h_rays[i].dx;
             p.y = h_rays[i].dy;
             p.z = h_rays[i].dz;
@@ -79,12 +80,12 @@ int main(int argc, char* argv[])
                 if (i == j)
                     continue;
 
-                float3 q;
+                grace::Vector<3, double> q; // double type for precision
                 q.x = h_rays[j].dx;
                 q.y = h_rays[j].dy;
                 q.z = h_rays[j].dz;
 
-                if (great_circle_distance(p, q) < r) {
+                if (great_circle_distance(p, q, 1.0) < r) {
                     ++N_within;
                 }
             }

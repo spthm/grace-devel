@@ -1,5 +1,7 @@
 #pragma once
 
+#include "grace/vector.h"
+
 #include <thrust/host_vector.h>
 
 struct Ray
@@ -27,5 +29,5 @@ __host__ __device__ Ray compute_ray_invd(const Ray&);
 __host__ __device__ Ray compute_ray_class(const Ray&);
 __host__ __device__ Ray compute_ray_slope(const Ray&);
 
-void isotropic_rays(thrust::host_vector<Ray>&, float ox, float oy, float oz,
+void isotropic_rays(thrust::host_vector<Ray>&, grace::Vector<3, float>,
                     float length);

@@ -5,6 +5,7 @@
 
 #include "grace/error.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -74,12 +75,12 @@ __global__ void compute_ij_pairs(const grace::Ray* rays,
 
     if (tid < N) {
         // Rays always contain single-precision variables.
-        float3 pi;
+        grace::Vector<3, float> pi;
         pi.x = rays[i].dx;
         pi.y = rays[i].dy;
         pi.z = rays[i].dz;
 
-        float3 pj;
+        grace::Vector<3, float> pj;
         pj.x = rays[j_start + tid].dx;
         pj.y = rays[j_start + tid].dy;
         pj.z = rays[j_start + tid].dz;

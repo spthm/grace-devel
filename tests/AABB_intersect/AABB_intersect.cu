@@ -33,7 +33,7 @@ int main(int argc, char* argv[])
     thrust::host_vector<AABB> h_AABBs(N_AABBs);
 
     // Generate isotropic rays from the origin, and of length 2.
-    isotropic_rays(h_rays, 0.f, 0.f, 0.f, 2.f);
+    isotropic_rays(h_rays, grace::Vector<3, float>(), 2.f);
 
     // Generate the AABBs, with all points uniformly random in [-1, 1).
     random_aabbs(h_AABBs, -1.f, 1.f);

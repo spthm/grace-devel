@@ -11,6 +11,7 @@
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/random.cuh"
 
 #include <thrust/iterator/counting_iterator.h>
@@ -87,7 +88,7 @@ int main(int argc, char* argv[])
                       expand_functor(high.r));
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 2E4f);
+    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 2E4f);
     thrust::host_vector<grace::Ray> h_rays = d_rays;
     d_rays.clear(); d_rays.shrink_to_fit();
 

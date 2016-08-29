@@ -9,6 +9,7 @@
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/rays.cuh"
 #include "helper/read_gadget.cuh"
@@ -91,7 +92,9 @@ int main(int argc, char* argv[])
     grace::min_vec4(d_spheres, &mins);
     grace::max_vec4(d_spheres, &maxs);
 
-    build_tree(d_spheres, mins, maxs, d_tree);
+    build_tree(d_spheres,
+               grace::Vector<3, float>(mins), grace::Vector<3, float>(maxs),
+               d_tree);
     orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 
 

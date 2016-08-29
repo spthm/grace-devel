@@ -9,6 +9,7 @@
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/random.cuh"
 
@@ -103,7 +104,10 @@ int main(int argc, char* argv[])
             // Don't include above memory allocations in t_morton.
             timer.split();
 
-            grace::morton_keys_sph(d_spheres, low, high, d_keys);
+            grace::morton_keys_sph(d_spheres,
+                                   grace::Vector<3, float>(low),
+                                   grace::Vector<3, float>(high),
+                                   d_keys);
             if (i >= 0) t_morton += timer.split();
 
             thrust::sort_by_key(d_keys.begin(), d_keys.end(),

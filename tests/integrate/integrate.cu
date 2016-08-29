@@ -8,6 +8,7 @@
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"
 
@@ -27,7 +28,7 @@ void two_spheres(const SphereType mins, const SphereType maxs,
     thrust::host_vector<SphereType> h_spheres(2);
 
     float radius = (mins.r + maxs.r) / 2.0;
-    float3 mid;
+    grace::Vector<3, float> mid;
     mid.x = (mins.x + maxs.x) / 2.0;
     mid.y = (mins.y + maxs.y) / 2.0;
     mid.z = (mins.z + maxs.z) / 2.0;
@@ -85,7 +86,9 @@ int main(int argc, char* argv[])
     maxs.r = mins.r = 0.2f;
 
     two_spheres(mins, maxs, d_spheres);
-    build_tree(d_spheres, mins, maxs, d_tree);
+    build_tree(d_spheres,
+               grace::Vector<3, float>(mins), grace::Vector<3, float>(maxs),
+               d_tree);
     plane_parallel_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
     grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
 

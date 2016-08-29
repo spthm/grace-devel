@@ -10,6 +10,7 @@
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 #include "helper/tree.cuh"
@@ -75,7 +76,7 @@ int main(int argc, char* argv[])
     build_tree(d_spheres, d_tree);
 
     // Ray origin is the box centre.
-    float3 origin, AABB_bot, AABB_top;
+    grace::Vector<3, float> origin, AABB_bot, AABB_top;
     grace::min_vec3(d_spheres, &AABB_bot);
     grace::max_vec3(d_spheres, &AABB_top);
     origin.x = (AABB_bot.x + AABB_top.x) / 2.;
@@ -106,8 +107,7 @@ int main(int argc, char* argv[])
         // already sorted by their Hilbert keys, which is a better spatial
         // locality sort than is typically achieved with Morton keys, as is
         // done by grace.
-        grace::one_to_many_rays(d_rays, origin.x, origin.y, origin.z,
-                                d_spheres, grace::NoSort);
+        grace::one_to_many_rays(d_rays, origin, d_spheres, grace::NoSort);
         if (i >= 0) t_genray_nosort += timer.split();
 
         grace::trace_cumulative_sph(d_rays,

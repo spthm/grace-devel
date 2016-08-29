@@ -1,6 +1,7 @@
 #include "grace/cuda/detail/kernels/morton.cuh"
 #include "grace/generic/morton.h"
 #include "grace/generic/functors/centroid.h"
+#include "grace/vector.h"
 
 #include "helper/random.cuh"
 
@@ -37,32 +38,31 @@ int main(int argc, char* argv[])
     // Generate N random points with double precision co-ordinates in [-1, 1).
     // Note that, internally, GRACE will use single-precision values for the
     // centroids of the particles.
-    float3 top = make_float3(1., 1., 1.);
-    float3 bot = make_float3(-1., -1., -1.);
+    Vector<3, double> top(1., 1., 1.);
+    Vector<3, double> bot(-1., -1., -1.);
     thrust::host_vector<double3> h_points(N);
+    thrust::host_vector<grace::Vector<3, double> > h_points(N);
     thrust::transform(thrust::counting_iterator<size_t>(0),
                       thrust::counting_iterator<size_t>(N),
                       h_points.begin(),
-                      random_real3_functor<double3>());
-    thrust::device_vector<double3> d_points = h_points;
+                      random_vector3_functor<double>(bot, top));
+    thrust::device_vector<grace::Vector<3, double> > d_points = h_points;
 
     // Compute keys on host.
     thrust::host_vector<KeyT> h_keys(N);
     const KeyT MAX_KEY = (1u << 21) - 1;
     for (size_t i = 0; i < N; ++i) {
-        // We must cast to float here, as internally, GRACE only deals with
-        // float3 centroids. Not adding the cast here will lead to ~10% of keys
-        // mismatching.
-        KeyT ux = static_cast<KeyT>((float)(h_points[i].x - bot.x) * MAX_KEY);
-        KeyT uy = static_cast<KeyT>((float)(h_points[i].y - bot.y) * MAX_KEY);
-        KeyT uz = static_cast<KeyT>((float)(h_points[i].z - bot.z) * MAX_KEY);
+        KeyT ux = static_cast<KeyT>((h_points[i].x - bot.x) * MAX_KEY);
+        KeyT uy = static_cast<KeyT>((h_points[i].y - bot.y) * MAX_KEY);
+        KeyT uz = static_cast<KeyT>((h_points[i].z - bot.z) * MAX_KEY);
 
         h_keys[i] = grace::morton_key(ux, uy, uz);
     }
 
     // Compute keys on device.
     thrust::device_vector<KeyT> d_keys(N);
-    grace::morton_keys(d_points, bot, top, d_keys, grace::CentroidSphere());
+    grace::morton_keys(d_points, bot, top, d_keys,
+                       grace::CentroidSphere<double>());
 
     // Check device keys against host keys.
     int errors = 0;

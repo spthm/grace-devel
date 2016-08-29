@@ -1,7 +1,7 @@
 include ../Makefile.common
 
-OBJS = statistics.o ../helper/vector_math.o
-NVCCDEPS += stats_math.cuh statistics.cuh ../helper/vector_math.cuh
+OBJS = statistics.o
+NVCCDEPS += stats_math.cuh statistics.cuh
 
 all: ripleyk_stats uniformity_stats
 
@@ -11,9 +11,8 @@ ripleyk_stats: ripleyk_stats.cu $(NVCCDEPS) $(OBJS)
 uniformity_stats: uniformity_stats.cu $(NVCCDEPS) $(OBJS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
 
-# Note we need -dc in order to link device code from multiple .cu files.
 %.o: %.cu $(NVCCDEPS)
-	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -dc $< -o $@
+	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -c $< -o $@
 
 clean:
 	@-rm -f *.o

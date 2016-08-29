@@ -52,9 +52,7 @@ __host__ __device__ Ray compute_ray_slope(const Ray& in_ray)
 
 void isotropic_rays(
     thrust::host_vector<Ray>& h_rays,
-    float ox,
-    float oy,
-    float oz,
+    grace::Vector<3, float> origin,
     float length)
 {
     const size_t N_rays = h_rays.size();
@@ -63,7 +61,7 @@ void isotropic_rays(
     grace::uniform_random_rays(
         thrust::raw_pointer_cast(d_grace_rays.data()),
         N_rays,
-        ox, oy, ox, length);
+        origin, length);
 
     // Copy GRACE-type rays to the required ray type.
     thrust::host_vector<grace::Ray> h_grace_rays = d_grace_rays;

@@ -10,6 +10,7 @@
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 #include "helper/tree.cuh"
@@ -81,7 +82,7 @@ int main(int argc, char* argv[])
     // Ray origin is the box centre; all rays will exit the box.
     // Assume x, y and z spatial extents are similar.
     float min, max, length;
-    float3 origin;
+    grace::Vector<3, float> origin;
     grace::min_max_x(d_spheres, &min, &max);
     origin.x = origin.y = origin.z = (max + min) / 2.;
     length = 2 * (max - min);
@@ -102,8 +103,7 @@ int main(int argc, char* argv[])
         // Don't include above memory allocations in t_genray.
         timer.split();
 
-        grace::uniform_random_rays(d_rays, origin.x, origin.y, origin.z,
-                                   length);
+        grace::uniform_random_rays(d_rays, origin, length);
         if (i >= 0) t_genray += timer.split();
 
         grace::trace_cumulative_sph(d_rays,

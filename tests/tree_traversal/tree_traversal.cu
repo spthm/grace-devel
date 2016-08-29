@@ -10,6 +10,7 @@
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 #include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
@@ -54,7 +55,7 @@ int main(int argc, char* argv[])
     SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
     SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 2E4f);
+    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 2E4f);
 
     grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
     double total = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end());

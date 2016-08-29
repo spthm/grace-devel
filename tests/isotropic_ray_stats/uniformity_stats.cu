@@ -8,6 +8,7 @@
 
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/ray.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -35,7 +36,7 @@ int main(int argc, char* argv[]) {
               << std::endl;
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, 0.f, 0.f, 0.f, 1.f);
+    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 1.f);
 
     // Ray directions are always floats.
     float R2 = resultant_length_squared(d_rays);
