@@ -426,6 +426,25 @@ Vector<3, T> cross(const Vector<3, T>& u, const Vector<3, T>& v)
     return result;
 }
 
+// Angular separation only defined for length-three (and not defined length-two)
+// vectors
+template <typename T>
+GRACE_HOST_DEVICE
+T angular_separation(const Vector<3, T>& u, const Vector<3, T>& v)
+{
+    // This form is well conditioned when the angle is 0 or pi; acos is not.
+    return atan2( norm(cross(u, v)), dot(u, v) );
+}
+
+// Great circle distance only defined for length-three vectors.
+template <typename T>
+GRACE_HOST_DEVICE
+T great_circle_distance(const Vector<3, T>& u, const Vector<3, T>& v,
+                        const T radius)
+{
+    return radius * angular_separation(u, v);
+}
+
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 T dot(const Vector<Dims, T>& u, const Vector<Dims, T>& v)

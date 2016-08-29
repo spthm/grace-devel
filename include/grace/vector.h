@@ -218,10 +218,21 @@ Vector<Dims, T> normalize(const Vector<Dims, T>& vec);
 // Vector-vector operations
 //
 
-// Cross-product only definied for length-three vectors.
+// Cross-product, angular and great-circle operators only definied for
+// length-three vectors.
 template <typename T>
 GRACE_HOST_DEVICE
 Vector<3, T> cross(const Vector<3, T>& u, const Vector<3, T>& v);
+
+// In radians.
+template <typename T>
+GRACE_HOST_DEVICE
+T angular_separation(const Vector<3, T>& u, const Vector<3, T>& v);
+
+template <typename T>
+GRACE_HOST_DEVICE
+T great_circle_distance(const Vector<3, T>& u, const Vector<3, T>& v,
+                        const T radius);
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
