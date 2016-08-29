@@ -35,9 +35,9 @@ namespace detail {
 // direction vector set.
 GRACE_HOST_DEVICE uinteger32 ray_dir_morton_key(const Ray ray)
 {
-    return morton_key((ray.dx + 1) / 2.f,
-                      (ray.dy + 1) / 2.f,
-                      (ray.dz + 1) / 2.f);
+    return morton_key<uinteger32, float>((ray.dx + 1) / 2.f,
+                                         (ray.dy + 1) / 2.f,
+                                         (ray.dz + 1) / 2.f);
 }
 
 // Normalizes the provided (dx, dy, dz) direction vector and ets ray.dx/dy/dz.
