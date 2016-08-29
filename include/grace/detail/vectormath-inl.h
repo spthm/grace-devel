@@ -354,7 +354,9 @@ T operator_reduce(const Vector<4, T>& v,
 } // namespace detail
 
 
-/* Vector opeartions */
+//
+// Vector operations
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -409,7 +411,9 @@ Vector<Dims, T> normalize(const Vector<Dims, T>& vec)
 }
 
 
-/* Vector-vector operations */
+//
+// Vector-vector operations
+//
 
 // Cross-product only definied for length-three vectors.
 template <typename T>
@@ -448,7 +452,9 @@ Vector<Dims, T> min(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 }
 
 
-/* Vector-vector arithmetic */
+//
+// Vector-vector arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -479,7 +485,9 @@ Vector<Dims, T> operator/(const Vector<Dims, T>& u, const Vector<Dims, T>& v)
 }
 
 
-/* Vector-scalar aarithmetic */
+///
+// Vector-scalar arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -510,7 +518,9 @@ Vector<Dims, T> operator/(const Vector<Dims, T>& v, const T s)
 }
 
 
-/* Scalar-vector arithmetic */
+//
+// Scalar-vector arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE

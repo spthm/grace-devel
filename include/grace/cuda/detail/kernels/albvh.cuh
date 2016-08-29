@@ -7,6 +7,7 @@
 
 #include "grace/error.h"
 #include "grace/types.h"
+#include "grace/vector.h"
 
 #include <thrust/fill.h>
 #include <thrust/functional.h>
@@ -409,7 +410,7 @@ __global__ void build_nodes_slice_kernel(
                 for (int i = 0; i < node.y; i++) {
                     TPrimitive prim = primitives[node.x + i];
 
-                    float3 bot, top;
+                    Vector<3, float> bot, top;
                     AABB(prim, &bot, &top);
 
                     x_min = min(x_min, bot.x);

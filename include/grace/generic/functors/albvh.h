@@ -1,6 +1,7 @@
 #pragma once
 
 #include "grace/types.h"
+#include "grace/vector.h"
 
 // CUDA math constants.
 #include <math_constants.h>
@@ -108,7 +109,7 @@ struct DeltaSurfaceArea
         TPrimitive pi = primitives[i];
         TPrimitive pj = primitives[i+1];
 
-        float3 boti, topi, botj, topj;
+        Vector<3, float> boti, topi, botj, topj;
         AABB(pi, &boti, &topi);
         AABB(pj, &botj, &topj);
 

@@ -185,7 +185,9 @@ private:
 };
 
 
-/* Vector operations */
+//
+// Vector operations
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -212,7 +214,9 @@ GRACE_HOST_DEVICE
 Vector<Dims, T> normalize(const Vector<Dims, T>& vec);
 
 
-/* Vector-vector operations */
+//
+// Vector-vector operations
+//
 
 // Cross-product only definied for length-three vectors.
 template <typename T>
@@ -232,7 +236,9 @@ GRACE_HOST_DEVICE
 Vector<Dims, T> min(const Vector<Dims, T>& u, const Vector<Dims, T>& v);
 
 
-/* Vector-vector arithmetic */
+//
+// Vector-vector arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -251,7 +257,9 @@ GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const Vector<Dims, T>& u, const Vector<Dims, T>& v);
 
 
-/* Vector-scalar arithmetic */
+//
+// Vector-scalar arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -270,7 +278,9 @@ GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const Vector<Dims, T>& v, const T s);
 
 
-/* Scalar-Vector arithmetic */
+//
+// Scalar-vector arithmetic
+//
 
 template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
@@ -288,7 +298,7 @@ template <size_t Dims, typename T>
 GRACE_HOST_DEVICE
 Vector<Dims, T> operator/(const T s, const Vector<Dims, T>& v);
 
-} //namespace grace
+} // namespace grace
 
 #include "grace/detail/vectormath-inl.h"
 #include "grace/detail/vector3-inl.h"

@@ -2,6 +2,7 @@
 
 #include "grace/sphere.h"
 #include "grace/types.h"
+#include "grace/vector.h"
 
 #include <iterator>
 
@@ -12,8 +13,8 @@ struct AABBSphere
     template <typename T>
     GRACE_HOST_DEVICE void operator()(
         Sphere<T> sphere,
-        float3* bot,
-        float3* top) const
+        Vector<3, T>* bot,
+        Vector<3, T>* top) const
     {
         bot->x = sphere.x - sphere.r;
         top->x = sphere.x + sphere.r;
@@ -29,13 +30,24 @@ struct AABBSphere
 namespace detail {
 
 // Finds the centroid of an AABB.
-// The performance hit of using doubles here is not particularly high.
-GRACE_HOST_DEVICE float3 AABB_centroid(const float3 bot, const float3 top)
+GRACE_HOST_DEVICE Vector<3, float> AABB_centroid(const Vector<3, float> bot,
+                                                 const Vector<3, float> top)
 {
-    float3 centre;
-    centre.x = (static_cast<double>(bot.x) + top.x) / 2.;
-    centre.y = (static_cast<double>(bot.y) + top.y) / 2.;
-    centre.z = (static_cast<double>(bot.z) + top.z) / 2.;
+    Vector<3, float> centre;
+    centre.x = (bot.x + top.x) / 2.f;
+    centre.y = (bot.y + top.y) / 2.f;
+    centre.z = (bot.z + top.z) / 2.f;
+
+    return centre;
+}
+
+GRACE_HOST_DEVICE Vector<3, double> AABB_centroid(const Vector<3, double> bot,
+                                                  const Vector<3, double> top)
+{
+    Vector<3, double> centre;
+    centre.x = (bot.x + top.x) / 2.;
+    centre.y = (bot.y + top.y) / 2.;
+    centre.z = (bot.z + top.z) / 2.;
 
     return centre;
 }

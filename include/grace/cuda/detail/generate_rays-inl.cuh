@@ -6,6 +6,7 @@
 
 #include "grace/types.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 
@@ -26,28 +27,25 @@ template <typename Real>
 GRACE_HOST void uniform_random_rays(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const unsigned long long seed)
 {
-    detail::uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
+    detail::uniform_random_rays(d_rays_ptr, N_rays, origin, length, seed);
 }
 
 template <typename Real>
 GRACE_HOST void uniform_random_rays(
     thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const unsigned long long seed)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const size_t N_rays = d_rays.size();
 
-    uniform_random_rays(d_rays_ptr, N_rays, ox, oy, oz, length, seed);
+    // unclear why grace:: is required here to disambiguate from grace::detail::
+    grace::uniform_random_rays(d_rays_ptr, N_rays, origin, length, seed);
 }
 
 // Similar to uniform_random_rays, except rays are confined to a single octant.
@@ -63,23 +61,19 @@ template <typename Real>
 GRACE_HOST void uniform_random_rays_single_octant(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const enum Octants octant,
     const unsigned long long seed)
 {
-    detail::uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz,
+    detail::uniform_random_rays_single_octant(d_rays_ptr, N_rays, origin,
                                               length, octant, seed);
 }
 
 template <typename Real>
 GRACE_HOST void uniform_random_rays_single_octant(
     thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const Real length,
     const enum Octants octant,
     const unsigned long long seed)
@@ -87,7 +81,8 @@ GRACE_HOST void uniform_random_rays_single_octant(
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const size_t N_rays = d_rays.size();
 
-    uniform_random_rays_single_octant(d_rays_ptr, N_rays, ox, oy, oz, length,
+    // unclear why grace:: is required here to disambiguate from grace::detail::
+    grace::uniform_random_rays_single_octant(d_rays_ptr, N_rays, origin, length,
                                       octant, seed);
 
 }
@@ -100,25 +95,23 @@ template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
     const enum RaySortType sort_type)
 {
     if (sort_type == NoSort) {
-        detail::one_to_many_rays_nosort(d_rays_ptr, N_rays, ox, oy, oz,
+        detail::one_to_many_rays_nosort(d_rays_ptr, N_rays, origin,
                                         d_points_ptr);
     }
     else if (sort_type == DirectionSort) {
-        detail::one_to_many_rays_dirsort(d_rays_ptr, N_rays, ox, oy, oz,
+        detail::one_to_many_rays_dirsort(d_rays_ptr, N_rays, origin,
                                          d_points_ptr);
     }
     else if (sort_type == EndPointSort) {
-        float3 AABB_bot, AABB_top;
+        Vector<3, float> AABB_bot, AABB_top;
         min_vec3(d_points_ptr, N_rays, &AABB_bot);
         max_vec3(d_points_ptr, N_rays, &AABB_top);
-        detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, ox, oy, oz,
+        detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, origin,
                                          d_points_ptr, AABB_bot, AABB_bot);
     }
     else {
@@ -134,9 +127,7 @@ GRACE_HOST void one_to_many_rays(
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
     thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
     const enum RaySortType sort_type)
 {
@@ -148,7 +139,7 @@ GRACE_HOST void one_to_many_rays(
         d_rays.resize(N_rays);
     }
 
-    one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr, sort_type);
+    one_to_many_rays(d_rays_ptr, N_rays, origin, d_points_ptr, sort_type);
 }
 
 // Generates rays emanating from a single point to N other points.
@@ -158,31 +149,27 @@ GRACE_HOST void one_to_many_rays(
 // When an endpoint sort is desired, and AABBs for the input points are already
 // known, this saves re-computing them, which would occur if calling
 // one_to_many_rays without providing AABBs.
-template <typename Real, typename Real3, typename PointType>
+template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
     Ray* const d_rays_ptr,
     const size_t N_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const Real3 AABB_bot,
-    const Real3 AABB_top)
+    const Vector<3, Real>& AABB_bot,
+    const Vector<3, Real>& AABB_top)
 {
-    detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, ox, oy, oz,
-                                     d_points_ptr, AABB_bot, AABB_top);
+    detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, origin, d_points_ptr,
+                                     AABB_bot, AABB_top);
 }
 
 // If d_rays.size() < d_points.size(), d_rays will be resized.
-template <typename Real, typename Real3, typename PointType>
+template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
     thrust::device_vector<Ray>& d_rays,
-    const Real ox,
-    const Real oy,
-    const Real oz,
+    const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
-    const Real3 AABB_bot,
-    const Real3 AABB_top)
+    const Vector<3, Real>& AABB_bot,
+    const Vector<3, Real>& AABB_top)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const PointType* const d_points_ptr
@@ -192,7 +179,7 @@ GRACE_HOST void one_to_many_rays(
         d_rays.resize(N_rays);
     }
 
-    one_to_many_rays(d_rays_ptr, N_rays, ox, oy, oz, d_points_ptr, AABB_bot,
+    one_to_many_rays(d_rays_ptr, N_rays, origin, d_points_ptr, AABB_bot,
                      AABB_top);
 }
 
@@ -228,14 +215,14 @@ GRACE_HOST void one_to_many_rays(
 // w = (-5, 0, 0)
 // h = (0, 6, 0)
 // direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void plane_parallel_random_rays(
     Ray* const d_rays_ptr,
     const int width,
     const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
+    const Vector<3, Real>& base,
+    const Vector<3, Real>& w,
+    const Vector<3, Real>& h,
     const Real length,
     const unsigned long long seed)
 {
@@ -243,14 +230,14 @@ GRACE_HOST void plane_parallel_random_rays(
                                        length, seed);
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void plane_parallel_random_rays(
     thrust::device_vector<Ray>& d_rays,
     const int width,
     const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
+    const Vector<3, Real>& base,
+    const Vector<3, Real>& w,
+    const Vector<3, Real>& h,
     const Real length,
     const unsigned long long seed)
 {
@@ -260,8 +247,9 @@ GRACE_HOST void plane_parallel_random_rays(
     }
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
 
-    plane_parallel_random_rays(d_rays_ptr, width, height, base, w, h, length,
-                               seed);
+    // unclear why grace:: is required here to disambiguate from grace::detail::
+    grace::plane_parallel_random_rays(d_rays_ptr, width, height, base, w, h,
+                                      length, seed);
 }
 
 // Generates rays for an orthographic projection; this is the projection
@@ -294,14 +282,14 @@ GRACE_HOST void plane_parallel_random_rays(
 // where view_direction is parallel to the vector (look_at - camera_position).
 // That is to say, the vertical in the image plane is the direction view_up
 // with all components in the direction of view_direction removed.
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void orthographic_projection_rays(
     Ray* const d_rays_ptr,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real vertical_extent,
     const Real length)
 {
@@ -310,14 +298,14 @@ GRACE_HOST void orthographic_projection_rays(
                                          vertical_extent, length);
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void orthographic_projection_rays(
     thrust::device_vector<Ray>& d_rays,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real vertical_extent,
     const Real length)
 {
@@ -361,14 +349,14 @@ GRACE_HOST void orthographic_projection_rays(
 // where view_direction is parallel to the vector (look_at - camera_position).
 // That is to say, the vertical in the image plane is the direction view_up
 // with all components in the direction of view_direction removed.
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void pinhole_camera_rays(
     Ray* const d_rays_ptr,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real FOVy,
     const Real length)
 {
@@ -377,14 +365,14 @@ GRACE_HOST void pinhole_camera_rays(
                                 length);
 }
 
-template <typename Real, typename Real3>
+template <typename Real>
 GRACE_HOST void pinhole_camera_rays(
     thrust::device_vector<Ray>& d_rays,
     const int resolution_x,
     const int resolution_y,
-    const Real3 camera_position,
-    const Real3 look_at,
-    const Real3 view_up,
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
     const Real FOVy,
     const Real length)
 {

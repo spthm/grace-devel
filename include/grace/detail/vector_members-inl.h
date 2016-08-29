@@ -915,4 +915,4 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<4, 1, T>
 
 } // namespace detail
 
-} //namespace grace
+} // namespace grace

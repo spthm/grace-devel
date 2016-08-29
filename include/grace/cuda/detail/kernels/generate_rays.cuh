@@ -10,7 +10,6 @@
 #include "grace/cuda/sort.cuh"
 
 #include "grace/generic/morton.h"
-#include "grace/generic/vecmath.h"
 #include "grace/generic/functors/centroid.h"
 
 #include "grace/error.h"
@@ -202,10 +201,10 @@ __global__ void gen_uniform_rays_single_octant_kernel(
     }
 }
 
-template <RaySortType SortType, typename T, typename KeyType>
+template <RaySortType SortType, typename T, typename PointType, typename KeyType>
 __global__ void one_to_many_rays_kernel(
     const Vector<3, T> origin,
-    const Vector<3, T>* const points,
+    const PointType* const points,
     Ray* const rays,
     KeyType* const keys,
     const size_t N_rays)
@@ -487,8 +486,6 @@ GRACE_HOST void uniform_random_rays_single_octant(
     const enum Octants octant,
     const unsigned long long seed)
 {
-    const float4 origin = make_float4(ox, oy, oz, length);
-
     curandState* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
@@ -515,12 +512,12 @@ GRACE_HOST void uniform_random_rays_single_octant(
 }
 
 // No sorting of rays (useful when particles are already spatially sorted).
-template <typename Reale>
+template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_nosort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
     const Vector<3, Real> origin,
-    const Vector<3, Real>* const d_points_ptr)
+    const PointType* const d_points_ptr)
 {
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -537,12 +534,12 @@ GRACE_HOST void one_to_many_rays_nosort(
 
 // No bounding box information for points; just sort rays based on their
 // direction vectors.
-template <typename Real>
+template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_dirsort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
     const Vector<3, Real> origin,
-    const Vector<3, Real>* const d_points_ptr)
+    const PointType* const d_points_ptr)
 {
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -565,14 +562,14 @@ GRACE_HOST void one_to_many_rays_dirsort(
 
 // Have bounding box information for points; sort rays based on their end
 // points.
-template <typename Real, typename Real3>
+template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_endsort(
     Ray* const d_rays_ptr,
     const size_t N_rays,
     const Vector<3, Real> origin,
-    const Vector<3, Real>* const d_points_ptr,
-    const Real3 AABB_bot,
-    const Real3 AABB_top)
+    const PointType* const d_points_ptr,
+    const Vector<3, Real>* AABB_bot,
+    const Vector<3, Real>* AABB_top)
 {
     thrust::device_vector<uinteger32> d_keys(N_rays);
     uinteger32* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());

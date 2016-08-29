@@ -4,6 +4,7 @@
 
 #include "grace/sphere.h"
 #include "grace/types.h"
+#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 
@@ -15,11 +16,11 @@ GRACE_HOST void morton_keys_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
     thrust::device_vector<KeyType>& d_keys);
 
-template <typename T, typename Real3, typename KeyType>
+template <typename T, typename KeyType>
 GRACE_HOST void morton_keys_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Real3 bot,
-    const Real3 top,
+    const Vector<3, T>& bot,
+    const Vector<3, T>& top,
     thrust::device_vector<KeyType>& d_keys);
 
 // Generates 30-bit Morton keys.
@@ -29,11 +30,11 @@ template <typename T>
 GRACE_HOST void morton_keys30_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres);
 
-template <typename T, typename Real3>
+template <typename T>
 GRACE_HOST void morton_keys30_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Real3 bot,
-    const Real3 top);
+    const Vector<3, T>& bot,
+    const Vector<3, T>& top);
 
 // Generates 63-bit Morton keys.
 // Sorts spheres by the Morton keys.
@@ -42,11 +43,11 @@ template <typename T>
 GRACE_HOST void morton_keys63_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres);
 
-template <typename T, typename Real3>
+template <typename T>
 GRACE_HOST void morton_keys63_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Real3 bot,
-    const Real3 top);
+    const Vector<3, T>& bot,
+    const Vector<3, T>& top);
 
 template <typename T>
 GRACE_HOST void euclidean_deltas_sph(
