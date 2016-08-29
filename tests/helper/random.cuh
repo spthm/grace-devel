@@ -2,6 +2,7 @@
 
 #include "grace/generic/meta.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 
 #include <thrust/random.h>
 
@@ -54,49 +55,47 @@ public:
     }
 };
 
-template <typename Real3>
-class random_real3_functor
+template <typename Real>
+class random_vector3_functor
 {
-    typedef typename grace::Real3ToRealMapper<Real3>::type Real;
-
     thrust::uniform_real_distribution<Real> x_uniform;
     thrust::uniform_real_distribution<Real> y_uniform;
     thrust::uniform_real_distribution<Real> z_uniform;
 
 public:
-    random_real3_functor() :
+    random_vector3_functor() :
         x_uniform(0.0, 1.0),
         y_uniform(0.0, 1.0),
         z_uniform(0.0, 1.0) {}
 
-    explicit random_real3_functor(const Real high) :
+    explicit random_vector3_functor(const Real high) :
         x_uniform(0.0, high),
         y_uniform(0.0, high),
         z_uniform(0.0, high) {}
 
-    explicit random_real3_functor(const Real low, const Real high) :
+    explicit random_vector3_functor(const Real low, const Real high) :
         x_uniform(low, high),
         y_uniform(low, high),
         z_uniform(low, high) {}
 
-    explicit random_real3_functor(const Real3 high) :
+    explicit random_vector3_functor(const grace::Vector<3, Real>& high) :
         x_uniform(0.0, high.x),
         y_uniform(0.0, high.y),
         z_uniform(0.0, high.z) {}
 
-    explicit random_real3_functor(const Real3 low,
-                                   const Real3 high) :
+    explicit random_vector3_functor(const grace::Vector<3, Real>& low,
+                                   const grace::Vector<3, Real>& high) :
         x_uniform(low.x, high.x),
         y_uniform(low.y, high.y),
         z_uniform(low.z, high.z) {}
 
-    GRACE_HOST_DEVICE Real3 operator()(unsigned int n)
+    GRACE_HOST_DEVICE grace::Vector<3, Real> operator()(unsigned int n)
     {
         unsigned int seed = hash(n);
 
         thrust::default_random_engine rng(seed);
 
-        Real3 xyz;
+        grace::Vector<3, Real> xyz;
         xyz.x = x_uniform(rng);
         xyz.y = y_uniform(rng);
         xyz.z = z_uniform(rng);

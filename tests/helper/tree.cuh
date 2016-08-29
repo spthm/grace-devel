@@ -4,6 +4,7 @@
 #include "grace/cuda/nodes.h"
 #include "grace/generic/meta.h"
 #include "grace/sphere.h"
+#include "grace/vector.h"
 
 #include "helper/random.cuh"
 
@@ -24,17 +25,15 @@ void build_tree(thrust::device_vector<grace::Sphere<T> >& spheres,
 }
 
 // Always uses 30-bit keys.
-// low and high can be any type with .x/.y/.z components.
-template <typename Real3, typename T>
+template <typename T>
 void build_tree(thrust::device_vector<grace::Sphere<T> >& spheres,
-                const Real3 low, const Real3 high,
+                const grace::Vector<3, T> bot,
+                const grace::Vector<3, T> top,
                 grace::Tree& tree)
 {
-    const float3 bottom = make_float3(low.x, low.y, low.z);
-    const float3 top = make_float3(high.x, high.y, high.z);
     thrust::device_vector<T> deltas(spheres.size() + 1);
 
-    grace::morton_keys30_sort_sph(spheres, bottom, top);
+    grace::morton_keys30_sort_sph(spheres, bot, top);
     grace::euclidean_deltas_sph(spheres, deltas);
     grace::ALBVH_sph(spheres, deltas, tree);
 }
@@ -54,5 +53,6 @@ void random_spheres_tree(const grace::Sphere<T> low,
                       spheres.begin(),
                       random_sphere_functor<grace::Sphere<T> >(low, high) );
 
-    build_tree(spheres, low, high, tree);
+    build_tree(spheres, grace::Vector<3, T>(low), grace::Vector<3, T>(high),
+               tree);
 }
