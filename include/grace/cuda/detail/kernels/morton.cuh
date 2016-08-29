@@ -161,13 +161,13 @@ GRACE_HOST void morton_keys(
     // dereference the result on the host. This will work if PrimitiveIter is
     // actually a Thrust iterator, but not otherwise!
 
-    thrust::device_vector<Vector<3, float> > d_centroids(N_primitives);
-    Vector<3, float>* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
+    thrust::device_vector<Vector<3, Real> > d_centroids(N_primitives);
+    Vector<3, Real>* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
 
     AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr,
                             centroid);
 
-    Vector<3, float> mins, maxs;
+    Vector<3, Real> mins, maxs;
     min_vec3(d_centroids_ptr, N_primitives, &mins);
     max_vec3(d_centroids_ptr, N_primitives, &maxs);
 
@@ -181,19 +181,52 @@ GRACE_HOST void morton_keys(
     }
 }
 
-template <typename TPrimitive, typename KeyType, typename CentroidFunc>
+// bots and tops may be NULL if they are not required. In that case, the first
+// template parameter should be a float or double, setting the precision of the
+// centroids-to-keys computations.
+// CentroidFunc should return a grace::Vector<3, Real>.
+template <typename Real, typename TPrimitive, typename KeyType,
+          typename CentroidFunc>
 GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
     thrust::device_vector<KeyType>& d_keys,
-    const CentroidFunc centroid,
-    float3* const bots = NULL,
-    float3* const tops = NULL)
+    const CentroidFunc& centroid,
+    Vector<3, Real>* const bots,
+    Vector<3, Real>* const tops)
 {
     const TPrimitive* d_prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     KeyType* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid, bots,
-                tops);
+    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid,
+                bots, tops);
+}
+
+// The precision of the centroids-to-keys computations is set by the value_type
+// for the Vector<3, value_type> returned by CentroidFunc.
+template <typename PrimitiveIter, typename KeyIter, typename CentroidFunc>
+GRACE_HOST void morton_keys(
+    PrimitiveIter d_prims_iter,
+    const size_t N_primitives,
+    KeyIter d_keys_iter,
+    const CentroidFunc& centroid)
+{
+    typedef typename CentroidFunc::result_type Vector3;
+    typedef typename Vector3::value_type Real;
+
+    morton_keys<Real>(d_prims_iter, N_primitives, d_keys_iter, centroid,
+                      NULL, NULL);
+}
+
+template <typename TPrimitive, typename KeyType, typename CentroidFunc>
+GRACE_HOST void morton_keys(
+    const thrust::device_vector<TPrimitive>& d_primitives,
+    thrust::device_vector<KeyType>& d_keys,
+    const CentroidFunc& centroid)
+{
+    const TPrimitive* d_prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    KeyType* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
+
+    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid);
 }
 
 } // namespace grace
