@@ -311,6 +311,6 @@ Vector<Dims, T> operator/(const T s, const Vector<Dims, T>& v);
 
 } // namespace grace
 
-#include "grace/detail/vectormath-inl.h"
+#include "grace/detail/vector_math-inl.h"
 #include "grace/detail/vector3-inl.h"
 #include "grace/detail/vector4-inl.h"
