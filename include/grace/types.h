@@ -104,3 +104,5 @@ enum RaySortType {
 };
 
 } // namespace grace
+
+#include "grace/detail/math_shim.h"
