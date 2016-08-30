@@ -84,7 +84,7 @@ typedef uint32_t uinteger32;
 typedef uint64_t uinteger64;
 typedef int32_t integer32;
 typedef int64_t integer64;
-#elif define(_MSC_VER)
+#elif defined(_MSC_VER)
 typedef unsigned __int32 uinteger32;
 typedef unsigned __int64 uinteger64;
 typedef __int32 integer32;
