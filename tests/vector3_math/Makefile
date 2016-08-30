@@ -4,18 +4,18 @@ _CXXFLAGS = -g
 
 CXXFLAGS += $(_CXXFLAGS)
 
-all: vector_math
+all: vector3_math
 %.o: %.cpp $(DEPS)
 	$(CXX) $(CXXFLAGS) $(INCLUDES) -c $< -o $@
 
-vector_math: vector_math.o
+vector3_math: vector3_math.o
 	$(CXX) $(CXXFLAGS) $(INCLUDES) $^ -o $@
 
 clean:
 	@-rm -f *.o
 
 distclean: clean
-	@-rm -f vector_math
+	@-rm -f vector3_math
 
 .PHONY: clean
 .PHONY: distclean
