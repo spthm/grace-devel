@@ -28,6 +28,8 @@ DEPS += $(abspath $(THIS_PATH)Makefile.config)
 
 DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.hpp))
 DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/*.h))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/detail/*.hpp))
+DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/detail/*.h))
 
 DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.h))
 DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/util/*.hpp))
@@ -36,6 +38,8 @@ DEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/generic/*.hpp))
 
 DEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.h))
 DEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
+DEPS += $(abspath $(wildcard $(THIS_PATH)/helper-unit/*.h))
+DEPS += $(abspath $(wildcard $(THIS_PATH)/helper-unit/*.hpp))
 
 NVCCDEPS = $(DEPS)
 NVCCDEPS += $(abspath $(wildcard $(GRACE_INC_DIR)/grace/cuda/detail/*.cuh))

@@ -2,7 +2,7 @@ include ../Makefile.common
 
 _CXXFLAGS = -g
 _INCLUDES = -I./
-_DEPS = vector4_host.h vector4_device.h vector4_common.h ../helper-unit/test_types.h Makefile
+_DEPS = vector4_host.h vector4_device.h vector4_common.h Makefile
 
 CXXFLAGS += $(_CXXFLAGS)
 INCLUDES += $(_INCLUDES)
