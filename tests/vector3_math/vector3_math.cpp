@@ -7,7 +7,6 @@
 
 // Convenient, and having commas in macro arguments requires extra parentheses.
 typedef grace::Vector<3, float>  Vector3f;
-typedef grace::Vector<3, double> Vector3d;
 
 const double PI = 3.14159265358979323846;
 
@@ -15,7 +14,7 @@ int main(void)
 {
     Vector3f a(2.f, -4.f, 8.f);
     Vector3f b(8.0,  4.0, 4.0);
-    Vector3f c(3.f, 4.f, 0.f);
+    Vector3f c(3.f, 4.f, 12.f);
     Vector3f d(1.0, 0.0, 0.0);
     Vector3f e(std::sqrt(2), std::sqrt(2), 0.0);
 
@@ -40,9 +39,9 @@ int main(void)
     ASSERT_EQUAL(-a, Vector3f(-2.f, 4.f, -8.f));
     ASSERT_EQUAL(max_element(a), 8.f);
     ASSERT_EQUAL(min_element(a), -4.f);
-    ASSERT_EQUAL(norm2(a), 84.f);
-    ASSERT_EQUAL(norm(a), std::sqrt(84.f));
-    ASSERT_EQUAL(normalize(c), 0.2f * c);
+    ASSERT_EQUAL(norm2(c), 169.f);
+    ASSERT_EQUAL(norm(c), 13.f);
+    ASSERT_EQUAL(normalize(c), (float)(1.0 / 13.0) * c);
 
 
     //

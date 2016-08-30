@@ -8,7 +8,8 @@ UNIT_TEST_DIRS = AABB \
 	morton_key_kernel \
 	Vector3 \
 	Vector4 \
-	vector_math
+	vector3_math \
+	vector4_math
 
 INTEGRATION_TEST_DIRS = segmented_scan \
 	distance_sort \
