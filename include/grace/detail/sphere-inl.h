@@ -4,6 +4,10 @@
 
 namespace grace {
 
+//
+// Constructors
+//
+
 template <typename T>
 GRACE_HOST_DEVICE Sphere<T>::Sphere() : x(0), y(0), z(0), r(1) {}
 
@@ -46,5 +50,30 @@ GRACE_HOST_DEVICE Sphere<T>::Sphere(const float4& xyzw) : x(xyzw.x), y(xyzw.y), 
 template <typename T>
 GRACE_HOST_DEVICE Sphere<T>::Sphere(const double4& xyzw) : x(xyzw.x), y(xyzw.y), z(xyzw.z), r(xyzw.w) {}
 #endif
+
+
+//
+// Comparison operations
+//
+
+template <typename T>
+GRACE_HOST_DEVICE
+bool operator==(const Sphere<T>& lhs, const Sphere<T>& rhs)
+{
+    return lhs.x == rhs.x
+        && lhs.y == rhs.y
+        && lhs.z == rhs.z
+        && lhs.r == rhs.r;
+}
+
+template <typename T>
+GRACE_HOST_DEVICE
+bool operator!=(const Sphere<T>& lhs, const Sphere<T>& rhs)
+{
+    return lhs.x != rhs.x
+        || lhs.y != rhs.y
+        || lhs.z != rhs.z
+        || lhs.r != rhs.r;
+}
 
 } // namespace grace

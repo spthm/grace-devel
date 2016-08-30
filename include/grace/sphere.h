@@ -32,7 +32,7 @@ GRACE_ALIGNED_STRUCT(16) Sphere
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Sphere(const Sphere<U>&);
+    GRACE_HOST_DEVICE Sphere(const Sphere<U>& other);
 
     // Unit sphere.
     // U must be convertible to T.
@@ -66,6 +66,18 @@ GRACE_ALIGNED_STRUCT(16) Sphere
     GRACE_HOST_DEVICE Sphere(const double4& xyzw);
 #endif
 };
+
+//
+// Comparison operations
+//
+
+template <typename T>
+GRACE_HOST_DEVICE
+bool operator==(const Sphere<T>& lhs, const Sphere<T>& rhs);
+
+template <typename T>
+GRACE_HOST_DEVICE
+bool operator!=(const Sphere<T>& lhs, const Sphere<T>& rhs);
 
 } //namespace grace
 

@@ -186,6 +186,19 @@ private:
 
 
 //
+// Comparison operations
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+bool operator==(const Vector<Dims, T>& lhs, const Vector<Dims, T>& rhs);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+bool operator!=(const Vector<Dims, T>& lhs, const Vector<Dims, T>& rhs);
+
+
+//
 // Vector operations
 //
 

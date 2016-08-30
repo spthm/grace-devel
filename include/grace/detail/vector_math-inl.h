@@ -289,16 +289,16 @@ T operator_reduce(const Vector<4, T>& v,
 // reduce(op_inner(u, v), op_outer)
 //
 
-template <size_t Dims, typename T,
+template <typename OutType, size_t Dims, typename InType,
           typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
-T operator_reduce(const Vector<Dims, T>& u,
-                  const Vector<Dims, T>& v,
-                  const OperatorInner& op_inner,
-                  const OperatorOuter& op_outer,
-                  const T outer_init)
+OutType operator_reduce(const Vector<Dims, InType>& u,
+                        const Vector<Dims, InType>& v,
+                        const OperatorInner& op_inner,
+                        const OperatorOuter& op_outer,
+                        const OutType outer_init)
 {
-    T result(outer_init);
+    OutType result(outer_init);
 
 #ifdef __CUDA_ARCH__
     #pragma unroll
@@ -311,15 +311,16 @@ T operator_reduce(const Vector<Dims, T>& u,
 }
 
 // Overload for Vector<3, > to avoid potentially-unsafe array-accessor.
-template <typename T, typename OperatorInner, typename OperatorOuter>
+template <typename OutType, typename InType,
+          typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
-T operator_reduce(const Vector<3, T>& v,
-                  const Vector<3, T>& u,
-                  const OperatorInner& op_inner,
-                  const OperatorOuter& op_outer,
-                  const T outer_init)
+OutType operator_reduce(const Vector<3, InType>& u,
+                        const Vector<3, InType>& v,
+                        const OperatorInner& op_inner,
+                        const OperatorOuter& op_outer,
+                        const OutType outer_init)
 {
-    T result(outer_init);
+    OutType result(outer_init);
 
     result = op_outer(result, op_inner(u.x, v.x));
     result = op_outer(result, op_inner(u.y, v.y));
@@ -329,15 +330,16 @@ T operator_reduce(const Vector<3, T>& v,
 }
 
 // Overload for Vector<4, > to avoid potentially-unsafe array-accessor.
-template <typename T, typename OperatorInner, typename OperatorOuter>
+template <typename OutType, typename InType,
+          typename OperatorInner, typename OperatorOuter>
 GRACE_HOST_DEVICE
-T operator_reduce(const Vector<4, T>& v,
-                  const Vector<4, T>& u,
-                  const OperatorInner& op_inner,
-                  const OperatorOuter& op_outer,
-                  const T outer_init)
+OutType operator_reduce(const Vector<4, InType>& u,
+                        const Vector<4, InType>& v,
+                        const OperatorInner& op_inner,
+                        const OperatorOuter& op_outer,
+                        const OutType outer_init)
 {
-    T result(outer_init);
+    OutType result(outer_init);
 
     result = op_outer(result, op_inner(u.x, v.x));
     result = op_outer(result, op_inner(u.y, v.y));
@@ -348,6 +350,29 @@ T operator_reduce(const Vector<4, T>& v,
 }
 
 } // namespace detail
+
+
+//
+// Comparison operations
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+bool operator==(const Vector<Dims, T>& lhs, const Vector<Dims, T>& rhs)
+{
+    return detail::operator_reduce<bool>(lhs, rhs,
+                                         equal_to<T>(), logical_and<bool>(),
+                                         true);
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+bool operator!=(const Vector<Dims, T>& lhs, const Vector<Dims, T>& rhs)
+{
+    return detail::operator_reduce<bool>(lhs, rhs,
+                                         not_equal_to<T>(), logical_or<bool>(),
+                                         false);
+}
 
 
 //
