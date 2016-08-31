@@ -8,6 +8,12 @@
 #error GRACE does not support devices of compute capability < 2.0.
 #endif
 
+#if defined(__NVCC__) || defined(__CUDACC__) || defined(__CUDA_ARCH__)
+#define GRACE_CUDA_VERSION  __CUDACC_VER_MAJOR__ * 100 + __CUDACC_VER_MINOR__ * 10
+#else
+#define GRACE_CUDA_VERSION -1
+#endif
+
 #ifdef __CUDACC__
     #define GRACE_HOST __host__ inline
     #define GRACE_DEVICE __device__ inline

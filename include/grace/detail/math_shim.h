@@ -1,5 +1,7 @@
 #pragma once
 
+#include "grace/types.h"
+
 #include <algorithm>
 
 namespace grace {
@@ -23,15 +25,20 @@ namespace grace {
  * For consistency, calls from the host will resolve instead to std::min() and
  * std::max(), which are still available when CUDA is not.
  *
- * Note that nvcc includes cuda_runtime.h by default, which includes
- * common_functions.h, which includes the aforementioned math_functions.h.
- * (See e.g. http://stackoverflow.com/a/29710576.)
- * Since we only required overloaded ::min() and ::max() when following the
- * device compilation trajectory, we can be sure they exist without #includ-ing
- * any other headers.
+ * Note 1: Prior to 7.5, "[unsigned] long" overloads were not provided by CUDA.
+ *         Here, if CUDA < 7.5 is detected, calls to the "[unsigned] long long"
+ *         overloads are made in device code. Host code is unaffected.
  *
- * Finally, note that none of this works if all this code is in namespace
- * grace::detail:: - it _MUST_ be in namespace grace::
+ *
+ * Note 2: nvcc includes cuda_runtime.h by default, which includes
+ *         common_functions.h, which includes the aforementioned
+ *         math_functions.h. (See e.g. http://stackoverflow.com/a/29710576.)
+ *         Since we only required overloaded ::min() and ::max() when following
+ *         the device compilation trajectory, we can be sure they exist without
+ *         #includ-ing any other headers.
+ *
+ * Note 3: None of this works if the below is in namespace grace::detail::
+ *         It _MUST_ be in namespace grace::
  */
 
 
@@ -78,7 +85,12 @@ GRACE_HOST_DEVICE unsigned int min(int a, unsigned int b)
 GRACE_HOST_DEVICE long min(long a, long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::min(a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::min((long long)a, (long long)b);
+    #else
+        return ::min(a, b);
+    #endif
+
 #else
     return std::min(a, b);
 #endif
@@ -87,7 +99,12 @@ GRACE_HOST_DEVICE long min(long a, long b)
 GRACE_HOST_DEVICE unsigned long min(unsigned long a, unsigned long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::min(a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::min((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::min(a, b);
+    #endif
+
 #else
     return std::min(a, b);
 #endif
@@ -96,7 +113,12 @@ GRACE_HOST_DEVICE unsigned long min(unsigned long a, unsigned long b)
 GRACE_HOST_DEVICE unsigned long min(unsigned long a, long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::min(a, (unsigned long)b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::min((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::min(a, (unsigned long)b);
+    #endif
+
 #else
     return std::min(a, (unsigned long)b);
 #endif
@@ -105,7 +127,12 @@ GRACE_HOST_DEVICE unsigned long min(unsigned long a, long b)
 GRACE_HOST_DEVICE unsigned long min(long a, unsigned long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::min((unsigned long)a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::min((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::min((unsigned long)a, b);
+    #endif
+
 #else
     return std::min((unsigned long)a, b);
 #endif
@@ -227,7 +254,12 @@ GRACE_HOST_DEVICE unsigned int max(int a, unsigned int b)
 GRACE_HOST_DEVICE long max(long a, long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::max(a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::max((long long)a, (long long)b);
+    #else
+        return ::max(a, b);
+    #endif
+
 #else
     return std::max(a, b);
 #endif
@@ -236,7 +268,12 @@ GRACE_HOST_DEVICE long max(long a, long b)
 GRACE_HOST_DEVICE unsigned long max(unsigned long a, unsigned long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::max(a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::max((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::max(a, b);
+    #endif
+
 #else
     return std::max(a, b);
 #endif
@@ -245,7 +282,12 @@ GRACE_HOST_DEVICE unsigned long max(unsigned long a, unsigned long b)
 GRACE_HOST_DEVICE unsigned long max(unsigned long a, long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::max(a, (unsigned long)b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::max((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::max(a, (unsigned long)b);
+    #endif
+
 #else
     return std::max(a, (unsigned long)b);
 #endif
@@ -254,7 +296,12 @@ GRACE_HOST_DEVICE unsigned long max(unsigned long a, long b)
 GRACE_HOST_DEVICE unsigned long max(long a, unsigned long b)
 {
 #ifdef __CUDA_ARCH__
-    return ::max((unsigned long)a, b);
+    #if GRACE_CUDA_VERSION < 750
+        return ::max((unsigned long long)a, (unsigned long long)b);
+    #else
+        return ::max((unsigned long)a, b);
+    #endif
+
 #else
     return std::max((unsigned long)a, b);
 #endif
