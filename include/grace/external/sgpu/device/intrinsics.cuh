@@ -134,7 +134,9 @@ __device__ __forceinline__ unsigned int shfl_up(unsigned int var, int offset,
 	int width = WARP_SIZE) {
 
 #if __CUDA_ARCH__ >= 300
-	var = __shfl_up(var, offset, width);
+	int vari = reinterpret_cast<int&>(var);
+	vari = __shfl_up(vari, offset, width);
+	var = reinterpret_cast<unsigned int&>(vari);
 #endif
 	return var;
 }
@@ -144,8 +146,10 @@ __device__ __forceinline__ sgpu::uint64 shfl_up(sgpu::uint64 var, int offset,
 
 #if __CUDA_ARCH__ >= 300
 	uint2 p = sgpu::ulonglong_as_uint2(var);
-	p.x = __shfl_up(p.x, offset, width);
-	p.y = __shfl_up(p.y, offset, width);
+	int2 pi = reinterpret_cast<int2&>(p);
+	pi.x = __shfl_up(pi.x, offset, width);
+	pi.y = __shfl_up(pi.y, offset, width);
+	p = reinterpret_cast<uint2&>(pi);
 	var = sgpu::uint2_as_ulonglong(p);
 #endif
 	return var;
