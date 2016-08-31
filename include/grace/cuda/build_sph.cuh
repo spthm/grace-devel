@@ -2,9 +2,9 @@
 
 #include "grace/cuda/nodes.h"
 
+#include "grace/aabb.h"
 #include "grace/sphere.h"
 #include "grace/types.h"
-#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 
@@ -19,8 +19,7 @@ GRACE_HOST void morton_keys_sph(
 template <typename T, typename KeyType>
 GRACE_HOST void morton_keys_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top,
+    const AABB<T>& aabb,
     thrust::device_vector<KeyType>& d_keys);
 
 // Generates 30-bit Morton keys.
@@ -33,8 +32,7 @@ GRACE_HOST void morton_keys30_sort_sph(
 template <typename T>
 GRACE_HOST void morton_keys30_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top);
+    const AABB<T>& aabb);
 
 // Generates 63-bit Morton keys.
 // Sorts spheres by the Morton keys.
@@ -46,8 +44,7 @@ GRACE_HOST void morton_keys63_sort_sph(
 template <typename T>
 GRACE_HOST void morton_keys63_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top);
+    const AABB<T>& aabb);
 
 template <typename T>
 GRACE_HOST void euclidean_deltas_sph(

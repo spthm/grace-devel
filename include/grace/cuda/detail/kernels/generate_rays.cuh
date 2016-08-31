@@ -12,6 +12,7 @@
 #include "grace/generic/morton.h"
 #include "grace/generic/functors/centroid.h"
 
+#include "grace/aabb.h"
 #include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"
@@ -569,8 +570,7 @@ GRACE_HOST void one_to_many_rays_endsort(
     const size_t N_rays,
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const Vector<3, Real>* AABB_bot,
-    const Vector<3, Real>* AABB_top)
+    const AABB<Real>& aabb)
 {
     thrust::device_vector<uinteger32> d_keys(N_rays);
     uinteger32* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
@@ -588,7 +588,7 @@ GRACE_HOST void one_to_many_rays_endsort(
             N_rays);
     GRACE_KERNEL_CHECK();
 
-    morton_keys(d_points_ptr, N_rays, AABB_bot, AABB_top, d_keys_ptr,
+    morton_keys(d_points_ptr, N_rays, aabb, d_keys_ptr,
                 CentroidPassThrough<PointType, Real>());
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),

@@ -8,9 +8,9 @@
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"
 
+#include "grace/aabb.h"
 #include "grace/sphere.h"
 #include "grace/types.h"
-#include "grace/vector.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
@@ -29,11 +29,10 @@ GRACE_HOST void morton_keys_sph(
 template <typename T, typename KeyType>
 GRACE_HOST void morton_keys_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top,
+    const AABB<T>& aabb,
     thrust::device_vector<KeyType>& d_keys)
 {
-    morton_keys(d_spheres, bot, top, d_keys, CentroidSphere<T>());
+    morton_keys(d_spheres, aabb, d_keys, CentroidSphere<T>());
 }
 
 // Generates 30-bit Morton keys.
@@ -51,11 +50,10 @@ GRACE_HOST void morton_keys30_sort_sph(
 template <typename T>
 GRACE_HOST void morton_keys30_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top)
+    const AABB<T>& aabb)
 {
     thrust::device_vector<grace::uinteger32> d_keys(d_spheres.size());
-    morton_keys_sph(d_spheres, bot, top, d_keys);
+    morton_keys_sph(d_spheres, aabb, d_keys);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres.begin());
 }
 
@@ -74,11 +72,10 @@ GRACE_HOST void morton_keys63_sort_sph(
 template <typename T>
 GRACE_HOST void morton_keys63_sort_sph(
     thrust::device_vector<Sphere<T> >& d_spheres,
-    const Vector<3, T>& bot,
-    const Vector<3, T>& top)
+    const AABB<T>& aabb)
 {
     thrust::device_vector<grace::uinteger64> d_keys(d_spheres.size());
-    morton_keys_sph(d_spheres, bot, top, d_keys);
+    morton_keys_sph(d_spheres, aabb, d_keys);
     thrust::sort_by_key(d_keys.begin(), d_keys.end(), d_spheres.begin());
 }
 

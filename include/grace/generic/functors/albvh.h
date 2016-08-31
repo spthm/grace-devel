@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/aabb.h"
 #include "grace/types.h"
 #include "grace/vector.h"
 
@@ -91,7 +92,7 @@ struct DeltaSurfaceArea
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
 
-    GRACE_HOST_DEVICE DeltaSurfaceArea() : AABB(AABBFunc()) {}
+    GRACE_HOST_DEVICE DeltaSurfaceArea() : aabb_op(AABBFunc()) {}
 
     GRACE_HOST_DEVICE float operator()(
         const int i,
@@ -109,13 +110,13 @@ struct DeltaSurfaceArea
         TPrimitive pi = primitives[i];
         TPrimitive pj = primitives[i+1];
 
-        Vector<3, float> boti, topi, botj, topj;
-        AABB(pi, &boti, &topi);
-        AABB(pj, &botj, &topj);
+        AABB<float> aabbi, aabbj;
+        aabb_op(pi, &aabbi);
+        aabb_op(pj, &aabbj);
 
-        float L_x = max(topi.x, topj.x) - min(boti.x, botj.x);
-        float L_y = max(topi.y, topj.y) - min(boti.y, botj.y);
-        float L_z = max(topi.z, topj.z) - min(boti.z, botj.z);
+        float L_x = max(aabbi.max.x, aabbj.max.x) - min(aabbi.min.x, aabbj.min.x);
+        float L_y = max(aabbi.max.y, aabbj.max.y) - min(aabbi.min.y, aabbj.min.y);
+        float L_z = max(aabbi.max.z, aabbj.max.z) - min(aabbi.min.z, aabbj.min.z);
 
         float SA = (L_x * L_y) + (L_x * L_z) + (L_y * L_z);
 
@@ -123,7 +124,7 @@ struct DeltaSurfaceArea
     }
 
 private:
-    const AABBFunc AABB;
+    const AABBFunc aabb_op;
 };
 
 } // namespace grace

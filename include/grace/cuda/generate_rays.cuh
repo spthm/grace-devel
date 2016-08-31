@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/aabb.h"
 #include "grace/types.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
@@ -93,8 +94,7 @@ GRACE_HOST void one_to_many_rays(
     const size_t N_rays,
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const Vector<3, Real>& AABB_bot,
-    const Vector<3, Real>& AABB_top);
+    const AABB<Real>& aabb);
 
 // If d_rays.size() < d_points.size(), d_rays will be resized.
 template <typename Real, typename PointType>
@@ -102,8 +102,7 @@ GRACE_HOST void one_to_many_rays(
     thrust::device_vector<Ray>& d_rays,
     const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
-    const Vector<3, Real>& AABB_bot,
-    const Vector<3, Real>& AABB_top);
+    const AABB<Real>& aabb);
 
 // width and height: the dimensions of the grid of rays to generate
 // base: a point at one corner of the ray-grid plane

@@ -5,6 +5,7 @@
 #include "grace/cuda/detail/kernel_config.h"
 #include "grace/cuda/nodes.h"
 
+#include "grace/aabb.h"
 #include "grace/error.h"
 #include "grace/types.h"
 #include "grace/vector.h"
@@ -316,7 +317,7 @@ __global__ void build_nodes_slice_kernel(
     const int max_per_node,
     int* new_base_indices,
     const DeltaComp delta_comp,
-    const AABBFunc AABB)
+    const AABBFunc aabb_op)
 {
     typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
@@ -411,17 +412,17 @@ __global__ void build_nodes_slice_kernel(
                 for (int i = 0; i < node.y; i++) {
                     TPrimitive prim = primitives[node.x + i];
 
-                    Vector<3, float> bot, top;
-                    AABB(prim, &bot, &top);
+                    AABB<float> aabb;
+                    aabb_op(prim, &aabb);
 
-                    x_min = min(x_min, bot.x);
-                    x_max = max(x_max, top.x);
+                    x_min = min(x_min, aabb.min.x);
+                    x_max = max(x_max, aabb.max.x);
 
-                    y_min = min(y_min, bot.y);
-                    y_max = max(y_max, top.y);
+                    y_min = min(y_min, aabb.min.y);
+                    y_max = max(y_max, aabb.max.y);
 
-                    z_min = min(z_min, bot.z);
-                    z_max = max(z_max, top.z);
+                    z_min = min(z_min, aabb.min.z);
+                    z_max = max(z_max, aabb.max.z);
                 }
             }
 
@@ -858,7 +859,7 @@ GRACE_HOST void build_nodes(
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
-    const AABBFunc AABB)
+    const AABBFunc aabb_op)
 {
     const size_t n_leaves = d_tree.leaves.size();
     const size_t n_nodes = n_leaves - 1;
@@ -908,7 +909,7 @@ GRACE_HOST void build_nodes(
             d_tree.max_per_leaf, // This can actually be anything.
             d_out_ptr,
             delta_comp,
-            AABB);
+            aabb_op);
         GRACE_KERNEL_CHECK();
 
         blocks = std::min(grace::MAX_BLOCKS,
@@ -990,7 +991,7 @@ GRACE_HOST void build_ALBVH(
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
-    const AABBFunc AABB,
+    const AABBFunc aabb_op,
     const bool wipe = false)
 {
     // TODO: Error if n_keys <= 1 OR n_keys > MAX_INT.
@@ -1019,7 +1020,8 @@ GRACE_HOST void build_ALBVH(
     DeltaType* new_deltas_ptr = thrust::raw_pointer_cast(d_new_deltas.data());
 
     ALBVH::copy_leaf_deltas(d_tree.leaves, d_deltas_iter, new_deltas_ptr);
-    ALBVH::build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp, AABB);
+    ALBVH::build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp,
+                       aabb_op);
 }
 
 template <
@@ -1033,13 +1035,13 @@ GRACE_HOST void build_ALBVH(
     const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const DeltaComp delta_comp,
-    const AABBFunc AABB,
+    const AABBFunc aabb_op,
     const bool wipe = false)
 {
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, aabb_op, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
@@ -1048,13 +1050,14 @@ GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
-    const AABBFunc AABB,
+    const AABBFunc aabb_op,
     const bool wipe = false)
 {
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     typedef typename thrust::less<DeltaType> DeltaComp;
 
-    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), AABB, wipe);
+    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), aabb_op,
+                wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
@@ -1063,14 +1066,14 @@ GRACE_HOST void build_ALBVH(
     Tree& d_tree,
     const thrust::device_vector<TPrimitive>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
-    const AABBFunc AABB,
+    const AABBFunc aabb_op,
     const bool wipe = false)
 {
     typedef typename thrust::less<DeltaType> DeltaComp;
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), AABB, wipe);
+    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), aabb_op, wipe);
 }
 
 } // namespace grace

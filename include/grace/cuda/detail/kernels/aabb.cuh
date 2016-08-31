@@ -13,7 +13,7 @@
 
 namespace grace {
 
-namespace AABB {
+namespace detail {
 
 template <typename PrimitiveIter, typename T, typename CentroidFunc>
 __global__ void compute_centroids_kernel(
@@ -52,6 +52,6 @@ GRACE_HOST void compute_centroids(
     GRACE_KERNEL_CHECK();
 }
 
-} // namespace AABB
+} // namespace detail
 
 } // namespace grace

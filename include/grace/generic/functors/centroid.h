@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/aabb.h"
 #include "grace/sphere.h"
 #include "grace/types.h"
 #include "grace/vector.h"
@@ -20,19 +21,19 @@ template <typename PrecisionType, typename TPrimitive, typename AABBFunc>
 struct PrimitiveCentroid : public std::unary_function<const TPrimitive&, Vector<3, PrecisionType> >
 {
 public:
-    GRACE_HOST_DEVICE PrimitiveCentroid() : aabb(AABBFunc()) {}
+    GRACE_HOST_DEVICE PrimitiveCentroid() : aabb_op(AABBFunc()) {}
 
-    GRACE_HOST_DEVICE PrimitiveCentroid(AABBFunc aabb) : aabb(aabb) {}
+    GRACE_HOST_DEVICE PrimitiveCentroid(AABBFunc aabb_op) : aabb_op(aabb_op) {}
 
     GRACE_HOST_DEVICE Vector<3, PrecisionType> operator()(const TPrimitive& primitive)
     {
-        Vector<3, PrecisionType> bot, top;
-        aabb(primitive, &bot, &top);
-        return detail::AABB_centroid(bot, top);
+        AABB<PrecisionType> aabb;
+        aabb_op(primitive, &aabb);
+        return aabb.center();
     }
 
 private:
-    const AABBFunc aabb;
+    const AABBFunc aabb_op;
 };
 
 template <typename T>

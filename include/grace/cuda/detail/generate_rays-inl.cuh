@@ -4,6 +4,7 @@
 
 #include "grace/cuda/util/extrema.cuh"
 
+#include "grace/aabb.h"
 #include "grace/types.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
@@ -108,11 +109,11 @@ GRACE_HOST void one_to_many_rays(
                                          d_points_ptr);
     }
     else if (sort_type == EndPointSort) {
-        Vector<3, float> AABB_bot, AABB_top;
-        min_vec3(d_points_ptr, N_rays, &AABB_bot);
-        max_vec3(d_points_ptr, N_rays, &AABB_top);
+        AABB<float> aabb;
+        min_vec3(d_points_ptr, N_rays, &aabb.min);
+        max_vec3(d_points_ptr, N_rays, &aabb.max);
         detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, origin,
-                                         d_points_ptr, AABB_bot, AABB_bot);
+                                         d_points_ptr, aabb);
     }
     else {
         std::stringstream msg_stream;
@@ -155,11 +156,10 @@ GRACE_HOST void one_to_many_rays(
     const size_t N_rays,
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const Vector<3, Real>& AABB_bot,
-    const Vector<3, Real>& AABB_top)
+    const AABB<Real>& aabb)
 {
     detail::one_to_many_rays_endsort(d_rays_ptr, N_rays, origin, d_points_ptr,
-                                     AABB_bot, AABB_top);
+                                     aabb);
 }
 
 // If d_rays.size() < d_points.size(), d_rays will be resized.
@@ -168,8 +168,7 @@ GRACE_HOST void one_to_many_rays(
     thrust::device_vector<Ray>& d_rays,
     const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
-    const Vector<3, Real>& AABB_bot,
-    const Vector<3, Real>& AABB_top)
+    const AABB<Real>& aabb)
 {
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
     const PointType* const d_points_ptr
@@ -179,8 +178,7 @@ GRACE_HOST void one_to_many_rays(
         d_rays.resize(N_rays);
     }
 
-    one_to_many_rays(d_rays_ptr, N_rays, origin, d_points_ptr, AABB_bot,
-                     AABB_top);
+    one_to_many_rays(d_rays_ptr, N_rays, origin, d_points_ptr, aabb);
 }
 
 // width and height: the dimensions of the grid of rays to generate

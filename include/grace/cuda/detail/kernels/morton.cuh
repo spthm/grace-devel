@@ -10,6 +10,7 @@
 #include "grace/generic/bits.h"
 #include "grace/generic/morton.h"
 
+#include "grace/aabb.h"
 #include "grace/error.h"
 #include "grace/types.h"
 #include "grace/vector.h"
@@ -100,8 +101,7 @@ template <typename PrimitiveIter, typename Real, typename KeyIter,
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
-    const Vector<3, Real>& AABB_bot,
-    const Vector<3, Real>& AABB_top,
+    const AABB<Real>& aabb,
     KeyIter d_keys_iter,
     const CentroidFunc& centroid)
 {
@@ -110,10 +110,7 @@ GRACE_HOST void morton_keys(
     const int MAX_KEY_63 = (1u << 21) - 1;
     const int MAX_KEY_30 = (1u << 10) - 1;
     const int span = CHAR_BIT * sizeof(KeyType) > 32 ? MAX_KEY_63 : MAX_KEY_30;
-    Vector<3, Real> scale
-        = Vector<3, Real>((Real)(span) / (AABB_top.x - AABB_bot.x),
-                          (Real)(span) / (AABB_top.y - AABB_bot.y),
-                          (Real)(span) / (AABB_top.z - AABB_bot.z));
+    Vector<3, Real> scale = (Real)(span) / aabb.size();
 
     morton::morton_keys(d_prims_iter, N_primitives, AABB_bot, scale,
                         d_keys_iter, centroid);
@@ -123,8 +120,7 @@ template <typename TPrimitive, typename Real, typename KeyType,
           typename CentroidFunc>
 GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
-    const Vector<3, Real> AABB_bot,
-    const Vector<3, Real> AABB_top,
+    const AABB<Real>& aabb,
     thrust::device_vector<KeyType>& d_keys,
     const CentroidFunc& centroid)
 {
@@ -132,14 +128,13 @@ GRACE_HOST void morton_keys(
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     KeyType* keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    morton_keys(prims_ptr, d_primitives.size(), AABB_bot, AABB_top, keys_ptr,
-                centroid);
+    morton_keys(prims_ptr, d_primitives.size(), aabb, keys_ptr, centroid);
 }
 
 // Wrappers to additionally compute the AABB containing all primitives.
 // Requires O(N_primitives) temporary storage.
-// bots and tops may be NULL if they are not required. In that case, the first
-// template parameter should be a float or double, setting the precision of the
+// aabb may be NULL if it is not required. In that case, the first template
+// parameter should be a float or double, setting the precision of the
 // centroids-to-keys computations.
 // CentroidFunc should return a grace::Vector<3, Real>.
 template <typename Real, typename PrimitiveIter, typename KeyIter,
@@ -149,8 +144,7 @@ GRACE_HOST void morton_keys(
     const size_t N_primitives,
     KeyIter d_keys_iter,
     const CentroidFunc& centroid,
-    Vector<3, Real>* const bots,
-    Vector<3, Real>* const tops)
+    AABB<Real>* aabb)
 {
     // grace::min_max_{x,y,z} use Thrust functions, which must accept either
     // Thrust iterators or device pointers.
@@ -164,25 +158,22 @@ GRACE_HOST void morton_keys(
     thrust::device_vector<Vector<3, Real> > d_centroids(N_primitives);
     Vector<3, Real>* d_centroids_ptr = thrust::raw_pointer_cast(d_centroids.data());
 
-    AABB::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr,
-                            centroid);
+    detail::compute_centroids(d_prims_iter, N_primitives, d_centroids_ptr,
+                              centroid);
 
-    Vector<3, Real> mins, maxs;
-    min_vec3(d_centroids_ptr, N_primitives, &mins);
-    max_vec3(d_centroids_ptr, N_primitives, &maxs);
+    AABB<Real> data_aabb;
+    min_vec3(d_centroids_ptr, N_primitives, &data_aabb.min);
+    max_vec3(d_centroids_ptr, N_primitives, &data_aabb.max);
 
-    morton_keys(d_prims_iter, N_primitives, mins, maxs, d_keys_iter, centroid);
+    morton_keys(d_prims_iter, N_primitives, data_aabb, d_keys_iter, centroid);
 
-    if (bots != NULL) {
-        *bots = mins;
-    }
-    if (tops != NULL) {
-        *tops = maxs;
+    if (aabb != NULL) {
+        *aabb = data_aabb;
     }
 }
 
-// bots and tops may be NULL if they are not required. In that case, the first
-// template parameter should be a float or double, setting the precision of the
+// aabb may be NULL if it is not required. In that case, the first template
+// parameter should be a float or double, setting the precision of the
 // centroids-to-keys computations.
 // CentroidFunc should return a grace::Vector<3, Real>.
 template <typename Real, typename TPrimitive, typename KeyType,
@@ -191,14 +182,12 @@ GRACE_HOST void morton_keys(
     const thrust::device_vector<TPrimitive>& d_primitives,
     thrust::device_vector<KeyType>& d_keys,
     const CentroidFunc& centroid,
-    Vector<3, Real>* const bots,
-    Vector<3, Real>* const tops)
+    AABB<Real>* aabb)
 {
     const TPrimitive* d_prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     KeyType* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
 
-    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid,
-                bots, tops);
+    morton_keys(d_prims_ptr, d_primitives.size(), d_keys_ptr, centroid, aabb);
 }
 
 // The precision of the centroids-to-keys computations is set by the value_type
@@ -213,8 +202,7 @@ GRACE_HOST void morton_keys(
     typedef typename CentroidFunc::result_type Vector3;
     typedef typename Vector3::value_type Real;
 
-    morton_keys<Real>(d_prims_iter, N_primitives, d_keys_iter, centroid,
-                      NULL, NULL);
+    morton_keys<Real>(d_prims_iter, N_primitives, d_keys_iter, centroid, NULL);
 }
 
 template <typename TPrimitive, typename KeyType, typename CentroidFunc>
