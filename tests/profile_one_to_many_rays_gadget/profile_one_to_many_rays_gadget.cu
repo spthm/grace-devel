@@ -8,6 +8,7 @@
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
+#include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
 #include "grace/vector.h"
@@ -76,12 +77,11 @@ int main(int argc, char* argv[])
     build_tree(d_spheres, d_tree);
 
     // Ray origin is the box centre.
-    grace::Vector<3, float> origin, AABB_bot, AABB_top;
-    grace::min_vec3(d_spheres, &AABB_bot);
-    grace::max_vec3(d_spheres, &AABB_top);
-    origin.x = (AABB_bot.x + AABB_top.x) / 2.;
-    origin.y = (AABB_bot.y + AABB_top.y) / 2.;
-    origin.z = (AABB_bot.z + AABB_top.z) / 2.;
+    grace::Vector<3, float> origin;
+    grace::AABB<float> aabb;
+    grace::min_vec3(d_spheres, &aabb.min);
+    grace::max_vec3(d_spheres, &aabb.max);
+    origin = aabb.center();
 
     CUDATimer timer;
     double t_genray_nosort, t_cum_nosort, t_hit_nosort, t_all;
@@ -127,8 +127,8 @@ int main(int argc, char* argv[])
 
         // Direction-based sort.
 
-        grace::one_to_many_rays(d_rays, origin.x, origin.y, origin.z,
-                                d_spheres, grace::DirectionSort);
+        grace::one_to_many_rays(d_rays, origin, d_spheres,
+                                grace::DirectionSort);
         if (i >= 0) t_genray_dirkey += timer.split();
 
         grace::trace_cumulative_sph(d_rays,
@@ -146,13 +146,11 @@ int main(int argc, char* argv[])
 
         // Ray end-point sort.
 
-        grace::one_to_many_rays(d_rays, origin.x, origin.y, origin.z,
-                                d_spheres, grace::EndPointSort);
+        grace::one_to_many_rays(d_rays, origin, d_spheres, grace::EndPointSort);
         // Using the already-computed AABBs is supported by GRACE, and would
         // be faster here; note the lack of grace::EndPointSort, which is
         // implicit:
-        // grace::one_to_many_rays(d_rays, origin.x, origin.y, origin.z,
-        //                         d_spheres, AABB_bot, AABB_top);
+        // grace::one_to_many_rays(d_rays, origin, d_spheres, aabb);
         if (i >= 0) t_genray_endkey += timer.split();
 
         grace::trace_cumulative_sph(d_rays,

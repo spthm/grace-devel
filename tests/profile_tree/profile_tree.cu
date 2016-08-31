@@ -8,8 +8,8 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
+#include "grace/aabb.h"
 #include "grace/sphere.h"
-#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/random.cuh"
 
@@ -105,8 +105,8 @@ int main(int argc, char* argv[])
             timer.split();
 
             grace::morton_keys_sph(d_spheres,
-                                   grace::Vector<3, float>(low),
-                                   grace::Vector<3, float>(high),
+                                   grace::AABB<float>(low.center(),
+                                                      high.center()),
                                    d_keys);
             if (i >= 0) t_morton += timer.split();
 

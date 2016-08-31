@@ -8,9 +8,9 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
+#include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
-#include "grace/vector.h"
 #include "helper/images.hpp"
 #include "helper/tree.cuh"
 #include "helper/rays.cuh"
@@ -74,8 +74,7 @@ int main(int argc, char* argv[])
     // values, and hence requires introduces a huge dynamic range.
     mins.r = maxs.r = 0;
 
-    build_tree(d_spheres,
-               grace::Vector<3, float>(mins), grace::Vector<3, float>(maxs),
+    build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
                d_tree);
     orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 

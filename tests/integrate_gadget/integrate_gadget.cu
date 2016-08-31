@@ -7,9 +7,9 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
+#include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
-#include "grace/vector.h"
 #include "helper/rays.cuh"
 #include "helper/read_gadget.cuh"
 #include "helper/tree.cuh"
@@ -76,8 +76,7 @@ int main(int argc, char* argv[])
 
     float area_per_ray;
 
-    build_tree(d_spheres,
-               grace::Vector<3, float>(mins), grace::Vector<3, float>(maxs),
+    build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
                d_tree);
     plane_parallel_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
     grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
