@@ -5,7 +5,7 @@
 namespace grace {
 
 //
-// Constructors
+// Constructors and member functions
 //
 
 template <typename T>
@@ -50,6 +50,13 @@ GRACE_HOST_DEVICE Sphere<T>::Sphere(const float4& xyzw) : x(xyzw.x), y(xyzw.y), 
 template <typename T>
 GRACE_HOST_DEVICE Sphere<T>::Sphere(const double4& xyzw) : x(xyzw.x), y(xyzw.y), z(xyzw.z), r(xyzw.w) {}
 #endif
+
+template <typename T>
+GRACE_HOST_DEVICE
+Vector<3, T> Sphere<T>::center() const
+{
+    return Vector<3, T>(x, y, z);
+}
 
 
 //

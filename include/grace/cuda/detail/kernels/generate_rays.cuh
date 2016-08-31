@@ -217,7 +217,7 @@ __global__ void one_to_many_rays_kernel(
         float dx, dy, dz, R, invR;
         Ray ray;
 
-        Vector<3, T> point = points[tid];
+        PointType point = points[tid];
 
         dx = point.x - origin.x;
         dy = point.y - origin.y;

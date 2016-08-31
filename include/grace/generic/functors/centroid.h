@@ -40,7 +40,7 @@ struct CentroidSphere : public std::unary_function<const Sphere<T>&, Vector<3, T
 {
     GRACE_HOST_DEVICE Vector<3, T> operator()(const Sphere<T>& sphere) const
     {
-        return Vector<3, T>(sphere);
+        return sphere.center();
     }
 };
 

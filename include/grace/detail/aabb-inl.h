@@ -38,20 +38,20 @@ GRACE_HOST_DEVICE AABB<T>::AABB(const double3& min, const double3& max)
 #endif
 
 template <typename T>
-GRACE_HOST_DEVICE T AABB<T>::area()
+GRACE_HOST_DEVICE T AABB<T>::area() const
 {
     const Vector<3, T> s = size();
     return T(2) * (s.x * s.y + s.x * s.z + s.y * s.z);
 }
 
 template <typename T>
-GRACE_HOST_DEVICE Vector<3, T> AABB<T>::center()
+GRACE_HOST_DEVICE Vector<3, T> AABB<T>::center() const
 {
     return T(0.5) * (max + min);
 }
 
 template <typename T>
-GRACE_HOST_DEVICE Vector<3, T> AABB<T>::size()
+GRACE_HOST_DEVICE Vector<3, T> AABB<T>::size() const
 {
     return max - min;
 }

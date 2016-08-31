@@ -5,10 +5,6 @@
 
 namespace grace {
 
-// Circular dependency.
-template <size_t Dims, typename T>
-struct Vector;
-
 template <typename T>
 GRACE_ALIGNED_STRUCT(16) Sphere
 {
@@ -65,6 +61,8 @@ GRACE_ALIGNED_STRUCT(16) Sphere
     // double must be convertible to T.
     GRACE_HOST_DEVICE Sphere(const double4& xyzw);
 #endif
+
+    GRACE_HOST_DEVICE Vector<3, T> center() const;
 };
 
 //

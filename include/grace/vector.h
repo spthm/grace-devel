@@ -1,15 +1,10 @@
 #pragma once
 
-#include "grace/sphere.h"
 #include "grace/types.h"
 
 #include "grace/detail/vector_members-inl.h"
 
 namespace grace {
-
-// Circular dependency.
-template <typename T>
-struct Sphere;
 
 // Defining a vector with Dims = {2, 3, 4} with sizeof(T) >= 9 (excepting
 // sizeof(T) == 16) results in .data() and operator[] implementations which are
@@ -56,12 +51,6 @@ struct Vector<3, T> : detail::VectorMembers<3, sizeof(T), T>
     template <typename U>
     GRACE_HOST_DEVICE Vector(const Vector<4, U>& vec) :
         Base(vec.x, vec.y, vec.z) {}
-
-    // sphere.r ignored.
-    // U must be convertible to T.
-    template <typename U>
-    GRACE_HOST_DEVICE Vector(const Sphere<U>& sphere) :
-        Base(sphere.x, sphere.y, sphere.z) {}
 
 #ifdef __CUDACC__
     // float must be convertible to T.
@@ -138,12 +127,6 @@ struct Vector<4, T> : detail::VectorMembers<4, sizeof(T), T>
     template <typename U>
     GRACE_HOST_DEVICE Vector(const Vector<3, U>& vec, const U w) :
         Base(vec.x, vec.y, vec.z, w) {}
-
-    // sphere.r is vec.w == vec[3].
-    // U must be convertible to T.
-    template <typename U>
-    GRACE_HOST_DEVICE Vector(const Sphere<U>& sphere) :
-        Base(sphere.x, sphere.y, sphere.z, sphere.w) {}
 
 #ifdef __CUDACC__
     // float must be convertible to T.

@@ -39,11 +39,11 @@ GRACE_ALIGNED_STRUCT(16) AABB
     GRACE_HOST_DEVICE AABB(const double3& min, const double3& max);
 #endif
 
-    GRACE_HOST_DEVICE T area();
+    GRACE_HOST_DEVICE T area() const;
 
-    GRACE_HOST_DEVICE Vector<3, T> center();
+    GRACE_HOST_DEVICE Vector<3, T> center() const;
 
-    GRACE_HOST_DEVICE Vector<3, T> size();
+    GRACE_HOST_DEVICE Vector<3, T> size() const;
 
     GRACE_HOST_DEVICE void scale(const T s);
     GRACE_HOST_DEVICE void scale(const Vector<3, T>& vec);
