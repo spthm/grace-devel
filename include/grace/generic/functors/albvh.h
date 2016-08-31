@@ -64,7 +64,9 @@ struct DeltaEuclidean
         const size_t n_primitives) const
     {
         if (i < 0 || i + 1 >= n_primitives) {
-#ifdef __CUDA_ARCH__
+// On CUDA 6.0 (and possibly others), __CUDA_ARCH__ appears to be defined, but
+// equal to 0, for some stage of the compilation process.
+#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ > 0))
             return CUDART_INF_F;
 #else
             return std::numeric_limits<float>::infinity();
@@ -100,7 +102,9 @@ struct DeltaSurfaceArea
         const size_t n_primitives) const
     {
         if (i < 0 || i + 1 >= n_primitives) {
-#ifdef __CUDA_ARCH__
+// On CUDA 6.0 (and possibly others), __CUDA_ARCH__ appears to be defined, but
+// equal to 0, for some stage of the compilation process.
+#if (defined(__CUDA_ARCH__) && (__CUDA_ARCH__ > 0))
             return CUDART_INF_F;
 #else
             return std::numeric_limits<float>::infinity();
