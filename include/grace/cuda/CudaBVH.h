@@ -5,112 +5,81 @@
 
 namespace grace {
 
+namespace detail {
+
+// Forward declaration
+template <typename PrimitiveType>
+class CudaBVHPtrs;
+
+} // namespace detail
+
 template <typename PrimitiveType>
 class CudaBVH
 {
 public:
     typedef PrimitiveType primitive_type;
     typedef typename thrust::device_vector<PrimitiveType> primitive_vector;
-    typedef typename thrust::device_vector<detail::CudaNode> node_vector;
-    typedef typename thrust::device_vector<detail::CudaLeaf> leaf_vector;
-
-    // Allocates space only.
-    GRACE_HOST CudaBVH(const size_t N_primitives,
-                       const int max_per_leaf = 1) :
-        max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        primitives.reserve(N_primitives);
-        initialize_reserve();
-    }
-
-    GRACE_HOST CudaBVH(const PrimitiveType* host_ptr, const size_t N_primitives,
-                       const int max_per_leaf = 1) :
-        primitives(host_ptr, host_ptr + N_primitives),
-        max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        initialize_reserve();
-    }
-
-    GRACE_HOST CudaBVH(const std::vector<PrimitiveType>& primitives,
-                       const int max_per_leaf = 1) :
-        primitives(primitives), max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        initialize_reserve();
-    }
-
-    GRACE_HOST CudaBVH(const thrust::host_vector<PrimitiveType>& primitives,
-                       const int max_per_leaf = 1) :
-        primitives(primitives), max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        initialize_reserve();
-    }
-
-    GRACE_HOST CudaBVH(const thrust::device_vector<PrimitiveType>& primitives,
-                       const int max_per_leaf = 1) :
-        primitives(primitives), max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        initialize_reserve();
-    }
-
-    template <typename PrimitiveIter>
-    GRACE_HOST CudaBVH(PrimitiveIter first, PrimitiveIter last,
-                       const int max_per_leaf = 1) :
-        primitives(first, last), max_per_leaf(max_per_leaf), root_index(-1)
-    {
-        initialize_reserve();
-    }
-
-    GRACE_HOST CudaBVH(const CudaBVH<PrimitiveIter>& other) :
-        primitives(other.primitives), nodes(other.nodes), leaves(other.leaves),
-        max_per_leaf(other.max_per_leaf), root_index(other.root_index) {}
-
-
-    const primitive_vector& primitives() const
-    {
-        return primitives;
-    }
-    primitive_vector& primitives()
-    {
-        return primitives;
-    }
-
-    const node_vector& nodes() const
-    {
-        return nodes;
-    }
-    node_vector& nodes()
-    {
-        return nodes;
-    }
-
-    const leaf_vector& leaves() const
-    {
-        return leaves;
-    }
-    leaf_vector& leaves()
-    {
-        return leaves;
-    }
-
-private:
-
-    primitive_vector primitives;
-    node_vector nodes;
-    leaf_vector leaves;
 
     const int max_per_leaf;
     int root_index;
 
-    GRACE_HOST initialize_reserve()
-    {
-        size_t estimate = primitives.size();
-        if (max_per_leaf > 1) {
-            estimate = (size_t)(1.4 * (primitives.size() / max_per_leaf));
-        }
+    // Allocates space only.
+    GRACE_HOST CudaBVH(const size_t N_primitives, const int max_per_leaf = 1);
 
-        nodes.reserve(esimate);
-        leaves.reserve(esimate);
-    }
+    // Copies primitives to device.
+    GRACE_HOST CudaBVH(const PrimitiveType* host_ptr, const size_t N_primitives,
+                       const int max_per_leaf = 1);
+
+    // Copies primitives to device.
+    GRACE_HOST CudaBVH(const std::vector<PrimitiveType>& primitives,
+                       const int max_per_leaf = 1);
+
+    // Copies primitives to device.
+    GRACE_HOST CudaBVH(const thrust::host_vector<PrimitiveType>& primitives,
+                       const int max_per_leaf = 1);
+
+    // Copies primitives.
+    GRACE_HOST CudaBVH(const thrust::device_ptr<PrimitiveType> primitives,
+                       const size_t N_primitives,
+                       const int max_per_leaf = 1);
+
+    // Copies primitives.
+    GRACE_HOST CudaBVH(const thrust::device_vector<PrimitiveType>& primitives,
+                       const int max_per_leaf = 1);
+
+    // Copies primitives (whether iterator is host- or device-side).
+    // Note that if first and last refer to device-side data, they must be
+    // thrust iterators or thrust::device_ptrs.
+    GRACE_HOST CudaBVH(PrimitiveIter first, PrimitiveIter last,
+                       const int max_per_leaf = 1);
+
+    // Copies all BVH data, including primitives.
+    GRACE_HOST CudaBVH(const CudaBVH<PrimitiveIter>& other);
+
+    GRACE_HOST const primitive_vector& primitives() const;
+
+    // Care should be taken with this accessor. If the underlying data is
+    // modified, the tree must be rebuilt.
+    GRACE_HOST primitive_vector& primitives();
+
+private:
+    typedef typename thrust::device_vector<detail::CudaNode> node_vector;
+    typedef typename thrust::device_vector<detail::CudaLeaf> leaf_vector;
+
+    primitive_vector _primitives;
+    node_vector _nodes;
+    leaf_vector _leaves;
+
+    GRACE_HOST const leaf_vector& leaves() const;
+    GRACE_HOST leaf_vector& leaves();
+    GRACE_HOST const node_vector& nodes() const;
+    GRACE_HOST node_vector& nodes();
+    GRACE_HOST void reserve_nodes();
+
+    friend class detail::CudaBVHPtrs<PrimitiveType>;
 };
 
 } //namespace grace
+
+#include "grace/cuda/detail/CudaBVH-inl.h"
+#include "grace/cuda/detail/CudaBVHPtrs-inl.h"
