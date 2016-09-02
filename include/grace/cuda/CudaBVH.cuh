@@ -8,8 +8,9 @@ namespace grace {
 
 namespace detail {
 
-// Forward declaration
-class CudaBVHRefs;
+// Forward declarations
+class CudaBVH_ref;
+class CudaBVH_const_ref;
 
 } // namespace detail
 
@@ -40,7 +41,8 @@ private:
 
     GRACE_HOST void reserve_nodes(const size_t);
 
-    friend class detail::CudaBVHRefs;
+    friend class detail::CudaBVH_ref;
+    friend class detail::CudaBVH_const_ref;
 };
 
 } //namespace grace

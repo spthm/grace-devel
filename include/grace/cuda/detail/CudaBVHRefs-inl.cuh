@@ -14,7 +14,7 @@ namespace grace {
 
 namespace detail {
 
-class CudaBVHRefs
+class CudaBVH_ref
 {
 public:
     typedef CudaBVH BVH;
@@ -23,7 +23,7 @@ public:
     typedef typename BVH::node_vector::iterator node_iterator;
     typedef typename BVH::leaf_vector::iterator leaf_iterator;
 
-    GRACE_HOST CudaBVHRefs(const BVH& cuda_bvh) :
+    GRACE_HOST CudaBVH_ref(BVH& cuda_bvh) :
         _nodes_ref(cuda_bvh._nodes), _leaves_ref(cuda_bvh._leaves) {}
 
     BVH::node_vector& nodes()
@@ -50,6 +50,47 @@ public:
 private:
     BVH::node_vector& _nodes_ref;
     BVH::leaf_vector& _leaves_ref;
+};
+
+class CudaBVH_const_ref
+{
+public:
+    typedef CudaBVH BVH;
+    typedef typename BVH::node_vector::value_type node_type;
+    typedef typename BVH::leaf_vector::value_type leaf_type;
+    typedef typename BVH::node_vector::iterator node_iterator;
+    typedef typename BVH::leaf_vector::iterator leaf_iterator;
+
+    GRACE_HOST CudaBVH_const_ref(BVH& cuda_bvh) :
+        _const_nodes_ref(cuda_bvh._nodes), _const_leaves_ref(cuda_bvh._leaves) {}
+
+    GRACE_HOST CudaBVH_const_ref(const BVH& cuda_bvh) :
+        _const_nodes_ref(cuda_bvh._nodes), _const_leaves_ref(cuda_bvh._leaves) {}
+
+    BVH::node_vector& nodes()
+    {
+        return const_cast<BVH::node_vector&>(_const_nodes_ref);
+    }
+
+    const BVH::node_vector& nodes() const
+    {
+        return _const_nodes_ref;
+    }
+
+    BVH::leaf_vector& leaves()
+    {
+        return const_cast<BVH::leaf_vector&>(_const_leaves_ref);
+    }
+
+
+    const BVH::leaf_vector& leaves() const
+    {
+        return _const_leaves_ref;
+    }
+
+private:
+    const BVH::node_vector& _const_nodes_ref;
+    const BVH::leaf_vector& _const_leaves_ref;
 };
 
 } // namespace detail
