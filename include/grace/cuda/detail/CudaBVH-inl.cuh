@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/CudaBVH.h"
+#include "grace/cuda/CudaBVH.cuh"
 
 namespace grace {
 

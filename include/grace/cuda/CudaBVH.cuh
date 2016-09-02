@@ -8,7 +8,7 @@ namespace grace {
 namespace detail {
 
 // Forward declaration
-class CudaBVHPtrs;
+class CudaBVHRefs;
 
 } // namespace detail
 
@@ -39,10 +39,10 @@ private:
 
     GRACE_HOST void reserve_nodes();
 
-    friend class detail::CudaBVHPtrs;
+    friend class detail::CudaBVHRefs;
 };
 
 } //namespace grace
 
-#include "grace/cuda/detail/CudaBVH-inl.h"
-#include "grace/cuda/detail/CudaBVHPtrs-inl.h"
+#include "grace/cuda/detail/CudaBVH-inl.cuh"
+#include "grace/cuda/detail/CudaBVHRefs-inl.cuh"
