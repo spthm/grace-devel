@@ -11,25 +11,34 @@ namespace detail {
 // A 32-bit int allows for indices up to 2,147,483,647 > 1024^3.
 // Since we likely can't fit more than 1024^3 particles on the GPU, int ---
 // which is 32-bit on relevant platforms --- should be sufficient for the
-// indices. In ALBVH there is no reason not to use uint, though.
-//
-
+// indices.
 
 GRACE_ALIGNED_STRUCT(16) CudaLeaf
 {
 private:
     // .x = index of first sphere in this leaf
     // .y = number of spheres in this leaf
-    // .z = padding
-    // .w = padding
+    // .z = parent_index
+    // .w = parent_index
     Vector<4, int> hierarchy;
 
 public:
+    GRACE_HOST_DEVICE CudaLeaf() :
+        hierarchy(Vector<4, int>()) {}
+
+    GRACE_HOST_DEVICE CudaLeaf(const int first_primitive,
+                               const int num_primitives,
+                               const int parent) :
+        hierarchy(first_primitive, num_primitives, parent, parent) {}
+
+    GRACE_HOST_DEVICE CudaLeaf(const CudaLeaf& other) :
+        hierarchy(other.hierarchy) {}
+
     GRACE_HOST_DEVICE bool is_inner() const
     {
         // TODO Common node/leaf base class:
-        // test hierarchy.w != 0, and have leaves always set hierarchy.w = 0?
-        // right-most leaf can never be zero for an inner node.
+        // test hierarchy.z != hierarchy.w (which must always be true for inner
+        // nodes as they must span at least two leaves).
         return false;
     }
 
@@ -51,6 +60,16 @@ public:
     GRACE_HOST_DEVICE int last_primitive() const
     {
         return first_primitive() + size() - 1;
+    }
+
+    GRACE_HOST_DEVICE int parent() const
+    {
+        return hierarchy.w;
+    }
+
+    GRACE_HOST_DEVICE int set_parent(const int index)
+    {
+        hierarchy.w = index;
     }
 
     GRACE_HOST_DEVICE int size() const
@@ -92,6 +111,17 @@ private:
     Vector<4, float> AABB_LRz;
 
 public:
+    GRACE_HOST_DEVICE CudaNode() :
+        hierarchy(Vector<4, int>()) {}
+
+    GRACE_HOST_DEVICE CudaNode(const int left_child, const int right_child,
+                               const int first_leaf, const int last_leaf) :
+        hierarchy(Vector<4, int>(left_child, right_child, first_leaf, last_leaf)) {}
+
+    GRACE_HOST_DEVICE CudaNode(const CudaNode& other) :
+        hierarchy(other.hierarchy),AABB_Lxy(other.AABB_Lxy),
+        AABB_Rxy(other.AABB_Rxy), AABB_LRz(other.AABB_LRz) {}
+
     GRACE_HOST_DEVICE bool is_inner() const
     {
         return true;
@@ -133,11 +163,25 @@ public:
         return hierarchy.w - hierarcy.z + 1;
     }
 
+    GRACE_HOST_DEVICE AABB<float> AABB() const
+    {
+        const Vector<3, float> bot(min(AABB_Lxy.x, AABB_Rxy.x),
+                                   min(AABB_Lxy.z, AABB_Rxy.z),
+                                   min(AABB_LRz.x, AABB_LRz.z));
+
+        const Vector<3, float> top(max(AABB_Lxy.y, AABB_Rxy.y),
+                                   max(AABB_Lxy.w, AAVV_Rxy.w),
+                                   max(AABB_LRz.y, AABB_LRz.w));
+
+        return AABB<float>(bot, top);
+
+    }
+
     GRACE_HOST_DEVICE AABB<float> left_AABB() const
     {
-        const Vector<3, float> min(AABB_Lxy.x, AABB_Lxy.z, AABB_LRz.x);
-        const Vector<3, float> max(AABB_Lxy.y, AABB_Lxy.w, AABB_LRz.y);
-        return AABB<float>(min, max);
+        const Vector<3, float> bot(AABB_Lxy.x, AABB_Lxy.z, AABB_LRz.x);
+        const Vector<3, float> top(AABB_Lxy.y, AABB_Lxy.w, AABB_LRz.y);
+        return AABB<float>(bot, top);
     }
 
     GRACE_HOST_DEVICE void set_left_AABB(const AABB<float>& aabb)
@@ -153,9 +197,9 @@ public:
 
     GRACE_HOST_DEVICE AABB<float> right_AABB() const
     {
-        const Vector<3, float> min(AABB_Rxy.x, AABB_Rxy.z, AABB_LRz.z);
-        const Vector<3, float> max(AABB_Rxy.y, AABB_Rxy.w, AABB_LRz.w);
-        return AABB<float>(min, max);
+        const Vector<3, float> bot(AABB_Rxy.x, AABB_Rxy.z, AABB_LRz.z);
+        const Vector<3, float> top(AABB_Rxy.y, AABB_Rxy.w, AABB_LRz.w);
+        return AABB<float>(bot, top);
     }
 
     GRACE_HOST_DEVICE void set_right_AABB(const AABB<float>& aabb)

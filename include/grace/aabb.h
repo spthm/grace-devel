@@ -64,6 +64,15 @@ template <typename T>
 GRACE_HOST_DEVICE
 bool operator!=(const AABB<T>& lhs, const AABB<T>& rhs);
 
+
+//
+// Geometric operations
+//
+
+template <typename T>
+GRACE_HOST_DEVICE
+AABB<T> aabb_union(const AABB<T>& lhs, const AABB<T>& rhs);
+
 } // namespace grace
 
 #include "grace/detail/aabb-inl.h"
