@@ -1,6 +1,7 @@
 #pragma once
 
-#include <thrust/host_vector.h>
+#include "grace/cuda/detail/CudaNode-inl.cuh"
+
 #include <thrust/device_vector.h>
 
 namespace grace {
@@ -37,7 +38,7 @@ private:
     node_vector _nodes;
     leaf_vector _leaves;
 
-    GRACE_HOST void reserve_nodes();
+    GRACE_HOST void reserve_nodes(const size_t);
 
     friend class detail::CudaBVHRefs;
 };

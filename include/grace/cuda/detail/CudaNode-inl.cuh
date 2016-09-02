@@ -67,7 +67,7 @@ public:
         return hierarchy.w;
     }
 
-    GRACE_HOST_DEVICE int set_parent(const int index)
+    GRACE_HOST_DEVICE void set_parent(const int index)
     {
         hierarchy.w = index;
     }
@@ -135,7 +135,7 @@ public:
     GRACE_HOST_DEVICE bool is_empty() const
     {
         // Right child can never be at index 0.
-        return hierarchy.y > 0;
+        return hierarchy.y == 0;
     }
 
     GRACE_HOST_DEVICE bool left_is_inner(const size_t N) const
@@ -160,31 +160,31 @@ public:
 
     GRACE_HOST_DEVICE int size() const
     {
-        return hierarchy.w - hierarcy.z + 1;
+        return hierarchy.w - hierarchy.z + 1;
     }
 
-    GRACE_HOST_DEVICE AABB<float> AABB() const
+    GRACE_HOST_DEVICE grace::AABB<float> AABB() const
     {
         const Vector<3, float> bot(min(AABB_Lxy.x, AABB_Rxy.x),
                                    min(AABB_Lxy.z, AABB_Rxy.z),
                                    min(AABB_LRz.x, AABB_LRz.z));
 
         const Vector<3, float> top(max(AABB_Lxy.y, AABB_Rxy.y),
-                                   max(AABB_Lxy.w, AAVV_Rxy.w),
+                                   max(AABB_Lxy.w, AABB_Rxy.w),
                                    max(AABB_LRz.y, AABB_LRz.w));
 
-        return AABB<float>(bot, top);
+        return grace::AABB<float>(bot, top);
 
     }
 
-    GRACE_HOST_DEVICE AABB<float> left_AABB() const
+    GRACE_HOST_DEVICE grace::AABB<float> left_AABB() const
     {
         const Vector<3, float> bot(AABB_Lxy.x, AABB_Lxy.z, AABB_LRz.x);
         const Vector<3, float> top(AABB_Lxy.y, AABB_Lxy.w, AABB_LRz.y);
-        return AABB<float>(bot, top);
+        return grace::AABB<float>(bot, top);
     }
 
-    GRACE_HOST_DEVICE void set_left_AABB(const AABB<float>& aabb)
+    GRACE_HOST_DEVICE void set_left_AABB(const grace::AABB<float>& aabb)
     {
         AABB_Lxy.x = aabb.min.x;
         AABB_Lxy.z = aabb.min.y;
@@ -195,14 +195,14 @@ public:
         AABB_LRz.y = aabb.max.z;
     }
 
-    GRACE_HOST_DEVICE AABB<float> right_AABB() const
+    GRACE_HOST_DEVICE grace::AABB<float> right_AABB() const
     {
         const Vector<3, float> bot(AABB_Rxy.x, AABB_Rxy.z, AABB_LRz.z);
         const Vector<3, float> top(AABB_Rxy.y, AABB_Rxy.w, AABB_LRz.w);
-        return AABB<float>(bot, top);
+        return grace::AABB<float>(bot, top);
     }
 
-    GRACE_HOST_DEVICE void set_right_AABB(const AABB<float>& aabb)
+    GRACE_HOST_DEVICE void set_right_AABB(const grace::AABB<float>& aabb)
     {
         AABB_Rxy.x = aabb.min.x;
         AABB_Rxy.z = aabb.min.y;

@@ -12,8 +12,7 @@ GRACE_HOST
 CudaBVH::CudaBVH(const size_t N_primitives, const int max_per_leaf) :
     max_per_leaf(max_per_leaf), root_index(-1)
 {
-    _primitives.reserve(N_primitives);
-    reserve_nodes();
+    reserve_nodes(N_primitives);
 
     GRACE_CUDA_CHECK(cudaMalloc(&d_root_index_ptr, sizeof(int)));
     GRACE_CUDA_CHECK(cudaMemcpy((void*)d_root_index_ptr,
@@ -23,7 +22,7 @@ CudaBVH::CudaBVH(const size_t N_primitives, const int max_per_leaf) :
 
 GRACE_HOST
 CudaBVH::CudaBVH(const CudaBVH& other) :
-    _nodes(other.nodes), _leaves(other.leaves),
+    _nodes(other._nodes), _leaves(other._leaves),
     max_per_leaf(other.max_per_leaf), root_index(other.root_index)
 {
     GRACE_CUDA_CHECK(cudaMalloc(&d_root_index_ptr, sizeof(int)));
@@ -53,7 +52,8 @@ size_t CudaBVH::num_nodes() const
     return _nodes.size();
 }
 
-GRACE_HOST CudaBVH::num_leaves() const
+GRACE_HOST
+size_t CudaBVH::num_leaves() const
 {
     return _leaves.size();
 }
@@ -64,15 +64,15 @@ GRACE_HOST CudaBVH::num_leaves() const
 //
 
 GRACE_HOST
-void CudaBVH::reserve_nodes()
+void CudaBVH::reserve_nodes(const size_t N_primitives)
 {
-    size_t estimate = _primitives.size();
+    size_t estimate = N_primitives;
     if (max_per_leaf > 1) {
-        estimate = (size_t)(1.4 * (_primitives.size() / max_per_leaf));
+        estimate = (size_t)(1.4 * (N_primitives / max_per_leaf));
     }
 
-    _nodes.reserve(esimate);
-    _leaves.reserve(esimate);
+    _nodes.reserve(estimate);
+    _leaves.reserve(estimate);
 }
 
 
