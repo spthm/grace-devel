@@ -47,6 +47,11 @@ public:
         return true;
     }
 
+    GRACE_HOST_DEVICE bool is_empty() const
+    {
+        return hierarchy.y == 0;
+    }
+
     GRACE_HOST_DEVICE int first_primitive() const
     {
         return hierarchy.x;
@@ -251,6 +256,19 @@ public:
     GRACE_HOST_DEVICE void set_last_leaf(const int index)
     {
         hierarchy.w = index;
+    }
+};
+
+struct is_empty_node
+{
+    GRACE_HOST_DEVICE bool operator()(const CudaLeaf& leaf)
+    {
+        return leaf.is_empty();
+    }
+
+    GRACE_HOST_DEVICE bool operator()(const CudaNode& node)
+    {
+        return node.is_empty();
     }
 };
 
