@@ -107,4 +107,19 @@ bool operator!=(const AABB<T>& lhs, const AABB<T>& rhs)
     return lhs.min != rhs.min || lhs.max != rhs.max;
 }
 
+
+//
+// Geometric operations
+//
+
+template <typename T>
+GRACE_HOST_DEVICE
+AABB<T> aabb_union(const AABB<T>& lhs, const AABB<T>& rhs)
+{
+    AABB<T> result;
+    result.min = min(lhs.min, rhs.min);
+    result.max = max(lhs.max, rhs.max);
+    return result;
+}
+
 } // namespace grace
