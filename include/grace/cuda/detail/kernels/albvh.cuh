@@ -3,7 +3,8 @@
 #include "grace/cuda/detail/device/loadstore.cuh"
 
 #include "grace/cuda/detail/kernel_config.h"
-#include "grace/cuda/nodes.h"
+
+#include "grace/cuda/CudaBVH.cuh"
 
 #include "grace/aabb.h"
 #include "grace/error.h"
@@ -26,7 +27,71 @@
 
 namespace grace {
 
-namespace ALBVH {
+namespace detail {
+
+//
+// ALBVH helper functions
+//
+
+GRACE_DEVICE bool albvh_is_left_child(int2 node, int parent_index) {
+    return node.y == parent_index;
+}
+
+GRACE_DEVICE CudaNode albvh_decode_node(CudaNode node) {
+    CudaNode decoded(node);
+    decoded.set_left_child(-1 * node.left_child() - 1);
+    decoded.set_right_child(-1 * node.right_child() - 1);
+
+    return decoded;
+}
+
+GRACE_DEVICE CudaNode albvh_encode_node(CudaNode node) {
+    CudaNode encoded(node);
+    encoded.set_left_child(-1 * (node.left_child() + 1));
+    encoded.set_right_child(-1 * (node.right_child() + 1));
+    return encoded;
+}
+
+// Return the parent index in terms of the base nodes, given the actual parent
+// index and the base nodes covered by the current node.
+GRACE_DEVICE int albvh_logical_parent(CudaNode node, int2 g_node, int g_parent_index)
+{
+    return albvh_is_left_child(g_node, g_parent_index) ? node.last_leaf() : node.first_leaf() - 1;
+}
+
+// Find the parent index of a node.
+// node contains the left- and right-most primitives it spans.
+// deltas is an array of per-primitive delta values.
+template <typename DeltaIter, typename DeltaComp>
+GRACE_DEVICE int albvh_node_parent(int2 node, DeltaIter deltas, DeltaComp comp)
+{
+    typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
+    DeltaType deltaL = deltas[node.x - 1];
+    DeltaType deltaR = deltas[node.y];
+
+    int parent_index;
+    if (comp(deltaL, deltaR)) {
+        parent_index = node.x - 1;
+    }
+    else {
+        parent_index = node.y;
+    }
+
+    return parent_index;
+}
+
+// Find the parent index of a node.
+// node contains the left- and right-most primitives it spans.
+// deltas is an array of per-leaf delta values.
+template <typename DeltaIter, typename DeltaComp>
+GRACE_DEVICE int albvh_node_parent(CudaNode node, DeltaIter deltas, DeltaComp comp)
+{
+    return albvh_node_parent(make_int2(node.first_leaf(), node.last_leaf()), deltas, comp);
+}
+
+GRACE_DEVICE bool out_of_block(int index, int low, int high) {
+    return (index < low || index >= high);
+}
 
 //-----------------------------------------------------------------------------
 // CUDA ALBVH kernels.
@@ -52,7 +117,7 @@ __global__ void compute_deltas_kernel(
 // Two template parameters as DeltaIter _may_ be const_iterator or const T*.
 template<typename DeltaIter, typename LeafDeltaIter>
 __global__ void copy_leaf_deltas_kernel(
-    const int4* leaves,
+    const CudaLeaf* leaves,
     const size_t n_leaves,
     DeltaIter all_deltas,
     LeafDeltaIter leaf_deltas)
@@ -68,8 +133,8 @@ __global__ void copy_leaf_deltas_kernel(
 
     while (tid < n_leaves)
     {
-        int4 leaf = leaves[tid];
-        int last_idx = leaf.x + leaf.y - 1;
+        CudaLeaf leaf = leaves[tid];
+        int last_idx = leaf.last_primitive();
         leaf_deltas[tid] = all_deltas[last_idx];
 
         tid += blockDim.x * gridDim.x;
@@ -239,7 +304,7 @@ __global__ void build_leaves_kernel(
 __global__ void write_leaves_kernel(
     const int2* nodes,
     const size_t n_nodes,
-    int4* big_leaves,
+    CudaLeaf* big_leaves,
     const int max_per_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -281,15 +346,15 @@ __global__ void write_leaves_kernel(
         // NOTE: size is guaranteed accurate only if both left_leaf and
         // right_leaf are true, but if they are both false no write occurs
         // anyway because of the && below.
-        int4 leaf;
+        CudaLeaf leaf;
         if (left_leaf && write_check) {
-            leaf.x = left;
-            leaf.y = left_size;
+            leaf.set_first_primitive(left);
+            leaf.set_size(left_size);
             big_leaves[left] = leaf;
         }
         if (right_leaf && write_check) {
-            leaf.x = tid + 1;
-            leaf.y = right_size;
+            leaf.set_first_primitive(tid + 1);
+            leaf.set_size(right_size);
             big_leaves[right] = leaf;
         }
 
@@ -304,10 +369,9 @@ template <
     typename AABBFunc
     >
 __global__ void build_nodes_slice_kernel(
-    int4* nodes,
-    float4* f4_nodes,
+    CudaNode* nodes,
     const size_t n_nodes,
-    const int4* leaves,
+    const CudaLeaf* leaves,
     const size_t n_leaves,
     PrimitiveIter primitives,
     const int* base_indices,
@@ -319,7 +383,7 @@ __global__ void build_nodes_slice_kernel(
     const DeltaComp delta_comp,
     const AABBFunc aabb_op)
 {
-    typedef typename std::iterator_traits<PrimitiveIter>::value_type TPrimitive;
+    typedef typename std::iterator_traits<PrimitiveIter>::value_type PrimitiveType;
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
 
     extern __shared__ int SMEM[];
@@ -378,65 +442,37 @@ __global__ void build_nodes_slice_kernel(
             // Node index can be >= n_nodes if a leaf.
             GRACE_ASSERT(g_cur_index < n_nodes + n_leaves);
 
-            int4 node;
-            if (g_cur_index < n_nodes)
-                node = nodes[4 * g_cur_index + 0];
-            else
-                node = leaves[g_cur_index - n_nodes];
-
-            float x_min, y_min, z_min;
-            float x_max, y_max, z_max;
+            int g_left, g_right;
+            AABB<float> node_aabb;
             if (g_cur_index < n_nodes) {
-                float4 AABB_L  = f4_nodes[4 * g_cur_index + 1];
-                float4 AABB_R  = f4_nodes[4 * g_cur_index + 2];
-                float4 AABB_LR = f4_nodes[4 * g_cur_index + 3];
+                CudaNode node = nodes[g_cur_index];
+                node_aabb = node.AABB();
 
-                // Compute the current node's AABB (union of its children's
-                // AABBs).
-                x_min = min(AABB_L.x, AABB_R.x);
-                x_max = max(AABB_L.y, AABB_R.y);
-
-                y_min = min(AABB_L.z, AABB_R.z);
-                y_max = max(AABB_L.w, AABB_R.w);
-
-                z_min = min(AABB_LR.x, AABB_LR.z);
-                z_max = max(AABB_LR.y, AABB_LR.w);
+                g_left = node.left_child();
+                g_right = node.right_child();
             }
             else {
-                x_min = y_min = z_min = CUDART_INF_F;
-                x_max = y_max = z_max = -CUDART_INF_F;
+                CudaLeaf leaf = leaves[g_cur_index - n_nodes];
 
-                // Current node is a leaf; compute it's AABB from the spheres
-                // it contains.
                 #pragma unroll 4
-                for (int i = 0; i < node.y; i++) {
-                    TPrimitive prim = primitives[node.x + i];
+                for (int i = 0; i < leaf.size(); i++) {
+                    PrimitiveType prim = primitives[leaf.first_primitive() + i];
 
-                    AABB<float> aabb;
-                    aabb_op(prim, &aabb);
-
-                    x_min = min(x_min, aabb.min.x);
-                    x_max = max(x_max, aabb.max.x);
-
-                    y_min = min(y_min, aabb.min.y);
-                    y_max = max(y_max, aabb.max.y);
-
-                    z_min = min(z_min, aabb.min.z);
-                    z_max = max(z_max, aabb.max.z);
+                    AABB<float> prim_aabb;
+                    aabb_op(prim, &prim_aabb);
+                    node_aabb = aabb_union(node_aabb, prim_aabb);
                 }
+
+                // Recall that leaf left/right limits are equal to the leaf
+                // index, minus the leaf-identifying offset.
+                g_left = g_cur_index - n_nodes;
+                g_right = g_cur_index - n_nodes;
             }
 
             // Note, they should never be equal.
-            GRACE_ASSERT(x_min < x_max);
-            GRACE_ASSERT(y_min < y_max);
-            GRACE_ASSERT(z_min < z_max);
-
-            // Recall that leaf left/right limits are equal to the leaf index,
-            // minus the leaf-identifying offset.
-            int g_left = (g_cur_index < n_nodes ? node.z :
-                                                  g_cur_index - n_nodes);
-            int g_right = (g_cur_index < n_nodes ? node.w :
-                                                   g_cur_index - n_nodes);
+            GRACE_ASSERT(node_aabb.min.x < node_aabb.max.x);
+            GRACE_ASSERT(node_aabb.min.y < node_aabb.max.y);
+            GRACE_ASSERT(node_aabb.min.z < node_aabb.max.z);
 
             // Only the left-most leaf can have an index of 0, and only the
             // right-most leaf can have an index of n_leaves - 1.
@@ -458,58 +494,25 @@ __global__ void build_nodes_slice_kernel(
 
             DeltaType delta_L = deltas[g_left - 1];
             DeltaType delta_R = deltas[g_right];
-            int* child_addr;
-            int* end_addr;
-            volatile int* sm_addr;
-            float2* AABB_f2_addr;
-            float4* AABB_f4_addr;
-            int end, sm_end;
             // Compute the current node's parent index and write-to locations.
             if (delta_comp(delta_L, delta_R))
             {
                 // Leftward node is parent.
-                parent_index = left - 1;
-                g_parent_index = g_left - 1;
-
                 // Current node is a right child.
-                // The -ve end index encodes the fact that the node was written
-                // this iteration.
-                child_addr = &(nodes[4 * g_parent_index + 0].y);
-                end_addr = &(nodes[4 * g_parent_index + 0].w);
-                end = -1 * (right + 1);
-
-                // Right-most global node index.
-                sm_addr = &(sm_nodes[parent_index - low].y);
-                sm_end = g_right;
-
-                // Right child AABB.
-                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
-                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
+                g_parent_index = g_left - 1;
+                parent_index = left - 1;
             }
-            else {
+            else
+            {
                 // Rightward node is parent.
-                parent_index = right;
-                g_parent_index = g_right;
-
                 // Current node is a left child.
-                // The -ve end index encodes the fact that the node was written
-                // this iteration.
-                child_addr = &(nodes[4 * g_parent_index + 0].x);
-                end_addr = &(nodes[4 * g_parent_index + 0].z);
-                end = -1 * (left + 1);
-
-                // Left-most global node index.
-                sm_addr = &(sm_nodes[parent_index - low].x);
-                sm_end = g_left;
-
-                // Left child AABB.
-                AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
-                AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
+                g_parent_index = g_right;
+                parent_index = right;
             }
 
             // If the leaf's parent is outside this block do not write anything;
             // an adjacent block will follow this path.
-            if (parent_index < low || parent_index >= high)
+            if (out_of_block(parent_index, low, high))
                 continue;
 
             // Parent index must be at a valid location for writing to sm_nodes
@@ -517,14 +520,26 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(parent_index - low >= 0);
             GRACE_ASSERT(parent_index - low < grace::BUILD_THREADS_PER_BLOCK + max_per_node);
 
-            // Normal stores.  Other threads in this block can read from L1 if
-            // they get a cache hit, i.e. there is no requirement for global
-            // coherency.
-            *child_addr = g_cur_index;
-            *end_addr = end;
-            *AABB_f4_addr = make_float4(x_min, x_max, y_min, y_max);
-            *AABB_f2_addr = make_float2(z_min, z_max);
-            *sm_addr = sm_end;
+            if (delta_comp(delta_L, delta_R))
+            {
+                nodes[g_parent_index].set_right_child(g_cur_index);
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
+                nodes[g_parent_index].set_last_leaf(-1 * (right + 1));
+                nodes[g_parent_index].set_right_AABB(node_aabb);
+                // Right-most global node index.
+                sm_nodes[parent_index - low].y = g_right;
+            }
+            else
+            {
+                nodes[g_parent_index].set_left_child(g_cur_index);
+                // The -ve end index encodes the fact that the node was written
+                // this iteration.
+                nodes[g_parent_index].set_first_leaf(-1 * (left + 1));
+                nodes[g_parent_index].set_left_AABB(node_aabb);
+                // Left-most global node index.
+                sm_nodes[parent_index - low].x = g_left;
+            }
 
             // Travel up the tree.  The second thread to reach a node writes its
             // logical/compressed left or right end to its parent; the first
@@ -545,8 +560,7 @@ __global__ void build_nodes_slice_kernel(
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
-                // int4 node = load_vec4s32(&(nodes[4 * g_cur_index + 0].x));
-                int4 node = nodes[4 * g_cur_index + 0];
+                CudaNode node = nodes[g_cur_index];
 
                 // 'error: class "int2" has no suitable copy constructor'
                 // int2 left_right = sm_nodes[cur_index - low];
@@ -560,8 +574,8 @@ __global__ void build_nodes_slice_kernel(
                 GRACE_ASSERT(g_right < n_leaves);
 
                 // Undo the -ve sign encoding.
-                int left = -1 * node.z - 1;
-                int right = -1 * node.w - 1;
+                int left = -1 * node.first_leaf() - 1;
+                int right = -1 * node.last_leaf() - 1;
                 // We are the second thread in this block to reach this node.
                 // Both of its logical/compressed end-indices must also be in
                 // this block.
@@ -584,78 +598,56 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 // Again, L1 data will be accurate.
-                float4 AABB_L  = f4_nodes[4 * g_cur_index + 1];
-                float4 AABB_R  = f4_nodes[4 * g_cur_index + 2];
-                float4 AABB_LR = f4_nodes[4 * g_cur_index + 3];
+                AABB<float> node_aabb = node.AABB();
 
-                float x_min = min(AABB_L.x, AABB_R.x);
-                float x_max = max(AABB_L.y, AABB_R.y);
-                float y_min = min(AABB_L.z, AABB_R.z);
-                float y_max = max(AABB_L.w, AABB_R.w);
-                float z_min = min(AABB_LR.x, AABB_LR.z);
-                float z_max = max(AABB_LR.y, AABB_LR.w);
-
-                GRACE_ASSERT(x_min < x_max);
-                GRACE_ASSERT(y_min < y_max);
-                GRACE_ASSERT(z_min < z_max);
+                GRACE_ASSERT(node_aabb.min.x < node_aabb.max.x);
+                GRACE_ASSERT(node_aabb.min.y < node_aabb.max.y);
+                GRACE_ASSERT(node_aabb.min.z < node_aabb.max.z);
 
                 DeltaType delta_L = deltas[g_left - 1];
                 DeltaType delta_R = deltas[g_right];
-                int* child_addr;
-                int* end_addr;
-                volatile int* sm_addr;
-                float2* AABB_f2_addr;
-                float4* AABB_f4_addr;
-                int end, sm_end;
                 if (delta_comp(delta_L, delta_R))
                 {
                     // Leftward node is parent.
+                    // Current node is a right child.
                     parent_index = left - 1;
                     g_parent_index = g_left - 1;
-
-                    // Current node is a right child.
-                    child_addr = &(nodes[4 * g_parent_index + 0].y);
-                    end_addr = &(nodes[4 * g_parent_index + 0].w);
-                    end = -1 * (right + 1);
-
-                    sm_addr = &(sm_nodes[parent_index - low].y);
-                    sm_end = g_right;
-
-                    // Right child AABB.
-                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 2];
-                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].z);
 
                 }
                 else {
                     // Rightward node is parent.
+                    // Current node is a left child.
                     parent_index = right;
                     g_parent_index = g_right;
-
-                    // Current node is a left child.
-                    child_addr = &(nodes[4 * g_parent_index + 0].x);
-                    end_addr = &(nodes[4 * g_parent_index + 0].z);
-                    end = -1 * (left + 1);
-
-                    sm_addr = &(sm_nodes[parent_index - low].x);
-                    sm_end = g_left;
-
-                    // Left child AABB.
-                    AABB_f4_addr = &f4_nodes[4 * g_parent_index + 1];
-                    AABB_f2_addr = (float2*)&(f4_nodes[4 * g_parent_index + 3].x);
                 }
 
-                if (parent_index < low || parent_index >= high) {
+                if (out_of_block(parent_index, low, high)) {
                     // Parent node outside this block's boundaries.  Either a
                     // thread in an adjacent block will follow this path, or the
                     // current node will be a base node in the next iteration.
                     break;
                 }
 
-                *child_addr = g_cur_index;
-                *end_addr = end;
-                *AABB_f4_addr = make_float4(x_min, x_max, y_min, y_max);
-                *AABB_f2_addr = make_float2(z_min, z_max);
-                *sm_addr = sm_end;
+                if (delta_comp(delta_L, delta_R))
+                {
+                    nodes[g_parent_index].set_right_child(g_cur_index);
+                    // The -ve end index encodes the fact that the node was written
+                    // this iteration.
+                    nodes[g_parent_index].set_last_leaf(-1 * (right + 1));
+                    nodes[g_parent_index].set_right_AABB(node_aabb);
+                    // Right-most global node index.
+                    sm_nodes[parent_index - low].y = g_right;
+                }
+                else
+                {
+                    nodes[g_parent_index].set_left_child(g_cur_index);
+                    // The -ve end index encodes the fact that the node was written
+                    // this iteration.
+                    nodes[g_parent_index].set_first_leaf(-1 * (left + 1));
+                    nodes[g_parent_index].set_left_AABB(node_aabb);
+                    // Left-most global node index.
+                    sm_nodes[parent_index - low].x = g_left;
+                }
 
                 __threadfence_block();
                 GRACE_ASSERT(parent_index - low >= 0);
@@ -673,7 +665,7 @@ __global__ void build_nodes_slice_kernel(
 }
 
 __global__ void fill_output_queue(
-    const int4* nodes,
+    const CudaNode* nodes,
     const size_t n_nodes,
     const int max_per_node,
     int* new_base_indices)
@@ -682,23 +674,23 @@ __global__ void fill_output_queue(
 
     while (tid < n_nodes)
     {
-        int4 node = nodes[4 * tid + 0];
+        CudaNode node = nodes[tid];
 
         // The left/right values are negative IFF they were written in this
         // iteration.  A negative index represents a logical/compacted index.
-        bool left_written = (node.z < 0);
-        bool right_written = (node.w < 0);
+        bool left_written = (node.first_leaf() < 0);
+        bool right_written = (node.last_leaf() < 0);
 
         // Undo the -ve encoding.
-        int left = -1 * node.z - 1;
-        int right = -1 * node.w - 1;
+        int left = -1 * node.first_leaf() - 1;
+        int right = -1 * node.last_leaf() - 1;
 
         if (left_written != right_written) {
             // Only one child was written; it must be placed in the output queue
             // at a *unique* location.
             int index = left_written ? left : right;
             GRACE_ASSERT(new_base_indices[index] == -1);
-            new_base_indices[index] = left_written ? node.x : node.y;
+            new_base_indices[index] = left_written ? node.left_child() : node.right_child();
         }
         else if (left_written) {
             // Both were written, so the current node must be added to the
@@ -718,23 +710,25 @@ __global__ void fill_output_queue(
 }
 
 __global__ void fix_node_ranges(
-    int4* nodes,
+    CudaNode* nodes,
     const size_t n_nodes,
-    const int4* leaves,
+    const CudaLeaf* leaves,
     const int* old_base_indices)
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
     while (tid < n_nodes)
     {
-        int4 node = nodes[4 * tid + 0];
+        CudaNode node = nodes[tid];
 
         // We only need to fix nodes whose ranges were written, *in full*, this
         // iteration.
-        if (node.z < 0 && node.w < 0)
+        int first = node.first_leaf();
+        int last = node.last_leaf();
+        if (first < 0 && last < 0)
         {
-            int left = node.z < 0 ? (-1 * node.z - 1) : node.z;
-            int right = node.w < 0 ? (-1 * node.w - 1) : node.w;
+            int left = first < 0 ? (-1 * first - 1) : first;
+            int right = last < 0 ? (-1 * last -  1) : last;
 
             // All base nodes have correct range indices.  If we know our
             // left/right-most base node, we can therefore find our
@@ -742,10 +736,10 @@ __global__ void fix_node_ranges(
             // Note that for leaves, the left and right ranges are simply the
             // (corrected) index of the leaf.
             int index = old_base_indices[left];
-            left = index < n_nodes ? nodes[4 * index + 0].z : index - n_nodes;
+            left = index < n_nodes ? nodes[index].first_leaf() : index - n_nodes;
 
             index = old_base_indices[right];
-            right = index < n_nodes ? nodes[4 * index + 0].w : index - n_nodes;
+            right = index < n_nodes ? nodes[index].last_leaf() : index - n_nodes;
 
             // Only the left-most leaf can have index 0.
             GRACE_ASSERT(left >= 0);
@@ -754,9 +748,9 @@ __global__ void fix_node_ranges(
             // Only the right-most leaf can have index n_leaves - 1 == n_nodes.
             GRACE_ASSERT(right <= n_nodes);
 
-            node.z = left;
-            node.w = right;
-            nodes[4 * tid + 0] = node;
+            node.set_first_leaf(left);
+            node.set_last_leaf(right);
+            nodes[tid] = node;
         }
 
         tid += blockDim.x * gridDim.x;
@@ -770,7 +764,7 @@ __global__ void fix_node_ranges(
 // Two template parameters as DeltaIter _may_ be const_iterator or const T*.
 template<typename DeltaIter, typename LeafDeltaIter>
 GRACE_HOST void copy_leaf_deltas(
-    const thrust::device_vector<int4>& d_leaves,
+    const thrust::device_vector<CudaLeaf>& d_leaves,
     DeltaIter d_all_deltas_iter,
     LeafDeltaIter d_leaf_deltas_iter)
 {
@@ -787,7 +781,7 @@ GRACE_HOST void copy_leaf_deltas(
 template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
     thrust::device_vector<int2>& d_tmp_nodes,
-    thrust::device_vector<int4>& d_tmp_leaves,
+    thrust::device_vector<CudaLeaf>& d_tmp_leaves,
     const int max_per_leaf,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
@@ -826,7 +820,7 @@ GRACE_HOST void build_leaves(
     GRACE_KERNEL_CHECK();
 }
 
-GRACE_HOST void remove_empty_leaves(Tree& d_tree)
+GRACE_HOST void remove_empty_leaves(CudaBVH& bvh)
 {
     // A transform_reduce (with unary op 'is_valid_node()') followed by a
     // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
@@ -834,18 +828,20 @@ GRACE_HOST void remove_empty_leaves(Tree& d_tree)
     // array, which would be the largest temporary memory allocation in the
     // build process.
 
-    // error: no operator "==" matches these operands
-    //         operand types are: const int4 == const int4
-    // thrust::remove(.., .., make_int4(0, 0, 0, 0))
+    // Try
+    // thrust::remove(.., .., CudaLeaf());
 
-    typedef thrust::device_vector<int4>::iterator Int4Iter;
-    Int4Iter end = thrust::remove_if(d_tree.leaves.begin(), d_tree.leaves.end(),
-                                     is_empty_node());
+    detail::CudaBVH_ref bvh_ref(bvh);
 
-    const size_t n_new_leaves = end - d_tree.leaves.begin();
+    typedef detail::CudaBVH_ref::leaf_iterator LeafIter;
+    LeafIter end = thrust::remove_if(bvh_ref.leaves().begin(),
+                                     bvh_ref.leaves().end(),
+                                     detail::is_empty_node());
+
+    const size_t n_new_leaves = end - bvh_ref.leaves().begin();
     const size_t n_new_nodes = n_new_leaves - 1;
-    d_tree.nodes.resize(4 * n_new_nodes);
-    d_tree.leaves.resize(n_new_leaves);
+    bvh_ref.nodes().resize(n_new_nodes);
+    bvh_ref.leaves().resize(n_new_leaves);
 }
 
 template <
@@ -855,14 +851,15 @@ template <
     typename AABBFunc
     >
 GRACE_HOST void build_nodes(
-    Tree& d_tree,
+    CudaBVH& bvh,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
     const AABBFunc aabb_op)
 {
-    const size_t n_leaves = d_tree.leaves.size();
-    const size_t n_nodes = n_leaves - 1;
+    const size_t n_leaves = bvh.num_leaves();
+    const size_t n_nodes = bvh.num_nodes();
+    detail::CudaBVH_ref bvh_ref(bvh);
 
     thrust::device_vector<int> d_queue1(n_leaves);
     thrust::device_vector<int> d_queue2(n_leaves);
@@ -893,20 +890,18 @@ GRACE_HOST void build_nodes(
         // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
         // AND int2 nodes.
         int smem_size = (sizeof(int) + sizeof(int2))
-                        * (grace::BUILD_THREADS_PER_BLOCK + d_tree.max_per_leaf);
+                        * (grace::BUILD_THREADS_PER_BLOCK + bvh.max_per_leaf);
         build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
-            thrust::raw_pointer_cast(d_tree.nodes.data()),
-            reinterpret_cast<float4*>(
-                thrust::raw_pointer_cast(d_tree.nodes.data())),
+            thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
-            thrust::raw_pointer_cast(d_tree.leaves.data()),
+            thrust::raw_pointer_cast(bvh_ref.leaves().data()),
             n_leaves,
             d_prims_iter,
             d_in_ptr,
             n_in,
-            d_tree.root_index_ptr,
+            bvh.d_root_index_ptr,
             d_deltas_iter,
-            d_tree.max_per_leaf, // This can actually be anything.
+            bvh.max_per_leaf, // This can actually be anything.
             d_out_ptr,
             delta_comp,
             aabb_op);
@@ -916,16 +911,16 @@ GRACE_HOST void build_nodes(
                           (int)((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
                                  / grace::BUILD_THREADS_PER_BLOCK));
         fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_tree.nodes.data()),
+            thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
-            d_tree.max_per_leaf,
+            bvh.max_per_leaf,
             d_out_ptr);
         GRACE_KERNEL_CHECK();
 
         fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
-            thrust::raw_pointer_cast(d_tree.nodes.data()),
+            thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
-            thrust::raw_pointer_cast(d_tree.leaves.data()),
+            thrust::raw_pointer_cast(bvh_ref.leaves().data()),
             d_in_ptr);
         GRACE_KERNEL_CHECK();
 
@@ -942,7 +937,7 @@ GRACE_HOST void build_nodes(
     }
 }
 
-} // namespace ALBVH
+} // namespace detail
 
 
 //-----------------------------------------------------------------------------
@@ -958,7 +953,7 @@ GRACE_HOST void compute_deltas(
 {
     const size_t N_deltas = N_keys + 1;
     int blocks = std::min(grace::MAX_BLOCKS, (int)((N_deltas + 512 - 1) / 512));
-    ALBVH::compute_deltas_kernel<<<blocks, 512>>>(
+    detail::compute_deltas_kernel<<<blocks, 512>>>(
         d_keys_iter,
         N_keys,
         d_deltas_iter,
@@ -987,7 +982,7 @@ template <
     typename AABBFunc
     >
 GRACE_HOST void build_ALBVH(
-    Tree& d_tree,
+    CudaBVH& bvh,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
@@ -998,56 +993,59 @@ GRACE_HOST void build_ALBVH(
 
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
 
+    detail::CudaBVH_ref bvh_ref(bvh);
+
     // In case this ever changes.
     GRACE_ASSERT(sizeof(int4) == sizeof(float4));
 
     if (wipe) {
-        int4 empty = make_int4(0, 0, 0, 0);
-        thrust::fill(d_tree.nodes.begin(), d_tree.nodes.end(), empty);
-        thrust::fill(d_tree.leaves.begin(), d_tree.leaves.end(), empty);
+        thrust::fill(bvh_ref.nodes().begin(), bvh_ref.nodes().end(),
+                     detail::CudaNode());
+        thrust::fill(bvh_ref.leaves().begin(), bvh_ref.leaves().end(),
+                     detail::CudaLeaf());
     }
 
-    const size_t n_leaves = d_tree.leaves.size();
+    const size_t n_leaves = bvh_ref.leaves().size();
     const size_t n_nodes = n_leaves - 1;
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    ALBVH::build_leaves(d_tmp_nodes, d_tree.leaves, d_tree.max_per_leaf,
-                        d_deltas_iter, delta_comp);
-    ALBVH::remove_empty_leaves(d_tree);
+    detail::build_leaves(d_tmp_nodes, bvh_ref.leaves(), bvh.max_per_leaf,
+                         d_deltas_iter, delta_comp);
+    detail::remove_empty_leaves(bvh);
 
-    const size_t n_new_leaves = d_tree.leaves.size();
+    const size_t n_new_leaves = bvh.num_leaves();
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
     DeltaType* new_deltas_ptr = thrust::raw_pointer_cast(d_new_deltas.data());
 
-    ALBVH::copy_leaf_deltas(d_tree.leaves, d_deltas_iter, new_deltas_ptr);
-    ALBVH::build_nodes(d_tree, d_prims_iter, new_deltas_ptr, delta_comp,
-                       aabb_op);
+    detail::copy_leaf_deltas(bvh_ref.leaves(), d_deltas_iter, new_deltas_ptr);
+    detail::build_nodes(bvh, d_prims_iter, new_deltas_ptr, delta_comp,
+                        aabb_op);
 }
 
 template <
-    typename TPrimitive,
+    typename PrimitiveType,
     typename DeltaType,
     typename DeltaComp,
     typename AABBFunc
     >
 GRACE_HOST void build_ALBVH(
-    Tree& d_tree,
-    const thrust::device_vector<TPrimitive>& d_primitives,
+    CudaBVH& bvh,
+    const thrust::device_vector<PrimitiveType>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const DeltaComp delta_comp,
     const AABBFunc aabb_op,
     const bool wipe = false)
 {
-    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    const PrimitiveType* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, delta_comp, aabb_op, wipe);
+    build_ALBVH(bvh, prims_ptr, deltas_ptr, delta_comp, aabb_op, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
 template <typename PrimitiveIter, typename DeltaIter, typename AABBFunc>
 GRACE_HOST void build_ALBVH(
-    Tree& d_tree,
+    CudaBVH& bvh,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const AABBFunc aabb_op,
@@ -1056,24 +1054,24 @@ GRACE_HOST void build_ALBVH(
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     typedef typename thrust::less<DeltaType> DeltaComp;
 
-    build_ALBVH(d_tree, d_prims_iter, d_deltas_iter, DeltaComp(), aabb_op,
+    build_ALBVH(bvh, d_prims_iter, d_deltas_iter, DeltaComp(), aabb_op,
                 wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
-template <typename TPrimitive, typename DeltaType, typename AABBFunc>
+template <typename PrimitiveType, typename DeltaType, typename AABBFunc>
 GRACE_HOST void build_ALBVH(
-    Tree& d_tree,
-    const thrust::device_vector<TPrimitive>& d_primitives,
+    CudaBVH& bvh,
+    const thrust::device_vector<PrimitiveType>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const AABBFunc aabb_op,
     const bool wipe = false)
 {
     typedef typename thrust::less<DeltaType> DeltaComp;
-    const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
+    const PrimitiveType* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(d_tree, prims_ptr, deltas_ptr, DeltaComp(), aabb_op, wipe);
+    build_ALBVH(bvh, prims_ptr, deltas_ptr, DeltaComp(), aabb_op, wipe);
 }
 
 } // namespace grace
