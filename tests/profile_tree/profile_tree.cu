@@ -96,6 +96,7 @@ int main(int argc, char* argv[])
             thrust::device_vector<grace::uinteger32> d_keys(N);
             thrust::device_vector<float> d_deltas(N + 1);
             grace::Tree d_tree(N, max_per_leaf);
+            thrust::device_vector<unsigned int> d_counters(N, 0u);
             thrust::device_vector<int2> d_tmp_nodes(N - 1);
             // Don't include above memory allocations in t_morton.
             timer.split();
@@ -115,12 +116,16 @@ int main(int argc, char* argv[])
                 d_tree.leaves,
                 d_tree.max_per_leaf,
                 thrust::raw_pointer_cast(d_deltas.data()),
+                d_counters,
                 thrust::less<float>());
             grace::ALBVH::remove_empty_leaves(d_tree);
             if (i >= 0) t_leaves += timer.split();
 
             const size_t n_new_leaves = d_tree.leaves.size();
             thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
+            thrust::fill(d_counters.begin(),
+                         d_counters.begin() + n_new_leaves - 1,
+                         0u);
             // Don't include above memory allocation in t_leaf_deltas.
             timer.split();
 
@@ -134,6 +139,7 @@ int main(int argc, char* argv[])
                 d_tree,
                 thrust::raw_pointer_cast(d_spheres.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()),
+                d_counters,
                 thrust::less<float>(),
                 grace::AABB_sphere());
             if (i >= 0) t_nodes += timer.split();

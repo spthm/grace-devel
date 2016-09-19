@@ -1,5 +1,6 @@
 #pragma once
 
+#include "device/loadstore.cuh"
 #include "error.h"
 #include "types.h"
 
@@ -99,9 +100,18 @@ GRACE_HOST_DEVICE int4 get_inner(int index, const int4* nodes)
 {
     return nodes[4 * index];
 }
+GRACE_DEVICE int4 get_inner(int index, volatile int4* nodes)
+{
+    return load_volatile_vec4s32(nodes + 4 * index);
+}
 GRACE_HOST_DEVICE int4 get_inner(int index, const float4* nodes)
 {
     return get_inner(index, reinterpret_cast<const int4*>(nodes));
+}
+GRACE_DEVICE int4 get_inner(int index, volatile float4* nodes)
+{
+    float4 f4_node = load_volatile_vec4f32(nodes + 4 * index);
+    return reinterpret_cast<int4&>(f4_node);
 }
 
 GRACE_HOST_DEVICE int4 get_leaf(int index, const int4* leaves)
@@ -119,27 +129,54 @@ GRACE_HOST_DEVICE float4 get_AABB1(int index, const float4* nodes)
 {
     return nodes[4 * index + 1];
 }
+GRACE_DEVICE float4 get_AABB1(int index, volatile float4* nodes)
+{
+    return load_volatile_vec4f32(nodes + 4 * index + 1);
+}
 GRACE_HOST_DEVICE float4 get_AABB1(int index, const int4* nodes)
 {
     return get_AABB1(index, reinterpret_cast<const float4*>(nodes));
+}
+GRACE_DEVICE float4 get_AABB1(int index, volatile int4* nodes)
+{
+    int4 i4_node = load_volatile_vec4s32(nodes + 4 * index + 1);
+    return reinterpret_cast<float4&>(i4_node);
 }
 
 GRACE_HOST_DEVICE float4 get_AABB2(int index, const float4* nodes)
 {
     return nodes[4 * index + 2];
 }
+GRACE_DEVICE float4 get_AABB2(int index, volatile float4* nodes)
+{
+    return load_volatile_vec4f32(nodes + 4 * index + 2);
+}
 GRACE_HOST_DEVICE float4 get_AABB2(int index, const int4* nodes)
 {
     return get_AABB2(index, reinterpret_cast<const float4*>(nodes));
+}
+GRACE_DEVICE float4 get_AABB2(int index, volatile int4* nodes)
+{
+    int4 i4_node = load_volatile_vec4s32(nodes + 4 * index + 2);
+    return reinterpret_cast<float4&>(i4_node);
 }
 
 GRACE_HOST_DEVICE float4 get_AABB3(int index, const float4* nodes)
 {
     return nodes[4 * index + 3];
 }
+GRACE_DEVICE float4 get_AABB3(int index, volatile float4* nodes)
+{
+    return load_volatile_vec4f32(nodes + 4 * index + 3);
+}
 GRACE_HOST_DEVICE float4 get_AABB3(int index, const int4* nodes)
 {
     return get_AABB3(index, reinterpret_cast<const float4*>(nodes));
+}
+GRACE_DEVICE float4 get_AABB3(int index, volatile int4* nodes)
+{
+    int4 i4_node = load_volatile_vec4s32(nodes + 4 * index + 3);
+    return reinterpret_cast<float4&>(i4_node);
 }
 
 GRACE_HOST_DEVICE void get_left_AABB(int index, const float4* nodes,
@@ -182,9 +219,17 @@ GRACE_HOST_DEVICE void set_inner(int4 node, int index, int4* nodes)
 {
     nodes[4 * index] = node;
 }
+GRACE_DEVICE void set_inner(int4 node, int index, volatile int4* nodes)
+{
+    store_volatile_vec4s32(nodes + 4 * index, node);
+}
 GRACE_HOST_DEVICE void set_inner(int4 node, int index, float4* nodes)
 {
     set_inner(node, index, reinterpret_cast<int4*>(nodes));
+}
+GRACE_DEVICE void set_inner(int4 node, int index, volatile float4* nodes)
+{
+    set_inner(node, index, reinterpret_cast<volatile int4*>(nodes));
 }
 
 GRACE_HOST_DEVICE void set_leaf(int4 leaf, int index, int4* leaves)
@@ -205,15 +250,33 @@ GRACE_HOST_DEVICE void set_left_node(int left_child, int left_leaf,
     nodes[4 * index].x = left_child;
     nodes[4 * index].z = left_leaf;
 }
+GRACE_DEVICE void set_left_node(int left_child, int left_leaf,
+                                int index, volatile int4* nodes)
+{
+    nodes[4 * index].x = left_child;
+    nodes[4 * index].z = left_leaf;
+}
 GRACE_HOST_DEVICE void set_left_node(int left_child, int left_leaf,
                                      int index, float4* nodes)
 {
     set_left_node(left_child, left_leaf, index,
                   reinterpret_cast<int4*>(nodes));
 }
+GRACE_DEVICE void set_left_node(int left_child, int left_leaf,
+                                int index, volatile float4* nodes)
+{
+    set_left_node(left_child, left_leaf, index,
+                  reinterpret_cast<volatile int4*>(nodes));
+}
 
 GRACE_HOST_DEVICE void set_right_node(int right_child, int right_leaf,
                                       int index, int4* nodes)
+{
+    nodes[4 * index].y = right_child;
+    nodes[4 * index].w = right_leaf;
+}
+GRACE_DEVICE void set_right_node(int right_child, int right_leaf,
+                                 int index, volatile int4* nodes)
 {
     nodes[4 * index].y = right_child;
     nodes[4 * index].w = right_leaf;
@@ -224,6 +287,12 @@ GRACE_HOST_DEVICE void set_right_node(int right_child, int right_leaf,
     set_right_node(right_child, right_leaf, index,
                    reinterpret_cast<int4*>(nodes));
 }
+GRACE_DEVICE void set_right_node(int right_child, int right_leaf,
+                                 int index, volatile float4* nodes)
+{
+    set_right_node(right_child, right_leaf, index,
+                   reinterpret_cast<volatile int4*>(nodes));
+}
 
 GRACE_HOST_DEVICE void set_left_AABB(float3 bottom, float3 top,
                                      int index, float4* nodes)
@@ -232,10 +301,23 @@ GRACE_HOST_DEVICE void set_left_AABB(float3 bottom, float3 top,
     nodes[4 * index + 3].x = bottom.z;
     nodes[4 * index + 3].y = top.z;
 }
+GRACE_DEVICE void set_left_AABB(float3 bottom, float3 top,
+                                int index, volatile float4* nodes)
+{
+    float4 AABB1 = make_float4(bottom.x, top.x, bottom.y, top.y);
+    store_volatile_vec4f32(nodes + 4 * index + 1, AABB1);
+    nodes[4 * index + 3].x = bottom.z;
+    nodes[4 * index + 3].y = top.z;
+}
 GRACE_HOST_DEVICE void set_left_AABB(float3 bottom, float3 top,
                                      int index, int4* nodes)
 {
     set_left_AABB(bottom, top, index, reinterpret_cast<float4*>(nodes));
+}
+GRACE_DEVICE void set_left_AABB(float3 bottom, float3 top,
+                                int index, volatile int4* nodes)
+{
+    set_left_AABB(bottom, top, index, reinterpret_cast<volatile float4*>(nodes));
 }
 
 GRACE_HOST_DEVICE void set_right_AABB(float3 bottom, float3 top,
@@ -245,10 +327,23 @@ GRACE_HOST_DEVICE void set_right_AABB(float3 bottom, float3 top,
     nodes[4 * index + 3].z = bottom.z;
     nodes[4 * index + 3].w = top.z;
 }
+GRACE_DEVICE void set_right_AABB(float3 bottom, float3 top,
+                                 int index, volatile float4* nodes)
+{
+    float4 AABB2 = make_float4(bottom.x, top.x, bottom.y, top.y);
+    store_volatile_vec4f32(nodes + 4 * index + 2, AABB2);
+    nodes[4 * index + 3].z = bottom.z;
+    nodes[4 * index + 3].w = top.z;
+}
 GRACE_HOST_DEVICE void set_right_AABB(float3 bottom, float3 top,
                                       int index, int4* nodes)
 {
     set_right_AABB(bottom, top, index, reinterpret_cast<float4*>(nodes));
+}
+GRACE_DEVICE void set_right_AABB(float3 bottom, float3 top,
+                                 int index, volatile int4* nodes)
+{
+    set_right_AABB(bottom, top, index, reinterpret_cast<volatile float4*>(nodes));
 }
 
 } // namespace grace
