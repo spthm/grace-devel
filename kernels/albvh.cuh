@@ -367,6 +367,7 @@ __global__ void build_nodes_kernel(
     const int4* leaves,
     const size_t n_leaves,
     PrimitiveIter primitives,
+    // const size_t n_primitives,
     int* root_index,
     DeltaIter deltas,
     unsigned int* counters,
@@ -388,8 +389,8 @@ __global__ void build_nodes_kernel(
 
         GRACE_ASSERT(leaf.x >= 0);
         GRACE_ASSERT(leaf.y > 0 || (leaf.x == leaf.y && leaf.y == 0));
-        GRACE_ASSERT(leaf.x < n_leaves - 1 || (leaf.x == leaf.y && leaf.x == n_leaves - 1));
-        GRACE_ASSERT(leaf.y < n_leaves);
+        // GRACE_ASSERT(leaf.x < n_primitives - 1 || (leaf.x == leaf.y && leaf.x == n_primitives - 1));
+        // GRACE_ASSERT(leaf.y < n_primitives);
 
         int parent_index = node_parent(leaf, deltas, delta_comp);
         GRACE_ASSERT(counters[parent_index] < 2);
@@ -454,13 +455,17 @@ __global__ void build_nodes_kernel(
             GRACE_ASSERT(node.w <= n_leaves - 1);
 
             parent_index = node_parent(node, deltas, delta_comp);
-            GRACE_ASSERT(counters[parent_index] < 2);
 
-            // Even if this is true, the following size test can be false.
             if (node_size(node) == n_leaves) {
                 *root_index = cur_index;
                 return;
             }
+
+            // This check must come after the above. If we're at the root node,
+            // the parent index is meaningless (here equal to n_leaves - 1)
+            // and all bets are off for its counter; it may not even be a valid
+            // address.
+            GRACE_ASSERT(counters[parent_index] < 2);
 
             float4 AABB1 = get_AABB1(cur_index, f4_nodes);
             float4 AABB2 = get_AABB2(cur_index, f4_nodes);
