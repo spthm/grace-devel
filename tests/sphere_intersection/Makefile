@@ -3,8 +3,8 @@ include ../Makefile.common
 # Ensures float/double calculations obey IEEE binary32/64 rules, rather than
 # being computed by the x87 FPU.
 _FLAGS = -fopenmp -mfpmath=sse -msse2
-_INCLUDES = -I./
-_LFLAGS = -L$(GMP_DIR)
+_INCLUDES = -I./ -I$(GMP_DIR)/include/
+_LFLAGS = -L$(GMP_DIR)/lib/
 _LIBS = -lgmp -lgmpxx
 _DEPS = interval.h quadratic.h intersection.cuh Makefile
 

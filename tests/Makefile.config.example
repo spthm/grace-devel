@@ -26,4 +26,4 @@ MGPU_DIR = $(HOME)/Code/moderngpu/
 # CUDA toolkit
 CUDA_DIR = /opt/cuda/lib64
 # GNU Multiple Precision Library
-GMP_DIR =
+GMP_DIR = /usr/local/
