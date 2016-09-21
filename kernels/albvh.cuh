@@ -244,29 +244,18 @@ __global__ void build_leaves_kernel(
     {
         // First node is a leaf at tid.
         int2 node = make_int2(tid, tid);
-        volatile int2* parent_ptr = &node;
 
-        bool first_arrival;
-        // Climb tree.
-        do
+        // A leaf's data is always written to its parent.
+        bool climb = true;
+        while (climb)
         {
-            node.x = (*parent_ptr).x;
-            node.y = (*parent_ptr).y;
-
             GRACE_ASSERT(node.x >= 0);
             GRACE_ASSERT(node.y > 0 || (node.x == node.y && node.y == 0));
             GRACE_ASSERT(node.x < n_leaves - 1 || (node.x == node.y && node.x == n_leaves - 1));
             GRACE_ASSERT(node.y < n_leaves);
 
-            if (node_size(node) >= max_per_leaf) {
-                // This node, or at least one of its children, will become a
-                // wide leaf.
-                break;
-            }
-
             int parent_index = node_parent(node, deltas, delta_comp);
             GRACE_ASSERT(counters[parent_index] < 2);
-            parent_ptr = tmp_nodes + parent_index;
 
             // Propagate left- or right-most primitive up the tree.
             if (is_left_child(node, parent_index)) {
@@ -279,11 +268,19 @@ __global__ void build_leaves_kernel(
             __threadfence();
 
             unsigned int count = atomicAdd(counters + parent_index, 1);
-            first_arrival = (count == 0);
-
             GRACE_ASSERT(count < 2);
-        } while (!first_arrival);
 
+            climb = (count == 1);
+            if (climb) {
+                // No copy-assignment for volatile-qualified int2.
+                node.x = tmp_nodes[parent_index].x;
+                node.y = tmp_nodes[parent_index].y;
+
+                // If false, this node, or at least one of its children, will
+                // become a wide leaf.
+                climb = node_size(node) < max_per_leaf;
+            }
+        }
     } // for bid * grace::BUILD_THREADS_PER_BLOCK < n_leaves
 }
 
