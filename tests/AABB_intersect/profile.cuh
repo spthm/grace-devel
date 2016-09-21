@@ -71,7 +71,7 @@ float profile_gpu(const thrust::device_vector<Ray>& rays,
     cudaEventCreate(&start);
     cudaEventCreate(&stop);
 
-    const int num_blocks = min((rays.size() + 127) / 128, (size_t)48);
+    const int num_blocks = min((unsigned long long)((rays.size() + 127) / 128), (unsigned long long)48);
 
     cudaEventRecord(start);
     intersect_kernel<<<num_blocks, 128>>>(
