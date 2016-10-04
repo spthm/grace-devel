@@ -152,7 +152,7 @@ public:
     template <typename RayData, typename TPrim>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*prim_idx*/,
-                                 const TPrim&,  const int /*lane*/,
+                                 const TPrim&, const int /*lane*/,
                                  const gpu::BoundIter<char> /*smem_iter*/)
     {
         ++ray_data.data;

@@ -6,6 +6,8 @@
 
 #include "stats_math.cuh"
 
+#include "helper/vector_math.cuh"
+
 #include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 

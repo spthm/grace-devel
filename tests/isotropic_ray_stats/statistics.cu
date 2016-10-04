@@ -1,6 +1,8 @@
 #include "statistics.cuh"
 #include "stats_math.cuh"
 
+#include "helper/vector_math.cuh"
+
 #include "grace/error.h"
 #include "grace/ray.h"
 
