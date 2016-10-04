@@ -1,17 +1,17 @@
 include ../Makefile.common
 
-OBJS = ../helper/vector_math.o
+OBJS = ../helper/vector_math.o profile_trace_triangle.o
 NVCCDEPS += triangle.cuh ../helper/vector_math.cuh
 
 
 all: profile_trace_triangle
 
 # Note we need -dc in order to link device code from multiple .cu files.
-%.o: %.cu $(NVCCDEPS) $(OBJS)
+%.o: %.cu $(NVCCDEPS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -dc $< -o $@
 
-profile_trace_triangle: profile_trace_triangle.cu $(OBJS)
-	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) $< -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
+profile_trace_triangle: $(OBJS) $(NVCCDEPS)
+	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
 
 clean:
 	@-rm -f *.o
