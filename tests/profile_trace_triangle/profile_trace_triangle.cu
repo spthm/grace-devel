@@ -4,14 +4,14 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
+#include "triangle.cuh"
+#include "tris_tree.cuh"
+#include "tris_trace.cuh"
+
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/gen_rays.cuh"
-#include "grace/cuda/trace_sph.cuh"
-#include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
 #include "helper/cuda_timer.cuh"
-#include "helper/read_gadget.cuh"
-#include "helper/tree.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -59,7 +59,7 @@ int main(int argc, char* argv[])
     std::cout << "Input geometry file:     " << fname << std::endl;
     // Vector is resized in read_gadget().
     thrust::device_vector<Triangle> d_tris;
-    read_gadget(fname, d_tris);
+    // read_gadget(fname, d_tris);
     const size_t N = d_tris.size();
 
     std::cout << "Number of primitives:    " << N << std::endl
@@ -79,23 +79,22 @@ int main(int argc, char* argv[])
     // Assume x, y and z spatial extents are similar.
     float min, max, length;
     float3 origin;
-    grace::min_max_x(d_tris, &min, &max);
+    // FIXME: If .PLY format does not provide bounds, use TriangleCentroid.
+    // grace::min_max_x(d_tris, &min, &max);
+    min = 0.f;
+    max = 1.f;
     origin.x = origin.y = origin.z = (max + min) / 2.;
     length = 2 * (max - min);
 
     CUDATimer timer;
-    double t_genray, t_sort, t_cum, t_trace, t_hit, t_all;
-    t_genray = t_sort = t_cum = t_trace = t_hit = t_all = 0.0;
+    double t_genray, t_closest, t_all;
+    t_genray = t_closest = t_all = 0.0;
     for (int i = -1; i < N_iter; ++i)
     {
         timer.start();
 
         thrust::device_vector<grace::Ray> d_rays(N_rays);
-        thrust::device_vector<int> d_ray_offsets(N_rays);
-        // Resized in grace::trace_sph():
-        thrust::device_vector<float> d_integrals(N_rays);
-        thrust::device_vector<int> d_indices;
-        thrust::device_vector<float> d_distances;
+        thrust::device_vector<int> d_closest_tri_idx(N_rays);
         // Don't include above memory allocations in t_genray.
         timer.split();
 
@@ -103,34 +102,11 @@ int main(int argc, char* argv[])
                                    length);
         if (i >= 0) t_genray += timer.split();
 
-        grace::trace_cumulative_sph(d_rays,
-                                    d_tris,
-                                    d_tree,
-                                    d_integrals);
-        if (i >= 0) t_cum += timer.split();
-
-        grace::trace_sph(d_rays,
-                         d_tris,
-                         d_tree,
-                         d_ray_offsets,
-                         d_indices,
-                         d_integrals,
-                         d_distances);
-        if (i >= 0) t_trace += timer.split();
-
-        grace::sort_by_distance(d_distances,
-                                d_ray_offsets,
-                                d_indices,
-                                d_integrals);
-        if (i >= 0) t_sort += timer.split();
-
-        // Profiling the pure hit-count tracing is useful for optimizing the
-        // traversal algorithm.
-        grace::trace_hitcounts_sph(d_rays,
-                                   d_tris,
-                                   d_tree,
-                                   d_ray_offsets);
-        if (i >= 0) t_hit += timer.split();
+        trace_closest_tri(d_rays,
+                          d_tris,
+                          d_tree,
+                          d_closest_tri_idx);
+        if (i >= 0) t_closest += timer.split();
 
         if (i >= 0) t_all += timer.elapsed();
 
@@ -144,15 +120,9 @@ int main(int argc, char* argv[])
             trace_bytes += d_tree.leaves.size() * sizeof(int4);
             trace_bytes += d_tree.nodes.size() * sizeof(int4);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
-            trace_bytes += d_ray_offsets.size() * sizeof(int);
-            trace_bytes += d_integrals.size() * sizeof(float);
-            trace_bytes += d_indices.size() * sizeof(int);
-            trace_bytes += d_distances.size() * sizeof(float);
-            trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
+            trace_bytes += d_closest_tri_idx.size() * sizeof(int);
 
-            std::cout << "Total hits: " << d_indices.size() << std::endl
-                      << std::endl
-                      << "Total memory for full trace kernel and sort: "
+            std::cout << "Total memory for closest-triangle traversal: "
                       << trace_bytes / (1024.0 * 1024.0 * 1024.0) << " GiB"
                       << std::endl;
 
@@ -166,17 +136,11 @@ int main(int argc, char* argv[])
         }
     }
 
-    std::cout << "Time for generating and sorting rays:   " << std::setw(8)
+    std::cout << "Time for generating and sorting rays: " << std::setw(8)
               << t_genray / N_iter << " ms" << std::endl
-              << "Time for hit count tracing:             " << std::setw(8)
-              << t_hit / N_iter << " ms" << std::endl
-              << "Time for cumulative density tracing:    " << std::setw(8)
-              << t_cum / N_iter << " ms" << std::endl
-              << "Time for full tracing:                  " << std::setw(8)
-              << t_trace / N_iter << " ms" << std::endl
-              << "Time for sort-by-distance:              " << std::setw(8)
-              << t_sort / N_iter << " ms" << std::endl
-              << "Time for total (inc. memory ops):       " << std::setw(8)
+              << "Time for closest-triangle traversal:  " << std::setw(8)
+              << t_closest / N_iter << " ms" << std::endl
+              << "Time for total (inc. memory ops):     " << std::setw(8)
               << t_all / N_iter << " ms" << std::endl
               << std::endl;
 
