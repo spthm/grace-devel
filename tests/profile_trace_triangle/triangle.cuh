@@ -1,5 +1,6 @@
 #pragma once
 
+#include "helper/read_ply.hpp"
 #include "helper/vector_math.cuh"
 
 #include "grace/cuda/util/bound_iter.cuh"
@@ -18,6 +19,8 @@ struct Triangle
     __host__ __device__ Triangle() {}
     __host__ __device__ Triangle(float3 vertex, float3 edge1, float3 edge2)
         : v(vertex), e1(edge1), e2(edge2) {}
+    __host__ __device__ Triangle(const PLYTriangle& tri)
+        : v(tri.v1), e1(tri.v2 - tri.v1), e2(tri.v3 - tri.v1) {}
 };
 
 struct RayData_tri

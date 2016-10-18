@@ -19,6 +19,7 @@
 #include <iomanip>
 #include <iostream>
 #include <string>
+#include <vector>
 
 int main(int argc, char* argv[])
 {
@@ -28,7 +29,7 @@ int main(int argc, char* argv[])
 
     size_t N_rays = 1200 * 32; // = 38,400; should run on most devices.
     int max_per_leaf = 32;
-    std::string fname = "../data/cg/stanford_dragon.ply";
+    std::string fname = "../data/ply/dragon_recon/dragon_vrip.ply";
     int N_iter = 2;
     unsigned int device_ID = 0;
 
@@ -57,9 +58,11 @@ int main(int argc, char* argv[])
     // vectors are not freed, cudaDeviceReset() will throw.)
 
     std::cout << "Input geometry file:     " << fname << std::endl;
-    // Vector is resized in read_gadget().
+    // Vector is resized in read_triangles().
+    std::vector<PLYTriangle> ply_tris;
     thrust::device_vector<Triangle> d_tris;
-    // read_gadget(fname, d_tris);
+    read_triangles(fname, ply_tris);
+    d_tris = ply_tris;
     const size_t N = d_tris.size();
 
     std::cout << "Number of primitives:    " << N << std::endl
