@@ -44,6 +44,9 @@ NVCCDEPS += $(abspath $(wildcard $(THIS_PATH)/helper/*.hpp))
 
 NVCCINCLUDES = -I$(GRACE_INC_DIR) -I$(GRACE_DIR)/tests/ -I$(SGPU_DIR)
 
+# This is needed if GLIBCXX_USE_CXX11_ABI=0 is set.
+CXXFLAGS = $(GRACE_FLAGS)
+
 NVCCFLAGS = $(CUARCH) $(GRACE_FLAGS)
 ifdef USE_OPENMP
 ifeq ($(USE_OPENMP), 1)
