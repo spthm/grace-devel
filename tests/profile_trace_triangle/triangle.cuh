@@ -132,6 +132,21 @@ struct TriangleAABB
         top->x = max(v0.x, max(v1.x, v2.x));
         top->y = max(v0.y, max(v1.y, v2.y));
         top->z = max(v0.z, max(v1.z, v2.z));
+
+        // Some PLY files contain triangles which are zero-sized in one or more
+        // dimensions, but GRACE is not robust to zero-sized AABBs.
+        if (bot->x == top->x) {
+            bot->x -= TRIANGLE_EPSILON;
+            top->x += TRIANGLE_EPSILON;
+        }
+        if (bot->y == top->y) {
+            bot->y -= TRIANGLE_EPSILON;
+            top->y += TRIANGLE_EPSILON;
+        }
+        if (bot->z == top->z) {
+            bot->z -= TRIANGLE_EPSILON;
+            top->z += TRIANGLE_EPSILON;
+        }
     }
 };
 
