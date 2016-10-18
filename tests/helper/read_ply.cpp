@@ -3,11 +3,33 @@
 
 #include <iostream>
 #include <stdio.h>
+#include <stdlib.h>
 #include <vector>
+
+struct float3 {
+    float x, y, z;
+};
+
+float3 make_float3(float x, float y, float z) {
+    float3 f3;
+    f3.x = x;
+    f3.y = y;
+    f3.z = z;
+    return f3;
+}
+
+std::ostream& operator<< (std::ostream& stream, const float3& f3) {
+    stream << f3.x << ", " << f3.y << ", " << f3.z;
+    return stream;
+}
 
 /////////////////////////////////
 // Vertex and face definitions
 /////////////////////////////////
+
+struct PLYTriangle {
+    float3 v1, v2, v3;
+};
 
 struct PLYVertex {
   float x, y, z;
@@ -122,26 +144,38 @@ int read_file(const char* const ply_fname,
     return 0;
 }
 
-
-/////////////////////////////////
-// Main
-/////////////////////////////////
-
-int main(int argc, char* argv[])
+int read_triangles(const char* const ply_fname,
+                   std::vector<PLYTriangle>& tris)
 {
-    int status = 0;
-    char* ply_fname;
     VertexListT vlist;
     FaceListT flist;
 
-    ply_fname = argv[1];
-
-    std::cout << "Reading file " << ply_fname << std::endl;
-    status = read_file(ply_fname, vlist, flist);
+    int status = read_file(ply_fname, vlist, flist);
     if (status != 0) {
-        return EXIT_FAILURE;
+        return status;
     }
 
-    return EXIT_SUCCESS;
-}
+    tris.resize(flist.size());
+    for (size_t i = 0; i < flist.size(); ++i)
+    {
+        PLYTriangle tri;
+        PLYFace face = flist[i];
+        if (face.nverts != 3) {
+            std::cerr << "Face " << i << " has " << face.nverts << " vertices"
+                      << std::endl;
+            return 1;
+        }
 
+        PLYVertex v1 = vlist[face.vertex_indices[0]];
+        PLYVertex v2 = vlist[face.vertex_indices[1]];
+        PLYVertex v3 = vlist[face.vertex_indices[2]];
+
+        tri.v1 = make_float3(v1.x, v1.y, v1.z);
+        tri.v2 = make_float3(v2.x, v2.y, v2.z);
+        tri.v3 = make_float3(v3.x, v3.y, v3.z);
+
+        tris[i] = tri;
+    }
+
+    return 0;
+}
