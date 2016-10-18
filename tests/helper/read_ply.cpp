@@ -1,35 +1,18 @@
-// The ply.h header is C++ compatible.
+#include "read_ply.hpp"
+// The ply.h header is C++ compatible, but including it in a .cu file appears
+// to break nvcc (likely the Int8 ... Float64 macros).
 #include "ply.h"
 
 #include <iostream>
 #include <stdio.h>
-#include <stdlib.h>
 #include <vector>
-
-struct float3 {
-    float x, y, z;
-};
-
-float3 make_float3(float x, float y, float z) {
-    float3 f3;
-    f3.x = x;
-    f3.y = y;
-    f3.z = z;
-    return f3;
-}
-
-std::ostream& operator<< (std::ostream& stream, const float3& f3) {
-    stream << f3.x << ", " << f3.y << ", " << f3.z;
-    return stream;
-}
 
 /////////////////////////////////
 // Vertex and face definitions
 /////////////////////////////////
 
-struct PLYTriangle {
-    float3 v1, v2, v3;
-};
+// ~Prevent external linkage.
+namespace {
 
 struct PLYVertex {
   float x, y, z;
@@ -58,6 +41,8 @@ PlyProperty face_properties[] = {
    1, Uint8, Uint8, offsetof(PLYFace, nverts)},
 };
 
+} // namespace
+
 
 /////////////////////////////////
 // PLY object
@@ -72,11 +57,12 @@ static PlyOtherProp* face_other;
 // PLY file reading
 /////////////////////////////////
 
-int read_file(const char* const ply_fname,
-              VertexListT& vlist,
-              FaceListT& flist)
+static int read_file(
+    const std::string& ply_fname,
+    VertexListT& vlist,
+    FaceListT& flist)
 {
-    FILE* ply_fp = fopen(ply_fname, "r");
+    FILE* ply_fp = fopen(ply_fname.c_str(), "r");
     if (ply_fp == NULL) {
         std::cerr << "Error opening file " << ply_fname << std::endl;
         return 1;
@@ -144,7 +130,7 @@ int read_file(const char* const ply_fname,
     return 0;
 }
 
-int read_triangles(const char* const ply_fname,
+int read_triangles(const std::string& ply_fname,
                    std::vector<PLYTriangle>& tris)
 {
     VertexListT vlist;
