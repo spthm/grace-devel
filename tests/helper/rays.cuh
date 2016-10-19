@@ -10,18 +10,20 @@
 
 // Setup for rays emitted from box side (x, y, mins.z - maxs.w) and of length
 // (maxs.z + maxs.w) - (mins.z - maxs.w).
-// Since we generally want to fully include all particles, the ray (ox, oy)
+// Since we generally want to fully include all primitives, the ray (ox, oy)
 // limits are set by
 //   [mins.x - maxs.w, maxs.x + maxs.w] and
 //   [mins.y - maxs.w, maxs.y + maxs.w],
 // but rays at the edges are likely to have no hits!
-void setup_plane_z(const size_t N_side,
-                   const float4 mins, const float4 maxs,
-                   float3* const base, float3* const w, float3* const h,
-                   float* const length, float* const area)
+GRACE_HOST void setup_plane_z(
+    const size_t N_side,
+    const float4 mins, const float4 maxs,
+    float3* const base, float3* const w, float3* const h,
+    float* const length, float* const area)
 {
-    // maxs.w ~ maximum SPH radius. Offset x, y and z on all sides by this value
-    // to avoid clipping particle volumes.
+    // maxs.w == padding beyond bounds (e.g. maximum SPH radius).
+    // Offset x, y and z on all sides by this value to avoid clipping (e.g. of
+    // SPH particle volumes).
     const float span_x = maxs.x - mins.x + 2 * maxs.w;
     const float span_y = maxs.y - mins.y + 2 * maxs.w;
     const float span_z = maxs.z - mins.z + 2 * maxs.w;
@@ -47,11 +49,12 @@ void setup_plane_z(const size_t N_side,
 // of cells in the ray-grid.
 // Rays are ordered to increase along x first, then y, hence are suitable for
 // image generation.
-// min/maxs.w may be safely set to zero to avoid edge effects in images.
-void orthogonal_rays_z(const size_t N_side,
-                       const float4 mins, const float4 maxs,
-                       thrust::device_vector<grace::Ray>& d_rays,
-                       float* area = NULL)
+// min/maxs.w may be safely set to zero.
+GRACE_HOST void orthogonal_rays_z(
+    const size_t N_side,
+    const float4 mins, const float4 maxs,
+    thrust::device_vector<grace::Ray>& d_rays,
+    float* area = NULL)
 {
     float3 base, w, h;
     float length;
@@ -65,11 +68,12 @@ void orthogonal_rays_z(const size_t N_side,
 // all ray-grid cells in range (mins.x/y/z - maxs.w) to (maxs.x/y/z + maxs.w).
 // Ray origins are randomized with each ray's cell, and ray order is not
 // specified (i.e. may not be useful for image generation).
-void plane_parallel_rays_z(const size_t N_side,
-                           const float4 mins, const float4 maxs,
-                           thrust::device_vector<grace::Ray>& d_rays,
-                           float* area = NULL,
-                           unsigned int seed = 1234)
+GRACE_HOST void plane_parallel_rays_z(
+    const size_t N_side,
+    const float4 mins, const float4 maxs,
+    thrust::device_vector<grace::Ray>& d_rays,
+    float* area = NULL,
+    unsigned int seed = 1234)
 {
     float3 base, w, h;
     float length;
