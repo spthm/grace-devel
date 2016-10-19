@@ -12,6 +12,7 @@
 #include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/cuda_timer.cuh"
+#include "helper/rays.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -27,10 +28,10 @@ int main(int argc, char* argv[])
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(3);
 
-    size_t N_rays = 1200 * 32; // = 38,400; should run on most devices.
+    size_t N_rays = 512 * 512; // = 2621,144
     int max_per_leaf = 32;
     std::string fname = "../data/ply/dragon_recon/dragon_vrip.ply";
-    int N_iter = 2;
+    int N_iter = 10;
     unsigned int device_ID = 0;
 
     if (argc > 1) {
@@ -51,6 +52,11 @@ int main(int argc, char* argv[])
 
     cudaGetDeviceProperties(&deviceProp, device_ID);
     cudaSetDevice(device_ID);
+
+    size_t N_per_side = std::floor(std::pow(N_rays, 0.500001));
+    // N_rays must be a multiple of 32.
+    N_per_side = ((N_per_side + 32 - 1) / 32) * 32;
+    N_rays = N_per_side * N_per_side;
 
 {   // Device code. To ensure that cudaDeviceReset() does not fail, all Thrust
     // vectors should be allocated within this block. (The closing } brace
@@ -74,20 +80,14 @@ int main(int argc, char* argv[])
                                              << std::endl
               << std::endl;
 
-
+    float3 bots, tops;
     grace::Tree d_tree(N, max_per_leaf);
-    build_tree_tris(d_tris, d_tree);
+    build_tree_tris(d_tris, d_tree, &bots, &tops);
 
-    // Ray origin is the box centre; all rays will exit the box.
-    // Assume x, y and z spatial extents are similar.
-    float min, max, length;
-    float3 origin;
-    // FIXME: If .PLY format does not provide bounds, use TriangleCentroid.
-    // grace::min_max_x(d_tris, &min, &max);
-    min = 0.f;
-    max = 1.f;
-    origin.x = origin.y = origin.z = (max + min) / 2.;
-    length = 2 * (max - min);
+    // maxs.w is padding to move ray-generating plane away from model AABB.
+    float padding = 0.001 * (bots.z - tops.z);
+    float4 mins = make_float4(bots.x, bots.y, bots.z, padding);
+    float4 maxs = make_float4(tops.x, tops.y, tops.z, padding);
 
     CUDATimer timer;
     double t_genray, t_closest, t_all;
@@ -101,8 +101,7 @@ int main(int argc, char* argv[])
         // Don't include above memory allocations in t_genray.
         timer.split();
 
-        grace::uniform_random_rays(d_rays, origin.x, origin.y, origin.z,
-                                   length);
+        orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
         if (i >= 0) t_genray += timer.split();
 
         trace_closest_tri(d_rays,
