@@ -33,14 +33,16 @@ int main(int argc, char* argv[])
         verbose = (std::string(argv[2]) == "true") ? true : false;
     }
 
-    // Generate N random points with double precision co-ordinates in [0, 1).
+    // Generate N random points with double precision co-ordinates in [-1, 1).
     // Note that, internally, GRACE will use single-precision values for the
     // centroids of the particles.
+    float3 top = make_float3(1., 1., 1.);
+    float3 bot = make_float3(-1., -1., -1.);
     thrust::host_vector<double4> h_points(N);
     thrust::transform(thrust::counting_iterator<size_t>(0),
                       thrust::counting_iterator<size_t>(N),
                       h_points.begin(),
-                      random_real4_functor<double4>());
+                      random_real4_functor<double4>(bot.x, top.x));
     thrust::device_vector<double4> d_points = h_points;
 
     // Compute keys on host.
@@ -50,16 +52,14 @@ int main(int argc, char* argv[])
         // We must cast to float here, as internally, GRACE only deals with
         // float3 centroids. Not adding the cast here will lead to ~10% of keys
         // mismatching.
-        KeyT ux = static_cast<KeyT>(static_cast<float>(h_points[i].x) * MAX_KEY);
-        KeyT uy = static_cast<KeyT>(static_cast<float>(h_points[i].y) * MAX_KEY);
-        KeyT uz = static_cast<KeyT>(static_cast<float>(h_points[i].z) * MAX_KEY);
+        KeyT ux = static_cast<KeyT>((float)(h_points[i].x - bot.x) * MAX_KEY);
+        KeyT uy = static_cast<KeyT>((float)(h_points[i].y - bot.y) * MAX_KEY);
+        KeyT uz = static_cast<KeyT>((float)(h_points[i].z - bot.z) * MAX_KEY);
 
         h_keys[i] = grace::morton_key(ux, uy, uz);
     }
 
     // Compute keys on device.
-    float3 top = make_float3(1., 1., 1.);
-    float3 bot = make_float3(0., 0., 0.);
     thrust::device_vector<KeyT> d_keys(N);
     grace::morton_keys_sph(d_points, bot, top, d_keys);
 
