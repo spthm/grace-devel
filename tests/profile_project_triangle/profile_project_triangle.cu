@@ -9,7 +9,6 @@
 #include "tris_trace.cuh"
 
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/rays.cuh"

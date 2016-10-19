@@ -19,8 +19,10 @@
 #include <thrust/reduce.h>
 #include <thrust/sort.h>
 
+#include <cstdlib>
 #include <cmath>
 #include <iostream>
+#include <string>
 
 int main(int argc, char* argv[])
 {
