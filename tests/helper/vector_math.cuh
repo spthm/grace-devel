@@ -5,9 +5,12 @@
 #include <thrust/functional.h>
 
 // All versions compute variables in double-precision, hence the return type
-// is typically double.
+// for scalars is typically double.
 __host__ __device__ double magnitude(float3 v);
 __host__ __device__ double magnitude(double3 v);
+
+__host__ __device__ float3 normalize(float3 v);
+__host__ __device__ double3 normalize(double3 v);
 
 __host__ __device__ double dot_product(float3 a, float3 b);
 __host__ __device__ double dot_product(double3 a, double3 b);
@@ -37,6 +40,21 @@ __host__ __device__ float3 operator+(float3 v, float s);
 __host__ __device__ float3 operator-(float3 v, float s);
 __host__ __device__ float3 operator*(float3 v, float s);
 __host__ __device__ float3 operator/(float3 v, float s);
+
+__host__ __device__ double3 operator+(double3 a, double3 b);
+__host__ __device__ double3 operator-(double3 a, double3 b);
+__host__ __device__ double3 operator*(double3 a, double3 b);
+__host__ __device__ double3 operator/(double3 a, double3 b);
+
+__host__ __device__ double3 operator+(double s, double3 v);
+__host__ __device__ double3 operator-(double s, double3 v);
+__host__ __device__ double3 operator*(double s, double3 v);
+__host__ __device__ double3 operator/(double s, double3 v);
+
+__host__ __device__ double3 operator+(double3 v, double s);
+__host__ __device__ double3 operator-(double3 v, double s);
+__host__ __device__ double3 operator*(double3 v, double s);
+__host__ __device__ double3 operator/(double3 v, double s);
 
 template <typename Real2>
 struct real2_add : public thrust::binary_function<Real2, Real2, Real2>

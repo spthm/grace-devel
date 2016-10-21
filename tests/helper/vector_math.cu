@@ -1,5 +1,7 @@
 #include <math.h>
 
+#include "vector_math.cuh"
+
 __host__ __device__ double magnitude(float3 v)
 {
     double v2 = (double)v.x * v.x + (double)v.y * v.y + (double)v.z * v.z;
@@ -10,6 +12,16 @@ __host__ __device__ double magnitude(double3 v)
 {
     double v2 = v.x * v.x + v.y * v.y + v.z * v.z;
     return sqrt(v2);
+}
+
+__host__ __device__ float3 normalize(float3 v)
+{
+    return v / magnitude(v);
+}
+
+__host__ __device__ double3 normalize(double3 v)
+{
+     return v / magnitude(v);
 }
 
 __host__ __device__ double dot_product(float3 a, float3 b)
@@ -149,4 +161,88 @@ __host__ __device__ float3 operator/(float3 v, float s)
     return make_float3(v.x / s,
                        v.y / s,
                        v.z / s);
+}
+
+__host__ __device__ double3 operator+(double3 a, double3 b)
+{
+    return make_double3(a.x + b.x,
+                        a.y + b.y,
+                        a.z + b.z);
+}
+
+__host__ __device__ double3 operator-(double3 a, double3 b)
+{
+    return make_double3(a.x - b.x,
+                        a.y - b.y,
+                        a.z - b.z);
+}
+
+__host__ __device__ double3 operator*(double3 a, double3 b)
+{
+    return make_double3(a.x * b.x,
+                        a.y * b.y,
+                        a.z * b.z);
+}
+
+__host__ __device__ double3 operator/(double3 a, double3 b)
+{
+    return make_double3(a.x / b.x,
+                        a.y / b.y,
+                        a.z / b.z);
+}
+
+__host__ __device__ double3 operator+(double s, double3 v)
+{
+    return make_double3(s + v.x,
+                        s + v.y,
+                        s + v.z);
+}
+
+__host__ __device__ double3 operator-(double s, double3 v)
+{
+    return make_double3(s - v.x,
+                        s - v.y,
+                        s - v.z);
+}
+
+__host__ __device__ double3 operator*(double s, double3 v)
+{
+    return make_double3(s * v.x,
+                        s * v.y,
+                        s * v.z);
+}
+
+__host__ __device__ double3 operator/(double s, double3 v)
+{
+    return make_double3(s / v.x,
+                        s / v.y,
+                        s / v.z);
+}
+
+__host__ __device__ double3 operator+(double3 v, double s)
+{
+    return make_double3(v.x + s,
+                        v.y + s,
+                        v.z + s);
+}
+
+__host__ __device__ double3 operator-(double3 v, double s)
+{
+    return make_double3(v.x - s,
+                        v.y - s,
+                        v.z - s);
+}
+
+__host__ __device__ double3 operator*(double3 v, double s)
+{
+    return make_double3(v.x * s,
+                        v.y * s,
+                        v.z * s);
+}
+
+__host__ __device__ double3 operator/(double3 v, double s)
+{
+    return make_double3(v.x / s,
+                        v.y / s,
+                        v.z / s);
 }
