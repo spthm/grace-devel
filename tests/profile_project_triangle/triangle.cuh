@@ -6,7 +6,8 @@
 #include "grace/cuda/util/bound_iter.cuh"
 #include "grace/cuda/nodes.h"
 
-#define TRIANGLE_EPSILON 0.000001
+#define AABB_EPSILON 0.000001f
+#define TRIANGLE_EPSILON 1E-14f
 
 struct Triangle
 {
@@ -66,7 +67,10 @@ struct RayIntersect_tri
         float3 P = cross_product(dir, tri.e2);
         float det = dot_product(tri.e1, P);
         // If true, the ray lies in - or close to - the plane of the triangle.
+        // Do not cull back faces.
         if (det > -TRIANGLE_EPSILON && det < TRIANGLE_EPSILON) return false;
+        // Cull back faces.
+        // if (det < TRIANGLE_EPSILON) return false;
 
         float inv_det = 1. / det;
         float3 OV = O - tri.v;
@@ -95,9 +99,9 @@ struct OnHit_tri
 {
     // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray&,
-                                 RayData_tri& ray_data, const int tri_idx,
-                                 const Triangle&, const int /*lane*/,
-                                 const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               RayData_tri& ray_data, const int tri_idx,
+                               const Triangle&, const int /*lane*/,
+                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
     {
         ray_data.data = tri_idx;
     }
@@ -107,11 +111,11 @@ struct RayEntry_tri
 {
     // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray& ray,
-                                 RayData_tri& ray_data,
-                                 const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               RayData_tri& ray_data,
+                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
     {
         ray_data.data = -1;
-        ray_data.t_min = ray.length + TRIANGLE_EPSILON;
+        ray_data.t_min = ray.length * (1.f + AABB_EPSILON);
     }
 };
 
@@ -136,16 +140,16 @@ struct TriangleAABB
         // Some PLY files contain triangles which are zero-sized in one or more
         // dimensions, but GRACE is not robust to zero-sized AABBs.
         if (bot->x == top->x) {
-            bot->x -= TRIANGLE_EPSILON;
-            top->x += TRIANGLE_EPSILON;
+            bot->x -= AABB_EPSILON * tri.e1.x;
+            top->x += AABB_EPSILON * tri.e1.x;
         }
         if (bot->y == top->y) {
-            bot->y -= TRIANGLE_EPSILON;
-            top->y += TRIANGLE_EPSILON;
+            bot->y -= AABB_EPSILON * tri.e1.y;
+            top->y += AABB_EPSILON * tri.e1.y;
         }
         if (bot->z == top->z) {
-            bot->z -= TRIANGLE_EPSILON;
-            top->z += TRIANGLE_EPSILON;
+            bot->z -= AABB_EPSILON * tri.e1.z;
+            top->z += AABB_EPSILON * tri.e1.z;
         }
     }
 };
