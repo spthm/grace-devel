@@ -140,16 +140,19 @@ struct TriangleAABB
         // Some PLY files contain triangles which are zero-sized in one or more
         // dimensions, but GRACE is not robust to zero-sized AABBs.
         if (bot->x == top->x) {
-            bot->x -= AABB_EPSILON * tri.e1.x;
-            top->x += AABB_EPSILON * tri.e1.x;
+            float scale = abs(bot->x);
+            bot->x -= AABB_EPSILON * scale;
+            top->x += AABB_EPSILON * scale;
         }
         if (bot->y == top->y) {
-            bot->y -= AABB_EPSILON * tri.e1.y;
-            top->y += AABB_EPSILON * tri.e1.y;
+            float scale = abs(bot->y);
+            bot->y -= AABB_EPSILON * scale;
+            top->y += AABB_EPSILON * scale;
         }
         if (bot->z == top->z) {
-            bot->z -= AABB_EPSILON * tri.e1.z;
-            top->z += AABB_EPSILON * tri.e1.z;
+            float scale = abs(bot->z);
+            bot->z -= AABB_EPSILON * scale;
+            top->z += AABB_EPSILON * scale;
         }
     }
 };
