@@ -62,7 +62,7 @@ struct RayIntersect_tri
         const grace::gpu::BoundIter<char> /*sm_iter*/) const
     {
         float3 dir = make_float3(ray.dx, ray.dy, ray.dz);
-        float3 O = make_float3(ray.oz, ray.oy, ray.oz);
+        float3 O = make_float3(ray.ox, ray.oy, ray.oz);
 
         float3 P = cross_product(dir, tri.e2);
         float det = dot_product(tri.e1, P);
