@@ -34,7 +34,7 @@ GRACE_HOST void setup_plane_z(
     *base = make_float3(mins.x - maxs.w, // start in top-left for images
                         maxs.y + maxs.w, // start in top-left for images
                         maxs.z + maxs.w);
-    // Ray direction is cross(w, h) = +z.
+    // Ray direction is cross(w, h) = -z.
     *w = make_float3(span_x, 0.f, 0.f);  // start in top-left for images
     *h = make_float3(0.f, -span_y, 0.f); // start in top-left for images
 
