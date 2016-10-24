@@ -42,8 +42,12 @@ struct TriangleAABB
         top->y = max(v0.y, max(v1.y, v2.y));
         top->z = max(v0.z, max(v1.z, v2.z));
 
-        // Some PLY files contain triangles which are zero-sized in one or more
-        // dimensions, but GRACE is not robust to zero-sized AABBs.
+// Some PLY files contain triangles which are zero-sized in one or more
+// dimensions. In debug mode, GRACE has an assertion check that lower x/y/z
+// bounds are _less_ than x/y/z upper bounds. The below is therefore needed to
+// prevent run-time errors in debug mode; however, it should not be allowed to
+// impact performance when not in debug mode.
+#ifdef GRACE_DEBUG
         if (bot->x == top->x) {
             float scale = abs(bot->x);
             bot->x -= AABB_EPSILON * scale;
@@ -59,6 +63,7 @@ struct TriangleAABB
             bot->z -= AABB_EPSILON * scale;
             top->z += AABB_EPSILON * scale;
         }
+#endif
     }
 };
 
