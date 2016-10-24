@@ -11,13 +11,15 @@ INTEGRATION_TEST_DIRS = segmented_scan \
 	sphere_intersection \
 	tree_traversal
 
-DUMP_DIRS = project_gadget hitcounts
+DUMP_DIRS = project_gadget project_triangle hitcounts
 
 PROFILE_DIRS = AABB_intersect \
 	profile_project_gadget \
+	profile_project_triangle \
 	profile_trace_gadget \
 	profile_tree \
-	profile_tree_gadget
+	profile_tree_gadget \
+	profile_tree_triangle
 
 # The variables here _must_ be simply expanded, as they are later altered.
 ALL_DIRS := $(UNIT_TEST_DIRS) $(INTEGRATION_TEST_DIRS) $(DUMP_DIRS) $(PROFILE_DIRS)
