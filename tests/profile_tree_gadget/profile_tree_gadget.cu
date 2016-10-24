@@ -4,10 +4,14 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
+#include "grace/types.h"
 #include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
+#include "grace/cuda/kernels/aabb.cuh"
 #include "grace/cuda/kernels/albvh.cuh"
+#include "grace/cuda/util/extrema.cuh"
 #include "grace/generic/functors/albvh.h"
+#include "grace/generic/functors/centroid.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 
@@ -69,13 +73,14 @@ int main(int argc, char* argv[])
               << std::endl;
 
     CUDATimer timer;
-    double t_all, t_morton, t_sort, t_deltas, t_leaves, t_leaf_deltas, t_nodes;
-    t_all = t_morton = t_sort = t_deltas = t_leaves = t_leaf_deltas = t_nodes = 0.0;
+    double t_all, t_bounds, t_morton, t_sort, t_deltas, t_leaves, t_leaf_deltas, t_nodes;
+    t_all = t_bounds = t_morton = t_sort = t_deltas = t_leaves = t_leaf_deltas = t_nodes = 0.0;
     for (int i = -1; i < N_iter; ++i)
     {
         timer.start();
 
         thrust::device_vector<float4> d_spheres = h_spheres;
+        thrust::device_vector<float3> d_centroids(N);
         thrust::device_vector<grace::uinteger32> d_keys(N);
         thrust::device_vector<float> d_deltas(N + 1);
         grace::Tree d_tree(N, max_per_leaf);
@@ -83,13 +88,22 @@ int main(int argc, char* argv[])
         // Don't include above memory allocations in t_morton.
         timer.split();
 
-        grace::morton_keys_sph(d_spheres, d_keys);
+        grace::AABB::compute_centroids(
+            thrust::raw_pointer_cast(d_spheres.data()),
+            N,
+            thrust::raw_pointer_cast(d_centroids.data()),
+            grace::CentroidSphere());
+        float3 bots, tops;
+        grace::min_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &bots);
+        grace::max_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &tops);
+        if (i >= 0) t_bounds += timer.split();
+
+        grace::morton_keys_sph(d_spheres, bots, tops, d_keys);
         if (i >= 0) t_morton += timer.split();
 
         thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                             d_spheres.begin());
         if (i >= 0) t_sort += timer.split();
-
 
         grace::euclidean_deltas_sph(d_spheres, d_deltas);
         if (i >= 0) t_deltas += timer.split();
@@ -125,7 +139,9 @@ int main(int argc, char* argv[])
         if (i >= 0) t_all += timer.elapsed();
     }
 
-    std::cout << "Time for Morton key generation:    " << std::setw(7)
+    std::cout << "Time to compute bounds:            " << std::setw(7)
+              << t_bounds/N_iter << " ms." << std::endl
+              << "Time for Morton key generation:    " << std::setw(7)
               << t_morton/N_iter << " ms." << std::endl
               << "Time for sort-by-key:              " << std::setw(7)
               << t_sort/N_iter << " ms." << std::endl
