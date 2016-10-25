@@ -401,7 +401,7 @@ __global__ void build_nodes_slice_kernel(
             }
             else {
                 x_min = y_min = z_min = CUDART_INF_F;
-                x_max = y_max = z_max = -1.f;
+                x_max = y_max = z_max = -CUDART_INF_F;
 
                 // Current node is a leaf; compute it's AABB from the spheres
                 // it contains.
