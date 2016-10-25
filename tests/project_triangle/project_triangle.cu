@@ -86,11 +86,11 @@ int main(int argc, char* argv[])
     setup_lights(bots, tops, d_lights_pos);
 
     thrust::device_vector<float> d_brightness(N_rays);
-    trace_flat_shade_tri(d_rays,
-                         d_tris,
-                         d_tree,
-                         d_lights_pos,
-                         d_brightness);
+    trace_shade_tri(d_rays,
+                    d_tris,
+                    d_tree,
+                    d_lights_pos,
+                    d_brightness);
 
     float min_brightness = thrust::reduce(d_brightness.begin(),
                                           d_brightness.end(),

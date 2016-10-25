@@ -136,6 +136,37 @@ public:
     }
 };
 
+struct RayExit_shade_tri
+{
+private:
+    const RayData_tri* const primary_raydata;
+    const float* const tri_colours;
+    float* const brightness;
+
+public:
+    RayExit_shade_tri(const RayData_tri* const primary_raydata,
+                      float* const tri_colours,
+                      float* const brightness) :
+        primary_raydata(primary_raydata),
+        tri_colours(tri_colours),
+        brightness(brightness) {}
+
+    // grace::gpu::BoundIter is not callable on the host.
+    __device__ void operator()(const int ray_idx, const grace::Ray& ray,
+                               RayData_tri& ray_data,
+                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+    {
+        int tri_idx = primary_raydata[ray_idx].data;
+
+        // If this light is not blocked (i.e. if there are no hits), and if the
+        // corresponding primary ray did hit something, then shade according to
+        // this light.
+        if (ray_data.data == -1 && tri_idx != -1) {
+            brightness[ray_idx] += tri_colours[tri_idx];
+        }
+    }
+};
+
 struct TriangleAABB
 {
     // Must be callable from the device.
