@@ -68,9 +68,9 @@ struct RayIntersect_tri
         float det = dot_product(tri.e1, P);
         // If true, the ray lies in - or close to - the plane of the triangle.
         // Do not cull back faces.
-        if (det > -TRIANGLE_EPSILON && det < TRIANGLE_EPSILON) return false;
+        // if (det > -TRIANGLE_EPSILON && det < TRIANGLE_EPSILON) return false;
         // Cull back faces.
-        // if (det < TRIANGLE_EPSILON) return false;
+        if (det < TRIANGLE_EPSILON) return false;
 
         float inv_det = 1. / det;
         float3 OV = O - tri.v;
