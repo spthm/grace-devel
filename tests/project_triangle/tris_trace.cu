@@ -6,28 +6,6 @@
 #include "grace/cuda/functors/trace.cuh"
 #include "grace/cuda/kernels/bintree_trace.cuh"
 
-// grace::gpu::BoundIter is not callable on the host.
-__device__ bool RayIntersect_tri::operator()(
-    const grace::Ray& ray, const Triangle& tri,
-    RayData_tri& ray_data, const int /*lane*/,
-    const grace::gpu::BoundIter<char> /*sm_iter*/) const
-{
-    float t;
-    bool hit = false;
-    if (intersect(ray, tri, &t))
-    {
-        // If false, the intersection is too far along the ray, or before
-        // the ray origin.
-        if (t <= ray_data.t_min && t >= TRIANGLE_EPSILON)
-        {
-            ray_data.t_min = t;
-            hit = true;
-        }
-    }
-
-    return hit;
-}
-
 static __global__ void shadow_rays_kernel(
     const grace::Ray* const primary_rays,
     const size_t N_rays,

@@ -27,11 +27,34 @@ struct ShadowRayResult
 
 struct RayIntersect_tri
 {
+    /* This method definition, and the definition of the intersect() function it
+     * calls, should be visible at compile-time for all device-side invocations
+     * for best performance! If this method instead links to some external
+     * __device__ function, performance is significantly reduced, because nvcc
+     * cannot optimize the register usage here or within intersect() in the
+     * context of the calling kernel.
+     */
     // grace::gpu::BoundIter is not callable on the host.
     __device__ bool operator()(
         const grace::Ray& ray, const Triangle& tri,
         RayData_tri& ray_data, const int /*lane*/,
-        const grace::gpu::BoundIter<char> /*sm_iter*/) const;
+        const grace::gpu::BoundIter<char> /*sm_iter*/) const
+    {
+        float t;
+        bool hit = false;
+        if (intersect(ray, tri, &t))
+        {
+            // If false, the intersection is too far along the ray, or before
+            // the ray origin.
+            if (t <= ray_data.t_min && t >= TRIANGLE_EPSILON)
+            {
+                ray_data.t_min = t;
+                hit = true;
+            }
+        }
+
+        return hit;
+    }
 };
 
 struct OnHit_tri
