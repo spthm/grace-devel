@@ -14,7 +14,7 @@
 
 // If not NULL, bots and tops will be populated with the minimum and maximum
 // triangle centroid bounds, respectively.
-GRACE_HOST void build_tree_tris(
+inline void build_tree_tris(
     thrust::device_vector<Triangle>& d_tris,
     grace::Tree& d_tree,
     float3* const bots = NULL,

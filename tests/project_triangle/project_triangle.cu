@@ -6,7 +6,7 @@
 
 #include "triangle.cuh"
 #include "tris_tree.cuh"
-#include "tris_trace.cuh"
+#include "tris_render.cuh"
 
 #include "grace/cuda/nodes.h"
 #include "grace/ray.h"
@@ -69,9 +69,14 @@ int main(int argc, char* argv[])
               << std::endl;
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    float3 bots, tops;
+    thrust::device_vector<float> d_pixels(N_rays);
+    thrust::device_vector<float3> d_lights_pos;
+    thrust::device_vector<float> d_shaded_tris;
     grace::Tree d_tree(N, max_per_leaf);
+
+    float3 bots, tops;
     build_tree_tris(d_tris, d_tree, &bots, &tops);
+    setup_lights(bots, tops, d_lights_pos);
 
     // maxs.w is padding to move ray-generating plane away from model AABB.
     // Applies equally to x/y/z bounds.
@@ -79,30 +84,22 @@ int main(int argc, char* argv[])
                                max(tops.y - bots.y, tops.z - bots.z));
     float4 mins = make_float4(bots.x, bots.y, bots.z, padding);
     float4 maxs = make_float4(tops.x, tops.y, tops.z, padding);
-
     orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 
-    thrust::device_vector<float3> d_lights_pos;
-    setup_lights(bots, tops, d_lights_pos);
+    shade_triangles(d_tris, d_lights_pos, d_shaded_tris);
+    render(d_rays, d_tris, d_tree, d_lights_pos, d_shaded_tris, d_pixels);
 
-    thrust::device_vector<float> d_brightness(N_rays);
-    trace_shade_tri(d_rays,
-                    d_tris,
-                    d_tree,
-                    d_lights_pos,
-                    d_brightness);
+    float min_val = thrust::reduce(d_pixels.begin(),
+                                   d_pixels.end(),
+                                   1E20f, thrust::minimum<float>());
+    float max_val = thrust::reduce(d_pixels.begin(),
+                                   d_pixels.end(),
+                                   0.f, thrust::maximum<float>());
+    std::cout << "Minimum pixel value: " << min_val << std::endl
+              << "Maximum pixel value: " << max_val << std::endl;
 
-    float min_brightness = thrust::reduce(d_brightness.begin(),
-                                          d_brightness.end(),
-                                          1E20f, thrust::minimum<float>());
-    float max_brightness = thrust::reduce(d_brightness.begin(),
-                                          d_brightness.end(),
-                                          0.f, thrust::maximum<float>());
-    std::cout << "Minimum brightness: " << min_brightness << std::endl
-              << "Maximum brightness: " << max_brightness << std::endl;
-
-    thrust::host_vector<float> h_brightness = d_brightness;
-    make_bitmap(thrust::raw_pointer_cast(h_brightness.data()),
+    thrust::host_vector<float> h_pixels = d_pixels;
+    make_bitmap(thrust::raw_pointer_cast(h_pixels.data()),
                 N_per_side, N_per_side,
                 0.f, d_lights_pos.size() * 1.f + AMBIENT_BKG,
                 "render.bmp",
