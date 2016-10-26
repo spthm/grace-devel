@@ -1,7 +1,11 @@
 include ../Makefile.common
 
-OBJS = profile_tree_triangle.o ../helper/vector_math.o ../helper/read_ply.o ../helper/ply.o
-NVCCDEPS += triangle.cuh ../helper/vector_math.cuh ../helper/read_ply.hpp ../helper/ply.h
+OBJS = profile_tree_triangle.o \
+triangle.o \
+../helper/vector_math.o ../helper/read_ply.o ../helper/ply.o
+
+NVCCDEPS += triangle.cuh \
+../helper/vector_math.cuh ../helper/read_ply.hpp ../helper/ply.h
 
 INCLUDES += -I../helper/ $(CUDA_INC)
 
