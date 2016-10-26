@@ -3,9 +3,6 @@
 #include "helper/read_ply.hpp"
 #include "helper/vector_math.cuh"
 
-#include "grace/cuda/util/bound_iter.cuh"
-#include "grace/cuda/nodes.h"
-
 #define AABB_EPSILON 0.000001f
 #define TRIANGLE_EPSILON 1E-14f
 
