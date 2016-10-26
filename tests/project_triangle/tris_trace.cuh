@@ -35,7 +35,7 @@ __global__ void shadow_rays_kernel(
             float3 D = make_float3(ray.dx, ray.dy, ray.dz);
 
             // Point needs to be moved off surface to prefent numerical artefacts.
-            float3 point = O + AABB_EPSILON * t_min * D;
+            float3 point = O + fmaxf(0.f, (t_min - 1e-4f)) * D;
             float3 light_vector = lights_pos[light_index] - point;
             float light_distance = magnitude(light_vector);
             float3 L = light_vector / light_distance;
