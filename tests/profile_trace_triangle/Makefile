@@ -1,6 +1,6 @@
 include ../Makefile.common
 
-OBJS = profile_project_triangle.o \
+OBJS = profile_trace_triangle.o \
 tris_trace.o \
 triangle.o \
 ../helper/vector_math.o ../helper/read_ply.o ../helper/ply.o
@@ -13,7 +13,7 @@ tris_tree.cuh \
 INCLUDES += -I../helper/ $(CUDA_INC)
 
 
-all: profile_project_triangle
+all: profile_trace_triangle
 
 %.o: %.c $(DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -25,14 +25,14 @@ all: profile_project_triangle
 %.o: %.cu $(NVCCDEPS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -dc $< -o $@
 
-profile_project_triangle: $(OBJS) $(NVCCDEPS)
+profile_trace_triangle: $(OBJS) $(NVCCDEPS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
 
 clean:
 	@-rm -f *.o
 
 distclean: clean
-	@-rm -f profile_project_triangle
+	@-rm -f profile_trace_triangle
 
 .PHONY: clean
 .PHONY: distclean

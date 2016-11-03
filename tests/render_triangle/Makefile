@@ -1,6 +1,6 @@
 include ../Makefile.common
 
-OBJS = project_triangle.o \
+OBJS = render_triangle.o \
 tris_trace.o \
 tris_render.o \
 triangle.o \
@@ -15,7 +15,7 @@ tris_render.cuh \
 INCLUDES += -I../helper/ $(CUDA_INC)
 
 
-all: project_triangle
+all: render_triangle
 
 %.o: %.c $(DEPS)
 	$(CC) $(CFLAGS) $(INCLUDES) -c $< -o $@
@@ -27,14 +27,14 @@ all: project_triangle
 %.o: %.cu $(NVCCDEPS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -dc $< -o $@
 
-project_triangle: $(OBJS) $(NVCCDEPS)
+render_triangle: $(OBJS) $(NVCCDEPS)
 	$(NVCC) $(NVCCFLAGS) $(NVCCINCLUDES) -o $@ $(OBJS) $(NVCCLFLAGS) $(NVCCLIBS)
 
 clean:
 	@-rm -f *.o
 
 distclean: clean
-	@-rm -f project_triangle
+	@-rm -f render_triangle
 
 .PHONY: clean
 .PHONY: distclean
