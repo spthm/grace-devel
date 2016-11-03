@@ -30,6 +30,7 @@ template <typename PrimitiveIter, typename Real3, typename KeyIter,
 __global__ void morton_keys_kernel(
     PrimitiveIter primitives,
     const size_t N_primitives,
+    const Real3 mins,
     const Real3 norm_scale,
     KeyIter keys,
     const CentroidFunc centroid)
@@ -42,9 +43,9 @@ __global__ void morton_keys_kernel(
     while (tid < N_primitives) {
         float3 centre = centroid(primitives[tid]);
 
-        KeyType x = static_cast<KeyType>(norm_scale.x * centre.x);
-        KeyType y = static_cast<KeyType>(norm_scale.y * centre.y);
-        KeyType z = static_cast<KeyType>(norm_scale.z * centre.z);
+        KeyType x = static_cast<KeyType>(norm_scale.x * (centre.x - mins.x));
+        KeyType y = static_cast<KeyType>(norm_scale.y * (centre.y - mins.y));
+        KeyType z = static_cast<KeyType>(norm_scale.z * (centre.z - mins.z));
 
         keys[tid] = morton_key(x, y, z);
 
@@ -64,6 +65,7 @@ template <typename PrimitiveIter, typename Real3, typename KeyIter,
 GRACE_HOST void morton_keys(
     PrimitiveIter d_prims_iter,
     const size_t N_primitives,
+    const Real3 mins,
     const Real3 normalizing_scale,
     KeyIter d_keys_iter,
     const CentroidFunc centroid)
@@ -74,6 +76,7 @@ GRACE_HOST void morton_keys(
     morton_keys_kernel<<<blocks,MORTON_THREADS_PER_BLOCK>>>(
         d_prims_iter,
         N_primitives,
+        mins,
         normalizing_scale,
         d_keys_iter,
         centroid);
@@ -108,8 +111,8 @@ GRACE_HOST void morton_keys(
                                span / (AABB_top.y - AABB_bot.y),
                                span / (AABB_top.z - AABB_bot.z));
 
-    morton::morton_keys(d_prims_iter, N_primitives, scale, d_keys_iter,
-                        centroid);
+    morton::morton_keys(d_prims_iter, N_primitives, AABB_bot, scale,
+                        d_keys_iter, centroid);
 }
 
 template <typename TPrimitive, typename Real3, typename KeyType,

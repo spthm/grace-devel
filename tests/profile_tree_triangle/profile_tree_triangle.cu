@@ -4,16 +4,17 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
+#include "triangle.cuh"
+
 #include "grace/types.h"
-#include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/kernels/aabb.cuh"
 #include "grace/cuda/kernels/albvh.cuh"
+#include "grace/cuda/kernels/morton.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/generic/functors/albvh.h"
-#include "grace/generic/functors/centroid.h"
 #include "helper/cuda_timer.cuh"
-#include "helper/read_gadget.cuh"
+#include "helper/read_ply.hpp"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -32,7 +33,7 @@ int main(int argc, char* argv[])
 
     int max_per_leaf = 32;
     int N_iter = 100;
-    std::string fname = "../data/gadget/0128/Data_025";
+    std::string fname = "../data/ply/dragon_recon/dragon_vrip.ply";
     unsigned int device_ID = 0;
 
     if (argc > 1) {
@@ -58,18 +59,20 @@ int main(int argc, char* argv[])
     // causes them to be freed before we call cudaDeviceReset(); if device
     // vectors are not freed, cudaDeviceReset() will throw.)
 
-    std::cout << "Gadget file:            " << fname << std::endl;
-    // Vector is resized in read_gadget().
-    thrust::host_vector<float4> h_spheres;
-    read_gadget(fname, h_spheres);
-    const size_t N = h_spheres.size();
+    std::cout << "Input geometry file:     " << fname << std::endl;
+    // Vector is resized in read_triangles().
+    std::vector<PLYTriangle> ply_tris;
+    thrust::host_vector<Triangle> h_tris;
+    read_triangles(fname, ply_tris);
+    h_tris = ply_tris;
+    const size_t N = h_tris.size();
 
-    std::cout << "Number of particles:    " << N << std::endl
-              << "Max particles per leaf: " << max_per_leaf << std::endl
-              << "Number of iterations:   " << N_iter << std::endl
-              << "Running on device:      " << device_ID
-                                          << " (" << deviceProp.name << ")"
-                                          << std::endl
+    std::cout << "Number of primitives:    " << N << std::endl
+              << "Max primitives per leaf: " << max_per_leaf << std::endl
+              << "Number of iterations:    " << N_iter << std::endl
+              << "Running on device:       " << device_ID
+                                             << " (" << deviceProp.name << ")"
+                                             << std::endl
               << std::endl;
 
     CUDATimer timer;
@@ -79,33 +82,33 @@ int main(int argc, char* argv[])
     {
         timer.start();
 
-        thrust::device_vector<float4> d_spheres = h_spheres;
+        thrust::device_vector<Triangle> d_tris = h_tris;
         thrust::device_vector<float3> d_centroids(N);
         thrust::device_vector<grace::uinteger32> d_keys(N);
-        thrust::device_vector<float> d_deltas(N + 1);
+        thrust::device_vector<grace::uinteger32> d_deltas(N + 1);
         grace::Tree d_tree(N, max_per_leaf);
         thrust::device_vector<int2> d_tmp_nodes(N - 1);
         // Don't include above memory allocations in t_morton.
         timer.split();
 
         grace::AABB::compute_centroids(
-            thrust::raw_pointer_cast(d_spheres.data()),
+            thrust::raw_pointer_cast(d_tris.data()),
             N,
             thrust::raw_pointer_cast(d_centroids.data()),
-            grace::CentroidSphere());
+            TriangleCentroid());
         float3 bots, tops;
         grace::min_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &bots);
         grace::max_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &tops);
         if (i >= 0) t_bounds += timer.split();
 
-        grace::morton_keys_sph(d_spheres, bots, tops, d_keys);
+        grace::morton_keys(d_tris, bots, tops, d_keys, TriangleCentroid());
         if (i >= 0) t_morton += timer.split();
 
         thrust::sort_by_key(d_keys.begin(), d_keys.end(),
-                            d_spheres.begin());
+                            d_tris.begin());
         if (i >= 0) t_sort += timer.split();
 
-        grace::euclidean_deltas_sph(d_spheres, d_deltas);
+        grace::compute_deltas(d_keys, d_deltas, grace::DeltaXOR());
         if (i >= 0) t_deltas += timer.split();
 
         grace::ALBVH::build_leaves(
@@ -113,12 +116,12 @@ int main(int argc, char* argv[])
             d_tree.leaves,
             d_tree.max_per_leaf,
             thrust::raw_pointer_cast(d_deltas.data()),
-            thrust::less<float>());
+            thrust::less<grace::uinteger32>());
         grace::ALBVH::remove_empty_leaves(d_tree);
         if (i >= 0) t_leaves += timer.split();
 
         const size_t n_new_leaves = d_tree.leaves.size();
-        thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
+        thrust::device_vector<grace::uinteger32> d_new_deltas(n_new_leaves + 1);
         // Don't include above memory allocation in t_leaf_deltas.
         timer.split();
 
@@ -130,10 +133,10 @@ int main(int argc, char* argv[])
 
         grace::ALBVH::build_nodes(
             d_tree,
-            thrust::raw_pointer_cast(d_spheres.data()),
+            thrust::raw_pointer_cast(d_tris.data()),
             thrust::raw_pointer_cast(d_new_deltas.data()),
-            thrust::less<float>(),
-            grace::AABBSphere());
+            thrust::less<grace::uinteger32>(),
+            TriangleAABB());
         if (i >= 0) t_nodes += timer.split();
 
         if (i >= 0) t_all += timer.elapsed();
