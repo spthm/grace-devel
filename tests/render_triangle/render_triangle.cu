@@ -9,9 +9,9 @@
 #include "tris_render.cuh"
 
 #include "grace/cuda/nodes.h"
+#include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/images.hpp"
-#include "helper/rays.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -78,13 +78,15 @@ int main(int argc, char* argv[])
     build_tree_tris(d_tris, d_tree, &bots, &tops);
     setup_lights(bots, tops, d_lights_pos);
 
-    // maxs.w is padding to move ray-generating plane away from model AABB.
-    // Applies equally to x/y/z bounds.
-    float padding = 0.05 * max(tops.x - bots.y,
-                               max(tops.y - bots.y, tops.z - bots.z));
-    float4 mins = make_float4(bots.x, bots.y, bots.z, padding);
-    float4 maxs = make_float4(tops.x, tops.y, tops.z, padding);
-    orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
+    float3 camera_position, look_at, view_up;
+    float FOVy_degrees, FOVy_radians, ray_length;
+    FOVy_degrees = 50.f;
+    setup_camera(bots, tops, FOVy_degrees,
+                 &camera_position, &look_at, &view_up,
+                 &FOVy_radians, &ray_length);
+    pinhole_camera_rays(d_rays, N_per_side, N_per_side,
+                        camera_position, look_at, view_up, FOVy_radians,
+                        ray_length);
 
     shade_triangles(d_tris, d_lights_pos, d_shaded_tris);
     render(d_rays, d_tris, d_tree, d_lights_pos, d_shaded_tris, d_pixels);

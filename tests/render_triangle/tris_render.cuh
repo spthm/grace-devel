@@ -7,12 +7,17 @@
 
 #include <thrust/device_vector.h>
 
-#define AMBIENT_BKG 0.05f
+#define AMBIENT_BKG 0.1f
 #define BKG_COLOUR 0.0f
 
 void setup_lights(
     const float3 bots, const float3 tops,
     thrust::device_vector<float3>& d_lights_pos);
+
+void setup_camera(
+    const float3 bots, const float3 tops, const float FOVy_degrees,
+    float3* camera_position, float3* look_at, float3* view_up,
+    float* FOVy_radians, float* length);
 
 void shade_triangles(
     const thrust::device_vector<Triangle>& d_tris,

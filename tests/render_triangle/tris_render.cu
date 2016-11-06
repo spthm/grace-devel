@@ -25,6 +25,22 @@ void setup_lights(
     // );
 }
 
+void setup_camera(
+    const float3 bots, const float3 tops, const float FOVy_degrees,
+    float3* camera_position, float3* look_at, float3* view_up,
+    float* FOVy_radians, float* length)
+{
+    *camera_position = make_float3(bots.x - 0.5 * (tops.x - bots.x),
+                                   tops.y + 1.0 * (tops.y - bots.y),
+                                   tops.z + 5.0 * (tops.z - bots.z));
+    *look_at = make_float3((bots.x + tops.x) / 2.,
+                           (bots.y + tops.y) / 2.,
+                           (bots.z + tops.z) / 2.);
+    *view_up = make_float3(0.f, 1.f, 0.f);
+    *FOVy_radians = FOVy_degrees * 3.141 / 360.;
+    *length = 100. * (tops.z - bots.z);
+}
+
 static __global__ void shade_triangles_kernel(
     const Triangle* triangles,
     const size_t N_tris,
