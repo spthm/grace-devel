@@ -72,6 +72,11 @@ struct RayEntry_tri
     }
 };
 
+void setup_cameras(
+    const float3 bots, const float3 tops, const float FOVy_degrees,
+    const int resolution_x, const int resolution_y,
+    std::vector<float3>& camera_positions, float3* look_at, float3* view_up,
+    float* FOVy_radians, float* ray_length);
 
 void trace_closest_tri(
     const thrust::device_vector<grace::Ray>& d_rays,

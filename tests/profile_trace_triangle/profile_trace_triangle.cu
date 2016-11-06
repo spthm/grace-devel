@@ -9,9 +9,9 @@
 #include "tris_trace.cuh"
 
 #include "grace/cuda/nodes.h"
+#include "grace/cuda/gen_rays.cuh"
 #include "grace/ray.h"
 #include "helper/cuda_timer.cuh"
-#include "helper/rays.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -27,7 +27,7 @@ int main(int argc, char* argv[])
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
     std::cout.precision(3);
 
-    size_t N_rays = 512 * 512; // = 2621,144
+    size_t N_rays = 512 * 512; // = 262,144
     int max_per_leaf = 32;
     std::string fname = "../data/ply/dragon_recon/dragon_vrip.ply";
     int N_iter = 10;
@@ -83,66 +83,77 @@ int main(int argc, char* argv[])
     grace::Tree d_tree(N, max_per_leaf);
     build_tree_tris(d_tris, d_tree, &bots, &tops);
 
-    // maxs.w is padding to move ray-generating plane away from model AABB.
-    float padding = 0.001 * (bots.z - tops.z);
-    float4 mins = make_float4(bots.x, bots.y, bots.z, padding);
-    float4 maxs = make_float4(tops.x, tops.y, tops.z, padding);
+    std::vector<float3> camera_positions;
+    float3 look_at, view_up;
+    float FOVy_radians, ray_length;
+    float FOVy_degrees = 50.f;
+    setup_cameras(bots, tops, FOVy_degrees, N_per_side, N_per_side,
+                  camera_positions, &look_at, &view_up,
+                  &FOVy_radians, &ray_length);
 
     CUDATimer timer;
     double t_genray, t_closest, t_all;
     t_genray = t_closest = t_all = 0.0;
     for (int i = -1; i < N_iter; ++i)
     {
-        timer.start();
+        for (int j = 0; j < camera_positions.size(); ++j)
+        {
+            timer.start();
 
-        thrust::device_vector<grace::Ray> d_rays(N_rays);
-        thrust::device_vector<int> d_closest_tri_idx(N_rays);
-        // Don't include above memory allocations in t_genray.
-        timer.split();
+            thrust::device_vector<grace::Ray> d_rays(N_rays);
+            thrust::device_vector<int> d_closest_tri_idx(N_rays);
+            // Don't include above memory allocations in t_genray.
+            timer.split();
 
-        orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
-        if (i >= 0) t_genray += timer.split();
+            pinhole_camera_rays(d_rays, N_per_side, N_per_side,
+                                camera_positions[j], look_at, view_up,
+                                FOVy_radians, ray_length);
+            if (i >= 0) t_genray += timer.split();
 
-        trace_closest_tri(d_rays,
-                          d_tris,
-                          d_tree,
-                          d_closest_tri_idx);
-        if (i >= 0) t_closest += timer.split();
+            trace_closest_tri(
+                d_rays,
+                d_tris,
+                d_tree,
+                d_closest_hit_idx);
+            if (i >= 0) t_closest += timer.split();
 
-        if (i >= 0) t_all += timer.elapsed();
+            if (i >= 0) t_all += timer.elapsed();
 
-        // Must be done in-loop for cuMemGetInfo to return relevant results.
-        if (i == 0) {
-            // Temporary memory used in tree construction is impossible to
-            // (straightforwardly) compute, so below we only include the
-            // 'permanently' allocated memory.
-            float trace_bytes = 0.0;
-            trace_bytes += d_tris.size() * sizeof(float4);
-            trace_bytes += d_tree.leaves.size() * sizeof(int4);
-            trace_bytes += d_tree.nodes.size() * sizeof(int4);
-            trace_bytes += d_rays.size() * sizeof(grace::Ray);
-            trace_bytes += d_closest_tri_idx.size() * sizeof(int);
+            // Must be done in-loop for cuMemGetInfo to return relevant results.
+            if (i == 0 && j == 0) {
+                // Temporary memory used in tree construction is impossible to
+                // (straightforwardly) compute, so below we only include the
+                // 'permanently' allocated memory.
+                float trace_bytes = 0.0;
+                trace_bytes += d_tris.size() * sizeof(Triangle);
+                trace_bytes += d_tree.leaves.size() * sizeof(int4);
+                trace_bytes += d_tree.nodes.size() * sizeof(int4);
+                trace_bytes += d_rays.size() * sizeof(grace::Ray);
+                trace_bytes += d_closest_hit_idx.size() * sizeof(int);
 
-            std::cout << "Total memory for closest-triangle traversal: "
-                      << trace_bytes / (1024.0 * 1024.0 * 1024.0) << " GiB"
-                      << std::endl;
+                std::cout << std::endl
+                          << "Total memory for closest-triangle traversal: "
+                          << trace_bytes / (1024.0 * 1024.0 * 1024.0) << " GiB"
+                          << std::endl;
 
-            size_t avail, total;
-            cuMemGetInfo(&avail, &total);
-            std::cout << "Free memory:  " << avail / (1024.0 * 1024.0 * 1024.0)
-                      << " GiB" << std::endl
-                      << "Total memory: " << total / (1024.0 * 1024.0 * 1024.0)
-                      << " GiB" << std::endl
-                      << std::endl;
+                size_t avail, total;
+                cuMemGetInfo(&avail, &total);
+                std::cout << "Free memory:  " << avail / (1024.0 * 1024.0 * 1024.0)
+                          << " GiB" << std::endl
+                          << "Total memory: " << total / (1024.0 * 1024.0 * 1024.0)
+                          << " GiB" << std::endl
+                          << std::endl;
+            }
         }
     }
 
-    std::cout << "Time for generating and sorting rays: " << std::setw(8)
-              << t_genray / N_iter << " ms" << std::endl
+    size_t N_trials = N_iter * camera_positions.size();
+    std::cout << "Time for generating rays:             " << std::setw(8)
+              << t_genray / N_trials << " ms" << std::endl
               << "Time for closest-triangle traversal:  " << std::setw(8)
-              << t_closest / N_iter << " ms" << std::endl
+              << t_closest / N_trials << " ms" << std::endl
               << "Time for total (inc. memory ops):     " << std::setw(8)
-              << t_all / N_iter << " ms" << std::endl
+              << t_all / N_trials << " ms" << std::endl
               << std::endl;
 
 } // End device code.
