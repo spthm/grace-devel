@@ -16,8 +16,9 @@ void setup_lights(
 
 void setup_camera(
     const float3 bots, const float3 tops, const float FOVy_degrees,
+    const int resolution_x, const int resolution_y,
     float3* camera_position, float3* look_at, float3* view_up,
-    float* FOVy_radians, float* length);
+    float* FOVy_radians, float* ray_length);
 
 void shade_triangles(
     const thrust::device_vector<Triangle>& d_tris,

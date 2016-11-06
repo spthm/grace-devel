@@ -81,7 +81,7 @@ int main(int argc, char* argv[])
     float3 camera_position, look_at, view_up;
     float FOVy_degrees, FOVy_radians, ray_length;
     FOVy_degrees = 50.f;
-    setup_camera(bots, tops, FOVy_degrees,
+    setup_camera(bots, tops, FOVy_degrees, N_per_side, N_per_side,
                  &camera_position, &look_at, &view_up,
                  &FOVy_radians, &ray_length);
     pinhole_camera_rays(d_rays, N_per_side, N_per_side,
