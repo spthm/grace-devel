@@ -316,6 +316,53 @@ __global__ void orthogonal_projection_rays_kernel(
     }
 }
 
+template <typename Real, typename Real3>
+__global__ void pinhole_camera_rays_kernel(
+    const int resolution_x,
+    const int resolution_y,
+    const size_t n_rays,
+    const Real aspect_ratio,
+    const Real3 camera_position,
+    const Real3 u,
+    const Real3 v,
+    const Real3 n,
+    const Real length,
+    Ray* const rays)
+{
+    for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
+         tid < n_rays;
+         tid += blockDim.x * gridDim.x)
+    {
+        const int i = tid % resolution_x;
+        const int j = tid / resolution_x;
+
+        // +0.5 to offset to pixel centres.
+        float x = (2 * ((i + 0.5f) / resolution_x) - 1) * aspect_ratio;
+        float y = 1 - 2 * ((j + 0.5f) / resolution_y);
+        // Correct value for z is constant, and rolled into n.
+        float z = 1.f;
+
+        float3 dir;
+        dir.x = x * v.x + y * u.x + z * n.x;
+        dir.y = x * v.y + y * u.y + z * n.y;
+        dir.z = x * v.z + y * u.z + z * n.z;
+        dir = normalize3(dir);
+
+        Ray ray;
+        ray.dx = dir.x;
+        ray.dy = dir.y;
+        ray.dz = dir.z;
+
+        ray.ox = camera_position.x;
+        ray.oy = camera_position.y;
+        ray.oz = camera_position.z;
+
+        ray.length = length;
+
+        rays[tid] = ray;
+    }
+}
+
 
 ////////////////////////////////////////////////////////////////////////////////
 // Kernel wrappers
@@ -585,31 +632,6 @@ GRACE_HOST void plane_parallel_random_rays(
     GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 }
 
-// Similar to plane_parallel_random_rays, except ray origins are fixed at the
-// cell centres for a given grid. Useful for emulating an orthogonal projection
-// camera.
-// Rays are ordered such that they increase along the direction of w first, then
-// h.
-//
-// width and height: the dimensions of the grid of rays to generate
-// base: a point at one corner of the ray-grid plane
-// w: a vector defining the width of the plane, beginning from base
-//    n = width rays are generated along w from base, for m = height rows
-// h: a vector defining the height of the plane, beginning from base
-//    m = height rays are generated along h from base, for n = width columns
-// length: the length of all rays
-//
-// A grid of width * height cells, covering an area |w| * |h|, is produced.
-// The centre of each cell in this grid defines a ray origin. base is located at
-// one corner of this grid. Hence, no ray will have origin == base.
-// The direction of all rays is normalize(cross(w, h)).
-//
-// For rays originating at z = 10, travelling in the -z direction, and covering
-// an area |w| * |h| = 5 * 6 = 30:
-// base = (5, 0, 10)
-// w = (-5, 0, 0)
-// h = (0, 6, 0)
-// direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
 template <typename Real, typename Real3>
 GRACE_HOST void orthogonal_projection_rays(
     Ray* const d_rays_ptr,
@@ -650,6 +672,69 @@ GRACE_HOST void orthogonal_projection_rays(
         delta_h,
         length,
         direction,
+        d_rays_ptr);
+    GRACE_KERNEL_CHECK();
+}
+
+template <typename Real, typename Real3>
+GRACE_HOST void pinhole_camera_rays(
+    Ray* const d_rays_ptr,
+    const int resolution_x,
+    const int resolution_y,
+    const Real3 camera_position,
+    const Real3 look_at,
+    const Real3 view_up,
+    const Real FOVy,
+    const Real length)
+{
+    // The kernel generates the points at which each ray intersects the image
+    // plane, but in the camera's co-ordinate system: the camera is centred at
+    // the origin, facing the -z direction, with +x rightward and +y upward.
+    // These points extend over (-aspect_ratio, aspect_ratio) along the x axis,
+    // (1, -1) along the y axis, and are a distance -1 / tan(FOVy/2) from the
+    // origin on the z axis, in a right-handed system.
+    // Each ray's direction vector can then be computed, in the same
+    // co-ordinate system, from each origin-to-point vector.
+    // These directions are transformed to the world co-ordinate system using
+    // a new basis, v, u, n, which is a left-handed system.
+
+    const size_t N_rays = (size_t)resolution_x * resolution_y;
+    const Real aspect_ratio = (Real)resolution_x / resolution_y;
+
+    // Construct u, v, n basis of image plane. +u is upward in plane, +v is
+    // rightward in plane, and +n is into plane. Again, assume a right-handed
+    // system.
+
+    Real3 L;
+    L.x = look_at.x - camera_position.x;
+    L.y = look_at.y - camera_position.y;
+    L.z = look_at.z - camera_position.z;
+
+    Real3 v = normalize3(cross(L, view_up));
+    Real3 u = normalize3(cross(v, L));
+    Real3 n = normalize3(L);
+
+    // Do this once here rather than by each thread in the kernel.
+    // In the camera's co-ordinate system, the image plane is at
+    // -1 / tan(FOVy/2), but we're swapping from a RH to a LH system.
+    Real n_prefactor = 1. / std::tan(FOVy / 2.);
+    n.x *= n_prefactor;
+    n.y *= n_prefactor;
+    n.z *= n_prefactor;
+
+    const int num_blocks = min(grace::MAX_BLOCKS,
+                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                       / RAYS_THREADS_PER_BLOCK));
+    pinhole_camera_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+        resolution_x,
+        resolution_y,
+        N_rays,
+        aspect_ratio,
+        camera_position,
+        u,
+        v,
+        n,
+        length,
         d_rays_ptr);
     GRACE_KERNEL_CHECK();
 }

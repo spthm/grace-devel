@@ -254,7 +254,7 @@ GRACE_HOST void plane_parallel_random_rays(
     const Real length,
     const unsigned long long seed = 1234)
 {
-    const size_t N_rays = static_cast<size_t>(width) * height;
+    const size_t N_rays = (size_t)width * height;
     if (d_rays.size() < N_rays) {
         d_rays.resize(N_rays);
     }
@@ -316,13 +316,79 @@ GRACE_HOST void orthogonal_projection_rays(
     const Real3 h,
     const Real length)
 {
-    const size_t N_rays = static_cast<size_t>(width) * height;
+    const size_t N_rays = (size_t)width * height;
     if (d_rays.size() < N_rays) {
         d_rays.resize(N_rays);
     }
     Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
 
     orthogonal_projection_rays(d_rays_ptr, width, height, base, w, h, length);
+}
+
+// Generates rays in a pinhole-camera model. Rays emanate from a common origin
+// camera_position and, have a vertical field-of-view FOVy in the image plane.
+// FOVy should be provided in radians.
+//
+// The centre of view is located at look_at, and the view orientation is
+// specified by the vector view_up. resolution_x rays are generated along the
+// horizontal, and resolution_y along the vertical, for a total of
+// N = resolution_x * resolution_y rays. Unlike a true pinhole-camera, the
+// resulting image is not vertically flipped.
+//
+// Square pixels are always assumed, and the aspect ratio of the image is
+// given by the ratio resolution_x / resolution_y. The horizontal field-of-view,
+// FOVx, can be computed via
+//     tan(FOVx / 2) = aspect_ratio * tan(FOVy / 2)
+//
+// The ray length, length, is fixed for all rays; note therefore that the plane
+// on which all rays terminate is a spherical surface.
+//
+// The ray at index 0 corresponds to the top-left of the image plane, and the
+// ray at index resolution_x * resolution_y - 1 corresponds to the bottom-right
+// of the image plane. Rays are ordered such that they increase along the
+// horizontal first, then the vertical.
+//
+// Note that view_up need only be approximate. The upward direction in the image
+// plane is parallel to the vector
+//     view_up - view_direction * (dot(view_direction, view_up)),
+// where view_direction is parallel to the vector (look_at - camera_position).
+// That is to say, the vertical in the image plane is the direction view_up
+// with all components in the direction of view_direction removed.
+template <typename Real, typename Real3>
+GRACE_HOST void pinhole_camera_rays(
+    Ray* const d_rays_ptr,
+    const int resolution_x,
+    const int resolution_y,
+    const Real3 camera_position,
+    const Real3 look_at,
+    const Real3 view_up,
+    const Real FOVy,
+    const Real length)
+{
+    detail::pinhole_camera_rays(d_rays_ptr, resolution_x, resolution_y,
+                                camera_position, look_at, view_up, FOVy,
+                                length);
+}
+
+template <typename Real, typename Real3>
+GRACE_HOST void pinhole_camera_rays(
+    thrust::device_vector<Ray>& d_rays,
+    const int resolution_x,
+    const int resolution_y,
+    const Real3 camera_position,
+    const Real3 look_at,
+    const Real3 view_up,
+    const Real FOVy,
+    const Real length)
+{
+    const size_t N_rays = (size_t)resolution_x * resolution_y;
+    if (d_rays.size() < N_rays) {
+        d_rays.resize(N_rays);
+    }
+    Ray* const d_rays_ptr = thrust::raw_pointer_cast(d_rays.data());
+
+    pinhole_camera_rays(d_rays_ptr, resolution_x, resolution_y, camera_position,
+                        look_at, view_up, FOVy, length);
 }
 
 } // namespace grace
