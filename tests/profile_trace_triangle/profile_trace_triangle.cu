@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
                 d_rays,
                 d_tris,
                 d_tree,
-                d_closest_hit_idx);
+                d_closest_tri_idx);
             if (i >= 0) t_closest += timer.split();
 
             if (i >= 0) t_all += timer.elapsed();
@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
                 trace_bytes += d_tree.leaves.size() * sizeof(int4);
                 trace_bytes += d_tree.nodes.size() * sizeof(int4);
                 trace_bytes += d_rays.size() * sizeof(grace::Ray);
-                trace_bytes += d_closest_hit_idx.size() * sizeof(int);
+                trace_bytes += d_closest_tri_idx.size() * sizeof(int);
 
                 std::cout << std::endl
                           << "Total memory for closest-triangle traversal: "
