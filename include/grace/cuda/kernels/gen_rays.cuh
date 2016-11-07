@@ -19,6 +19,8 @@
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>
 
+#include <cmath>
+
 namespace grace {
 
 namespace detail {
@@ -67,6 +69,27 @@ GRACE_HOST_DEVICE float3 zero_one_to_a_b(
     return make_float3(f.x * (b.x - a.x) + a.x,
                        f.y * (b.y - a.y) + a.y,
                        f.z * (b.z - a.z) + a.z);
+}
+
+template <typename Real, typename Real3>
+GRACE_DEVICE float3 image_plane_coord(
+    const int i, const int j,
+    const Real3 v, const Real3 u, const Real3 n,
+    const int resolution_x, const int resolution_y, const Real aspect_ratio)
+{
+    // +0.5 to offset to pixel centres.
+    float x = (2 * ((i + 0.5f) / resolution_x) - 1) * aspect_ratio;
+    float y = 1 - 2 * ((j + 0.5f) / resolution_y);
+
+    // Correct value for z should be rolled into n.
+    float z = 1.f;
+
+    float3 coord;
+    coord.x = x * v.x + y * u.x + z * n.x;
+    coord.y = x * v.y + y * u.y + z * n.y;
+    coord.z = x * v.z + y * u.z + z * n.z;
+
+    return coord;
 }
 
 
@@ -283,32 +306,42 @@ __global__ void plane_parallel_random_rays_kernel(
 }
 
 template <typename Real, typename Real3>
-__global__ void orthogonal_projection_rays_kernel(
-    const int width,
-    const int height,
+__global__ void orthographic_projection_rays_kernel(
+    const int resolution_x,
+    const int resolution_y,
     const size_t n_rays,
-    const Real3 base_centre,
-    const Real3 delta_w,
-    const Real3 delta_h,
+    const Real3 camera_position,
+    const Real3 view_direction,
+    const Real3 v,
+    const Real3 u,
     const Real length,
-    const Real3 normal,
     Ray* const rays)
 {
     for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
          tid < n_rays;
          tid += blockDim.x * gridDim.x)
     {
-        const int i = tid % width;
-        const int j = tid / width;
+        const int i = tid % resolution_x;
+        const int j = tid / resolution_x;
+
+        // The point camera_position should exist within the image plane, so
+        // im_coord is not offset in the direction view_direction.
+        // The aspect ratio is rolled into the vectors v and u; image plane
+        // co-ordinates should both cover the range (1, -1).
+        Real3 zero3;
+        zero3.x = zero3.y = zero3.z = 0;
+        float3 im_coord = image_plane_coord(i, j, v, u, zero3,
+                                            resolution_x, resolution_y,
+                                            (Real)1);
 
         Ray ray;
-        ray.dx = normal.x;
-        ray.dy = normal.y;
-        ray.dz = normal.z;
+        ray.dx = view_direction.x;
+        ray.dy = view_direction.y;
+        ray.dz = view_direction.z;
 
-        ray.ox = base_centre.x + i * delta_w.x + j * delta_h.x;
-        ray.oy = base_centre.y + i * delta_w.y + j * delta_h.y;
-        ray.oz = base_centre.z + i * delta_w.z + j * delta_h.z;
+        ray.ox = camera_position.x + im_coord.x;
+        ray.oy = camera_position.y + im_coord.y;
+        ray.oz = camera_position.z + im_coord.z;
 
         ray.length = length;
 
@@ -317,14 +350,14 @@ __global__ void orthogonal_projection_rays_kernel(
 }
 
 template <typename Real, typename Real3>
-__global__ void pinhole_camera_rays_kernel(
+__global__ void perspective_projection_rays_kernel(
     const int resolution_x,
     const int resolution_y,
     const size_t n_rays,
     const Real aspect_ratio,
     const Real3 camera_position,
-    const Real3 u,
     const Real3 v,
+    const Real3 u,
     const Real3 n,
     const Real length,
     Ray* const rays)
@@ -336,27 +369,15 @@ __global__ void pinhole_camera_rays_kernel(
         const int i = tid % resolution_x;
         const int j = tid / resolution_x;
 
-        // +0.5 to offset to pixel centres.
-        float x = (2 * ((i + 0.5f) / resolution_x) - 1) * aspect_ratio;
-        float y = 1 - 2 * ((j + 0.5f) / resolution_y);
-        // Correct value for z is constant, and rolled into n.
-        float z = 1.f;
-
-        float3 dir;
-        dir.x = x * v.x + y * u.x + z * n.x;
-        dir.y = x * v.y + y * u.y + z * n.y;
-        dir.z = x * v.z + y * u.z + z * n.z;
-        dir = normalize3(dir);
+        float3 im_coord = image_plane_coord(i, j, v, u, n,
+                                            resolution_x, resolution_y,
+                                            aspect_ratio);
 
         Ray ray;
-        ray.dx = dir.x;
-        ray.dy = dir.y;
-        ray.dz = dir.z;
-
+        set_normalized_ray_direction(im_coord.x, im_coord.y, im_coord.z, ray);
         ray.ox = camera_position.x;
         ray.oy = camera_position.y;
         ray.oz = camera_position.z;
-
         ray.length = length;
 
         rays[tid] = ray;
@@ -633,45 +654,62 @@ GRACE_HOST void plane_parallel_random_rays(
 }
 
 template <typename Real, typename Real3>
-GRACE_HOST void orthogonal_projection_rays(
+GRACE_HOST void orthographic_projection_rays(
     Ray* const d_rays_ptr,
-    const int width,
-    const int height,
-    const Real3 base,
-    const Real3 w,
-    const Real3 h,
+    const int resolution_x,
+    const int resolution_y,
+    const Real3 camera_position,
+    const Real3 look_at,
+    const Real3 view_up,
+    const Real vertical_extent,
     const Real length)
 {
-    const size_t N_rays = static_cast<size_t>(width) * height;
+    // The kernel generates the points at which each ray intersects the image
+    // plane, but in the camera's co-ordinate system: this plane is centred at
+    // the origin, with +x rightward, +y upward, and z = 0 everywhere. We assume
+    // a right-handed system.
+    // These points extend over (-1, 1) along the x axis and (1, -1) along the y
+    // axis. Each ray's origin is, then, in the same co-ordinate system, its
+    // point in the image plane.
+    // These origins are transformed to the world co-ordinate system using
+    // a new basis, v, u.
 
-    Real3 delta_w, delta_h, base_centre, direction;
+    const size_t N_rays = (size_t)resolution_x * resolution_y;
+    const Real aspect_ratio = (Real)resolution_x / resolution_y;
+    const Real horizontal_extent = vertical_extent * aspect_ratio;
 
-    delta_w.x = w.x / width;
-    delta_w.y = w.y / width;
-    delta_w.z = w.z / width;
+    Real3 view_direction;
+    view_direction.x = look_at.x - camera_position.x;
+    view_direction.y = look_at.y - camera_position.y;
+    view_direction.z = look_at.z - camera_position.z;
+    view_direction = normalize3(view_direction);
 
-    delta_h.x = h.x / height;
-    delta_h.y = h.y / height;
-    delta_h.z = h.z / height;
+    // Construct v, u, basis of image plane. +u is upward in plane, +v is
+    // rightward in plane. A left-handed system.
+    Real3 v = normalize3(cross(view_direction, view_up));
+    Real3 u = normalize3(cross(v, view_direction));
 
-    base_centre.x = base.x + (delta_w.x + delta_h.x) / 2.;
-    base_centre.y = base.y + (delta_w.y + delta_h.y) / 2.;
-    base_centre.z = base.z + (delta_w.z + delta_h.z) / 2.;
-
-    direction = normalize3(cross(w, h));
+    // Do this here once rather than by each thread in the kernel.
+    // Halved because kernel generates image plane x, y co-ordinates in (-1, 1).
+    v.x *= horizontal_extent / 2.;
+    v.y *= horizontal_extent / 2.;
+    v.z *= horizontal_extent / 2.;
+    u.x *= vertical_extent / 2.;
+    u.y *= vertical_extent / 2.;
+    u.z *= vertical_extent / 2.;
 
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                        / RAYS_THREADS_PER_BLOCK));
-    orthogonal_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-        width,
-        height,
+    orthographic_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+        resolution_x,
+        resolution_y,
         N_rays,
-        base_centre,
-        delta_w,
-        delta_h,
+        camera_position,
+        view_direction,
+        v,
+        u,
         length,
-        direction,
         d_rays_ptr);
     GRACE_KERNEL_CHECK();
 }
@@ -688,31 +726,30 @@ GRACE_HOST void pinhole_camera_rays(
     const Real length)
 {
     // The kernel generates the points at which each ray intersects the image
-    // plane, but in the camera's co-ordinate system: the camera is centred at
-    // the origin, facing the -z direction, with +x rightward and +y upward.
+    // plane, but in the camera's co-ordinate system: the camera is located at
+    // the origin, facing the -z direction, with +x rightward and +y upward,
+    // hence in a right-handed system.
     // These points extend over (-aspect_ratio, aspect_ratio) along the x axis,
     // (1, -1) along the y axis, and are a distance -1 / tan(FOVy/2) from the
-    // origin on the z axis, in a right-handed system.
-    // Each ray's direction vector can then be computed, in the same
-    // co-ordinate system, from each origin-to-point vector.
+    // origin on the z axis.
+    // Each ray's direction vector can then be computed, in the same co-ordinate
+    // system, from each origin-to-point vector.
     // These directions are transformed to the world co-ordinate system using
     // a new basis, v, u, n, which is a left-handed system.
 
     const size_t N_rays = (size_t)resolution_x * resolution_y;
     const Real aspect_ratio = (Real)resolution_x / resolution_y;
 
-    // Construct u, v, n basis of image plane. +u is upward in plane, +v is
-    // rightward in plane, and +n is into plane. Again, assume a right-handed
-    // system.
+    Real3 view_direction;
+    view_direction.x = look_at.x - camera_position.x;
+    view_direction.y = look_at.y - camera_position.y;
+    view_direction.z = look_at.z - camera_position.z;
 
-    Real3 L;
-    L.x = look_at.x - camera_position.x;
-    L.y = look_at.y - camera_position.y;
-    L.z = look_at.z - camera_position.z;
-
-    Real3 v = normalize3(cross(L, view_up));
-    Real3 u = normalize3(cross(v, L));
-    Real3 n = normalize3(L);
+    // Construct v, u, n basis of image plane. +u is upward in plane, +v is
+    // rightward in plane, and +n is into plane. A left-handed system.
+    Real3 v = normalize3(cross(view_direction, view_up));
+    Real3 u = normalize3(cross(v, view_direction));
+    Real3 n = normalize3(view_direction);
 
     // Do this once here rather than by each thread in the kernel.
     // In the camera's co-ordinate system, the image plane is at
@@ -725,14 +762,14 @@ GRACE_HOST void pinhole_camera_rays(
     const int num_blocks = min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
                                        / RAYS_THREADS_PER_BLOCK));
-    pinhole_camera_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
+    perspective_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         resolution_x,
         resolution_y,
         N_rays,
         aspect_ratio,
         camera_position,
-        u,
         v,
+        u,
         n,
         length,
         d_rays_ptr);

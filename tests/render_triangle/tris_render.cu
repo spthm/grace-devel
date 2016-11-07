@@ -5,6 +5,9 @@
 
 #include "grace/cuda/kernel_config.h"
 
+#include <algorithm>
+#include <cmath>
+
 void setup_lights(
     const float3 bots, const float3 tops,
     thrust::device_vector<float3>& d_lights_pos)
@@ -48,8 +51,8 @@ void setup_camera(
     // that the entire bounding box will always be visible.
     float FOVx_radians = 2. * std::atan2(std::tan(*FOVy_radians / 2.),
                                          (double)resolution_x / resolution_y);
-    float L_x = 1.1 * size.x / FOVx_radians;
-    float L_y = 1.1 * size.y / *FOVy_radians;
+    float L_x = 1.02 * size.x / FOVx_radians;
+    float L_y = 1.02 * size.y / *FOVy_radians;
     float camera_z = look_at->z + std::max(L_x, L_y);
 
     *camera_position = make_float3(bots.x - 0.1 * size.x,
