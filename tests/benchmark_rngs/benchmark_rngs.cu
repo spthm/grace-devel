@@ -157,6 +157,15 @@ int main(int argc, char* argv[])
             }
         }
 
+        std::cout << "  States' size: " << std::setw(9)
+                  << philox_states.size_bytes() / 1024. / 1024.
+                  << " MiB (PHILOX)" << std::endl
+                  << "  States' size: " << std::setw(9)
+                  << xorwow_states.size_bytes() / 1024. / 1024.
+                  << " MiB (XORWOW)" << std::endl
+                  << "  States' size: " << std::setw(9)
+                  << mrg32_states.size_bytes() / 1024. / 1024.
+                  << " MiB (MRG32)" << std::endl;
         std::cout << "  Time to init: " << std::setw(10)
                   << init_timings[PHILOX] / n_iter << " ms (PHILOX)"
                   << std::endl
