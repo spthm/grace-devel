@@ -4,6 +4,7 @@
 
 #include <thrust/device_vector.h>
 
+#include <iomanip>
 #include <iostream>
 
 template <typename RNGDeviceStatesT>
@@ -19,7 +20,7 @@ __global__ void generate_randoms_kernel(
     for (int i = tid; i < n; i += blockDim.x * gridDim.x)
     {
         unsigned int x = curand(&state);
-        if (x & 0xf) { ++count; }
+        if ((x & 0xf) == 0xf) { ++count; }
     }
 
     states.save_state(state);
@@ -30,7 +31,7 @@ template <typename RNGStatesT>
 void generate_randoms(
     RNGStatesT& states,
     const size_t n,
-    thrust::device_vector<unsigned int> d_results)
+    thrust::device_vector<unsigned int>& d_results)
 {
     const int NT = 128;
     cudaDeviceProp props;
@@ -62,6 +63,9 @@ typedef grace::detail::RNGStates<curandStateMRG32k3a_t> MRG32States;
 
 int main(int argc, char* argv[])
 {
+    std::cout.fill(' ');
+    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+
     size_t max_n = 100000000;
     int n_iter = 10;
     int device_id = 0;
@@ -123,8 +127,9 @@ int main(int argc, char* argv[])
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 std::cout << "  Fraction of numbers with low four bits set: "
-                          << (double)tot / n
+                          << std::setw(8) << (double)tot / n
                           << " (PHILOX)" << std::endl;
+                thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
             generate_randoms(xorwow_states, n, d_results);
@@ -134,8 +139,9 @@ int main(int argc, char* argv[])
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 std::cout << "  Fraction of numbers with low four bits set: "
-                          << (double)tot / n
+                          << std::setw(8) << (double)tot / n
                           << " (XORWOW)" << std::endl;
+                thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
             generate_randoms(mrg32_states, n, d_results);
@@ -145,23 +151,31 @@ int main(int argc, char* argv[])
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 std::cout << "  Fraction of numbers with low four bits set: "
-                          << (double)tot / n
+                          << std::setw(8) << (double)tot / n
                           << " (MRG32)" << std::endl;
+                thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
         }
 
-        std::cout << "  Time to init: " << init_timings[PHILOX] / n_iter
-                  << " (PHILOX)" << std::endl
-                  << "  Time to init: " << init_timings[XORWOW] / n_iter
-                  << " (XORWOW)" << std::endl
-                  << "  Time to init: " << init_timings[MRG32] / n_iter
-                  << " (MGR32)" << std::endl;
-        std::cout << "  Time to generate: " << rand_timings[PHILOX] / n_iter
-                  << " (PHILOX)" << std::endl
-                  << "  Time to generate: " << rand_timings[XORWOW] / n_iter
-                  << " (XORWOW)" << std::endl
-                  << "  Time to generate: " << rand_timings[MRG32] / n_iter
-                  << " (MGR32)" << std::endl;
+        std::cout << "  Time to init: " << std::setw(10)
+                  << init_timings[PHILOX] / n_iter << " ms (PHILOX)"
+                  << std::endl
+                  << "  Time to init: " << std::setw(10)
+                  << init_timings[XORWOW] / n_iter << " ms (XORWOW)" <<
+                  std::endl
+                  << "  Time to init: " << std::setw(10)
+                  << init_timings[MRG32] / n_iter << " ms (MGR32)"
+                  << std::endl;
+        std::cout << "  Time to generate: " << std::setw(10)
+                  << rand_timings[PHILOX] / n_iter << " ms (PHILOX)"
+                  << std::endl
+                  << "  Time to generate: " << std::setw(10)
+                  << rand_timings[XORWOW] / n_iter << " ms (XORWOW)"
+                  << std::endl
+                  << "  Time to generate: " << std::setw(10)
+                  << rand_timings[MRG32] / n_iter << " ms (MGR32)"
+                  << std::endl
+                  << std::endl;
     }
 
     return EXIT_SUCCESS;
