@@ -1,5 +1,7 @@
 #include "grace/cuda/detail/PRNGStates-inl.cuh"
 
+#include "helper/cuda_timer.cuh"
+
 #include <thrust/device_vector.h>
 
 #include <iostream>
@@ -10,7 +12,7 @@ __global__ void generate_randoms_kernel(
     const size_t n,
     unsigned int* const results)
 {
-    RNGDeviceStatesT::state_type state = states.load_state();
+    typename RNGDeviceStatesT::state_type state = states.load_state();
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     unsigned int count = 0;
@@ -35,7 +37,8 @@ void generate_randoms(
     int device_id;
     GRACE_CUDA_CHECK(cudaGetDevice(&device_id));
     GRACE_CUDA_CHECK(cudaGetDeviceProperties(&props, device_id));
-    const int max_states = props.multiProcessorCount * props.maxThreadsPerMultiProcessor;
+    const size_t max_states = props.multiProcessorCount
+                                * props.maxThreadsPerMultiProcessor;
 
     // Round down! We cannot generate more threads than there are states.
     const int num_blocks = std::min(n, max_states) / NT;
@@ -60,13 +63,17 @@ typedef grace::detail::RNGStates<curandStateMRG32k3a_t> MRG32States;
 int main(int argc, char* argv[])
 {
     size_t max_n = 100000000;
+    int n_iter = 10;
     int device_id = 0;
 
     if (argc > 1) {
         max_n = (size_t)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-        device_id = (int)std::strtol(argv[2], NULL, 10);
+        n_iter = (int)std::strtol(argv[2], NULL, 10);
+    }
+    if (argc > 3) {
+        device_id = (int)std::strtol(argv[3], NULL, 10);
     }
     cudaSetDevice(device_id);
 
@@ -80,13 +87,13 @@ int main(int argc, char* argv[])
     {
         std::cout << "n: " << n << std::endl;
 
-        for (size_t i = 0; i < num_generators; ++i)
+        for (int i = 0; i < num_generators; ++i)
         {
             init_timings[i] = 0.0;
             rand_timings[i] = 0.0;
         }
 
-        for (size_t i = -1; i < n_iter; ++i)
+        for (int i = -1; i < n_iter; ++i)
         {
             // Note that the constructors call init_states for us, but we're
             // doing it here to collect timing info.
@@ -97,14 +104,14 @@ int main(int argc, char* argv[])
             if (i >= 0) init_timings[PHILOX] += timer.split();
 
             xorwow_states.init_states();
-            if (i >= 0) init_timings[XORWOWStates] += timer.split();
+            if (i >= 0) init_timings[XORWOW] += timer.split();
 
             mrg32_states.init_states();
             if (i >= 0) init_timings[MRG32] += timer.split();
         }
 
         thrust::device_vector<unsigned int> d_results(n);
-        for (size_t i = -1; i < n_iter; ++i)
+        for (int i = -1; i < n_iter; ++i)
         {
             CUDATimer timer;
             timer.start();
@@ -121,7 +128,7 @@ int main(int argc, char* argv[])
             }
 
             generate_randoms(xorwow_states, n, d_results);
-            if (i >= 0) rand_timings[XORWOWStates] += timer.split();
+            if (i >= 0) rand_timings[XORWOW] += timer.split();
             else
             {
                 unsigned int tot = thrust::reduce(d_results.begin(),

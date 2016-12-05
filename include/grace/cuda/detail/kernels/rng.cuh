@@ -4,8 +4,9 @@
 // before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
-__global__ void init_PRNG_kernel(
-    curandState* const prng_states,
+template <typename PRNGStateT>
+__global__ void init_PRNG_states_kernel(
+    PRNGStateT* const prng_states,
     const unsigned long long seed,
     const size_t N)
 {
