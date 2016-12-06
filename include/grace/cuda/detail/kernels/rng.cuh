@@ -1,7 +1,5 @@
 #pragma once
 
-// Due to a bug in the version of Thrust provided with CUDA 6, this must appear
-// before #include <thrust/sort.h>
 #include <curand_kernel.h>
 
 template <typename PRNGStateT>

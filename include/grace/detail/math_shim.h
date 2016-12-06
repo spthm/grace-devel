@@ -29,13 +29,12 @@ namespace grace {
  *         Here, if CUDA < 7.5 is detected, calls to the "[unsigned] long long"
  *         overloads are made in device code. Host code is unaffected.
  *
- *
  * Note 2: nvcc includes cuda_runtime.h by default, which includes
  *         common_functions.h, which includes the aforementioned
  *         math_functions.h. (See e.g. http://stackoverflow.com/a/29710576.)
  *         Since we only required overloaded ::min() and ::max() when following
  *         the device compilation trajectory, we can be sure they exist without
- *         #includ-ing any other headers.
+ *         #include-ing any other headers.
  *
  * Note 3: None of this works if the below is in namespace grace::detail::
  *         It _MUST_ be in namespace grace::

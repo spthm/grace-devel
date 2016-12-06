@@ -13,7 +13,7 @@ namespace grace {
 namespace gpu {
 
 // An iterator which may only access the underlying array in a specific range.
-// Other than that, no constraints are placed on the type accessed, and user's
+// Other than that, no constraints are placed on the type accessed, and users
 // must therefore take care to ensure correct alignment.
 template <typename T>
 class BoundIter
@@ -28,7 +28,7 @@ private:
     T* T_start;
     T* T_end;
 
-    GRACE_DEVICE T* _alignTo(char* const unaligned, const size_t size)
+    GRACE_DEVICE T* _align_to(char* const unaligned, const size_t size)
     {
         char* aligned = unaligned;
 
@@ -58,7 +58,7 @@ public:
 
         ptr = reinterpret_cast<T*>(begin);
         T_start = ptr;
-        T_end = _alignTo(alloc_end, sizeof(T));
+        T_end = _align_to(alloc_end, sizeof(T));
     }
 
     template <typename U>
@@ -68,7 +68,7 @@ public:
 
         ptr = reinterpret_cast<T*>(other.ptr);
         T_start = ptr;
-        T_end = _alignTo(alloc_end, sizeof(T));
+        T_end = _align_to(alloc_end, sizeof(T));
     }
 
     template <typename U>
@@ -80,7 +80,7 @@ public:
 
             ptr = reinterpret_cast<T*>(other.ptr);
             T_start = ptr;
-            T_end = _alignTo(alloc_end, sizeof(T));
+            T_end = _align_to(alloc_end, sizeof(T));
         }
 
         return *this;
