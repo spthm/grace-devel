@@ -19,7 +19,7 @@ namespace grace {
 class Init_null
 {
 public:
-    GRACE_DEVICE void operator()(const gpu::BoundIter<char> /*smem_iter*/)
+    GRACE_DEVICE void operator()(const BoundedPtr<char> /*smem_iter*/)
     {
         return;
     }
@@ -31,7 +31,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  const RayData&,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         return;
     }
@@ -54,7 +54,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  RayData& ray_data,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         ray_data.data = inits[ray_idx];
     }
@@ -75,7 +75,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  const RayData& ray_data,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         store[ray_idx] = ray_data.data;
     }
@@ -96,12 +96,12 @@ public:
     InitGlobalToSmem(const InType* const global_addr, const int count) :
         data_global(global_addr), count(count) {}
 
-    GRACE_DEVICE void operator()(const gpu::BoundIter<char> smem_iter)
+    GRACE_DEVICE void operator()(const BoundedPtr<char> smem_iter)
     {
         // We *must* cast from the default pointer-to-char to the data type we
         // wish to store in shared memory for dereferencing and indexing
         // operators to work correctly.
-        gpu::BoundIter<InType> in_iter = smem_iter;
+        BoundedPtr<InType> in_iter = smem_iter;
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
         {
@@ -123,7 +123,7 @@ public:
     template <typename T, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  const RayData&, const int /*lane*/,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         PrecisionType dummy_b2, dummy_dist;
         return sphere_hit<PrecisionType>(ray, sphere, dummy_b2, dummy_dist);
@@ -138,7 +138,7 @@ public:
     template <typename T, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  RayData& ray_data, const int /*lane*/,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         // Type of the b2, dist provided to sphere_hit must match the
         // PrecisionType template parameter.
@@ -160,7 +160,7 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*prim_idx*/,
                                  const TPrim&, const int /*lane*/,
-                                 const gpu::BoundIter<char> /*smem_iter*/)
+                                 const BoundedPtr<char> /*smem_iter*/)
     {
         ++ray_data.data;
     }
@@ -180,11 +180,11 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*sphere_idx*/,
                                  const Sphere<T>& sphere, const int /*lane*/,
-                                 const gpu::BoundIter<char> smem_iter)
+                                 const BoundedPtr<char> smem_iter)
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
-        gpu::BoundIter<double> Wk_lookup = smem_iter;
+        BoundedPtr<double> Wk_lookup = smem_iter;
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
@@ -219,11 +219,11 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int sphere_idx,
                                  const Sphere<T>& sphere, const int /*lane*/,
-                                 const gpu::BoundIter<char> smem_iter)
+                                 const BoundedPtr<char> smem_iter)
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
-        gpu::BoundIter<double> Wk_lookup = smem_iter;
+        BoundedPtr<double> Wk_lookup = smem_iter;
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);

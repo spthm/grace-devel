@@ -82,7 +82,7 @@ __global__ void trace_kernel(
     const size_t prims_smem_count = max_per_leaf * N_warps;
 
     extern __shared__ char smem_trace[];
-    const BoundIter<char> sm_iter_usr(smem_trace, user_smem_bytes);
+    const BoundedPtr<char> sm_iter_usr(smem_trace, user_smem_bytes);
     init(sm_iter_usr);
     __syncthreads();
 
