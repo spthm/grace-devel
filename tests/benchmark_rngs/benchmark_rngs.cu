@@ -1,4 +1,4 @@
-#include "grace/cuda/detail/PRNGStates-inl.cuh"
+#include "grace/cuda/detail/prngstates-inl.cuh"
 
 #include "helper/cuda_timer.cuh"
 

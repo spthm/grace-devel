@@ -2,7 +2,7 @@
 
 #include "grace/cuda/detail/kernels/rng.cuh"
 
-#include "grace/detail/NonCopyable-inl.h"
+#include "grace/detail/noncopyable-inl.h"
 
 #include "grace/error.h"
 #include "grace/types.h"
