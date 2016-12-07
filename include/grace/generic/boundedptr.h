@@ -1,12 +1,6 @@
 #pragma once
 
-#include "grace/generic/meta.h"
-
-#include "grace/error.h"
 #include "grace/types.h"
-
-#include <cstddef>
-#include <iterator>
 
 namespace grace {
 
@@ -44,121 +38,50 @@ public:
     template <typename U>
     friend class BoundedPtr;
 
-    GRACE_HOST_DEVICE BoundedPtr(char* const begin, const size_t bytes)
-        : begin_(reinterpret_cast<T*>(begin)),
-          end_(reinterpret_cast<T*>(begin + bytes)),
-          ptr_(reinterpret_cast<T*>(begin)) {}
+    GRACE_HOST_DEVICE BoundedPtr(char* const begin, const size_t bytes);
+
+    // end should point to one past the last valid char.
+    GRACE_HOST_DEVICE BoundedPtr(char* const begin, char* const end);
 
     // Note this is not the copy constructor, because a copy constructor cannot
     // be a template. We use the default copy constructor. It is explicit, so it
     // is also not a converting constructor; explicit because e.g. we don't want
     // operator+() to work for BoundedPtrs with different value_types.
     template <typename U>
-    GRACE_HOST_DEVICE explicit BoundedPtr(const BoundedPtr<U>& other)
-        : begin_(reinterpret_cast<T*>(other.begin_)),
-          end_(reinterpret_cast<T*>(other.end_)),
-          ptr_(reinterpret_cast<T*>(other.ptr_)) {}
+    GRACE_HOST_DEVICE explicit BoundedPtr(const BoundedPtr<U>& other);
 
     // Again, copy-assigment operator must not be a templte. We use the default
     // copy-assignment operator.
     template <typename U>
-    GRACE_HOST_DEVICE BoundedPtr<T>& operator=(const BoundedPtr<U>& other)
-    {
-        BoundedPtr<T> other_T(other);
-        swap(*this, other_T);
-        return *this;
-    }
-
-    // Ensures alignment, increasing address when necessary.
-    GRACE_HOST_DEVICE void align_to(const size_t alignment)
-    {
-        char* aligned = reinterpret_cast<char*>(ptr_);
-        int rem = (uintptr_t)aligned % alignment;
-        if (rem != 0) {
-            aligned += (alignment - rem);
-        }
-
-        ptr_ = reinterpret_cast<T*>(aligned);
-    }
+    GRACE_HOST_DEVICE BoundedPtr<T>& operator=(const BoundedPtr<U>& other);
 
     // It doesn't make sense to swap BoundedPtrs of different value_types.
-    friend void swap(BoundedPtr<T>& lhs, BoundedPtr<T>& rhs)
-    {
-        // We make unqualified calls to swap to ensure that any swap operator
-        // for types T found via ADL used; we also want to use std::swap if no
-        // other swap() exists.
-        using std::swap;
+    friend void swap(BoundedPtr<T>& lhs, BoundedPtr<T>& rhs);
 
-        swap(lhs.ptr_, rhs.ptr_);
-        swap(lhs.begin_, rhs.begin_);
-        swap(lhs.end_, rhs.end_);
-    }
+    // Ensures alignment, increasing address when necessary.
+    GRACE_HOST_DEVICE void align_to(const size_t alignment);
 
-    GRACE_HOST_DEVICE T& operator*()
-    {
-        GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-        GRACE_ASSERT(ptr_ + sizeof(T) < end_, boundedptr_memory_overflow);
+    GRACE_HOST_DEVICE T& operator*();
 
-        return *ptr_;
-    }
+    GRACE_HOST_DEVICE const T& operator*() const;
 
-    GRACE_HOST_DEVICE const T& operator*() const
-    {
-        GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-        GRACE_ASSERT(ptr_ + sizeof(T) < end_, boundedptr_memory_overflow);
+    GRACE_HOST_DEVICE T& operator[](difference_type i);
 
-        return *ptr_;
-    }
+    GRACE_HOST_DEVICE const T& operator[](difference_type i) const;
 
-    GRACE_HOST_DEVICE T& operator[](difference_type i)
-    {
-        return *((*this) + i);
-    }
+    GRACE_HOST_DEVICE T* operator->();
 
-    GRACE_HOST_DEVICE const T& operator[](difference_type i) const
-    {
-        return *((*this) + i);
-    }
+    GRACE_HOST_DEVICE const T* operator->() const;
 
-    GRACE_HOST_DEVICE T* operator->()
-    {
-        return &(*(*this));
-    }
+    GRACE_HOST_DEVICE difference_type operator-(const BoundedPtr<T>& other) const;
 
-    GRACE_HOST_DEVICE const T* operator->() const
-    {
-        return &(*(*this));
-    }
+    GRACE_HOST_DEVICE BoundedPtr<T>& operator+=(const difference_type n);
 
-    GRACE_HOST_DEVICE difference_type operator-(const BoundedPtr<T>& other) const
-    {
-        return ptr_ - other.ptr_;
-    }
+    GRACE_HOST_DEVICE BoundedPtr<T>& operator-=(const difference_type n);
 
-    GRACE_HOST_DEVICE BoundedPtr<T>& operator+=(const difference_type n)
-    {
-        ptr_ += n;
-        return *this;
-    }
-
-    GRACE_HOST_DEVICE BoundedPtr<T>& operator-=(const difference_type n)
-    {
-        ptr_ -= n;
-        return *this;
-    }
-
-    GRACE_HOST_DEVICE friend bool operator<(const BoundedPtr<T>& lhs,
-                                            const BoundedPtr<T>& rhs)
-    {
-        return (rhs - lhs) > 0;
-    }
-
-    // Could be implemented from above; not done so for efficiency.
+    // Could be implemented from operator<; not done so for efficiency.
     GRACE_HOST_DEVICE friend bool operator==(const BoundedPtr<T>& lhs,
-                                             const BoundedPtr<T>& rhs)
-    {
-        return lhs.ptr_ == rhs.ptr_;
-    }
+                                             const BoundedPtr<T>& rhs);
 
 private:
     // Same type so they may safely be compared.
@@ -170,84 +93,51 @@ private:
     T* ptr_;
 };
 
-// Prefix.
-template <typename T>
-GRACE_HOST_DEVICE BoundedPtr<T>& operator++(BoundedPtr<T>& bptr)
-{
-    bptr += 1;
-    return bptr;
-}
+//
+// BoundedPtr operators
+//
 
-// Postfix.
 template <typename T>
-GRACE_HOST_DEVICE BoundedPtr<T> operator++(BoundedPtr<T>& bptr, int)
-{
-    BoundedPtr<T> prev = bptr;
-    ++bptr;
-    return prev;
-}
+GRACE_HOST_DEVICE bool operator<(const BoundedPtr<T>& lhs,
+                                 const BoundedPtr<T>& rhs);
 
 // Prefix.
 template <typename T>
-GRACE_HOST_DEVICE BoundedPtr<T>& operator--(BoundedPtr<T>& bptr)
-{
-    bptr -= 1;
-    return bptr;
-}
+GRACE_HOST_DEVICE BoundedPtr<T>& operator++(BoundedPtr<T>& bptr);
 
 // Postfix.
 template <typename T>
-GRACE_HOST_DEVICE BoundedPtr<T> operator--(BoundedPtr<T>& bptr, int)
-{
-   BoundedPtr<T> prev = bptr;
-   --bptr;
-   return prev;
-}
+GRACE_HOST_DEVICE BoundedPtr<T> operator++(BoundedPtr<T>& bptr, int);
+
+// Prefix.
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T>& operator--(BoundedPtr<T>& bptr);
+
+// Postfix.
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T> operator--(BoundedPtr<T>& bptr, int);
 
 GRACE_HOST_DEVICE BoundedPtr<T> operator+(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs)
-{
-    BoundedPtr<T> bptr = lhs;
-    bptr += rhs;
-    return bptr;
-}
+                                          const difference_type rhs);
 
 GRACE_HOST_DEVICE BoundedPtr<T> operator+(const difference_type lhs,
-                                          const BoundedPtr<T>& rhs)
-{
-    // Swap sides.
-    return rhs + lhs;
-}
+                                          const BoundedPtr<T>& rhs);
 
 GRACE_HOST_DEVICE BoundedPtr<T> operator-(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs)
-{
-    return lhs + (-rhs);
-}
+                                          const difference_type rhs);
 
 GRACE_HOST_DEVICE bool operator!=(const BoundedPtr<T>& lhs,
-                                  const BoundedPtr<T>& rhs)
-{
-    return !(lhs == rhs);
-}
+                                  const BoundedPtr<T>& rhs);
 
 GRACE_HOST_DEVICE bool operator>(const BoundedPtr<T>& lhs,
-                                 const BoundedPtr<T>& rhs)
-{
-    // Swap sides.
-    return rhs < lhs;
-}
+                                 const BoundedPtr<T>& rhs);
 
 GRACE_HOST_DEVICE bool operator<=(const BoundedPtr<T>& lhs,
-                                  const BoundedPtr<T>& rhs)
-{
-    return !(lhs > rhs);
-}
+                                  const BoundedPtr<T>& rhs);
 
 GRACE_HOST_DEVICE bool operator>=(const BoundedPtr<T>& lhs,
-                                  const BoundedPtr<T>& rhs)
-{
-    return !(lhs < rhs);
-}
+                                  const BoundedPtr<T>& rhs);
 
 } // namespace grace
+
+#include "grace/generic/detail/boundedptr-inl.h"
