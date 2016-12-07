@@ -7,13 +7,13 @@
 #include <iomanip>
 #include <iostream>
 
-template <typename RNGDeviceStatesT>
+template <typename RngDeviceStatesT>
 __global__ void generate_randoms_kernel(
-    RNGDeviceStatesT states,
+    RngDeviceStatesT states,
     const size_t n,
     unsigned int* const results)
 {
-    typename RNGDeviceStatesT::state_type state = states.load_state();
+    typename RngDeviceStatesT::state_type state = states.load_state();
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     unsigned int count = 0;
@@ -27,9 +27,9 @@ __global__ void generate_randoms_kernel(
     results[tid] = count;
 }
 
-template <typename RNGStatesT>
+template <typename RngStatesT>
 void generate_randoms(
-    RNGStatesT& states,
+    RngStatesT& states,
     const size_t n,
     thrust::device_vector<unsigned int>& d_results)
 {
@@ -57,9 +57,9 @@ enum
     num_generators
 };
 
-typedef grace::detail::RNGStates<curandStatePhilox4_32_10_t> PhiloxStates; // GRACE default
-typedef grace::detail::RNGStates<curandStateXORWOW_t> XORWOWStates; // CUDA default
-typedef grace::detail::RNGStates<curandStateMRG32k3a_t> MRG32States;
+typedef grace::detail::RngStates<curandStatePhilox4_32_10_t> PhiloxStates; // GRACE default
+typedef grace::detail::RngStates<curandStateXORWOW_t> XORWOWStates; // CUDA default
+typedef grace::detail::RngStates<curandStateMRG32k3a_t> MRG32States;
 
 int main(int argc, char* argv[])
 {
