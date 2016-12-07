@@ -2,8 +2,7 @@
 
 #include "grace/cuda/detail/device/intersect.cuh"
 
-#include "grace/cuda/util/bound_iter.cuh"
-
+#include "grace/generic/boundedptr.h"
 #include "grace/generic/interpolate.h"
 #include "grace/generic/meta.h"
 

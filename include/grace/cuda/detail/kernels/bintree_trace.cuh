@@ -3,9 +3,9 @@
 #include "grace/cuda/detail/device/intersect.cuh"
 #include "grace/cuda/detail/kernel_config.h"
 
-#include "grace/cuda/util/bound_iter.cuh"
 #include "grace/cuda/util/texref_iter.cuh"
 
+#include "grace/generic/boundedptr.h"
 #include "grace/generic/meta.h"
 
 #include "grace/cuda/nodes.h"
