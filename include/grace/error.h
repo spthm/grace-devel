@@ -23,10 +23,12 @@
 #define GRACE_ASSERT(...)
 #endif // GRACE_DEBUG
 
-#if defined(GRACE_DEBUG) && (defined(static_assert) || __STDC_VERSION >= 201112L)
+template <bool> struct grace_static_assert;
+template <> struct grace_static_assert<true> {};
+#if defined(static_assert) || __STDC_VERSION >= 201112L
 #define GRACE_STATIC_ASSERT(predicate, msg) { static_assert(predicate, msg); }
 #else
-#define GRACE_STATIC_ASSERT(ignore, msg)
+#define GRACE_STATIC_ASSERT(predicate, ignore) { grace_static_assert<predicate>(); }
 #endif
 
 #define GRACE_GOT_TO() std::cerr << "At " << __FILE__ << "@" << __LINE__ << std::endl;
