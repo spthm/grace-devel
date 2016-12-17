@@ -13,21 +13,6 @@ template <size_t Dims, size_t Tsize, typename T>
 struct vector_base {};
 
 
-//
-// Specializations for 8- and 16-byte T
-//
-
-// If sizeof(T) == 8, 8 should be our minimum alignment. It wastes no space, and
-// allows for efficient vector4 loads on CUDA devices.
-template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<Dims, 8, T> {};
-
-// If sizeof(T) == 16, 16 should be our alignment. It wastes no space, and
-// allows for efficient vector4 loads on CUDA devices.
-template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
-
-
 // The below template specializations balance the most-efficient alignment
 // (i.e. one for which nvcc can emit vector loads) against any resulting
 // increase in the size of the Vector type. For sizeof(T) <= 4 and
@@ -45,6 +30,21 @@ GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
 //  5+    D    D    D    D    D    D    D    8    D    16
 //
 // A 'D' denotes the default specification, i.e. whatever the compiler wants.
+
+
+//
+// Specializations for 8- and 16-byte T
+//
+
+// If sizeof(T) == 8, 8 should be our minimum alignment. It wastes no space, and
+// allows for efficient vector4 loads on CUDA devices.
+template <size_t Dims, typename T>
+GRACE_ALIGNED_STRUCT(8) vector_base<Dims, 8, T> {};
+
+// If sizeof(T) == 16, 16 should be our alignment. It wastes no space, and
+// allows for efficient vector4 loads on CUDA devices.
+template <size_t Dims, typename T>
+GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
 
 
 //
