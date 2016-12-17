@@ -2,62 +2,53 @@
 
 #include "grace/types.h"
 
-#include "grace/detail/vector_members-inl.h"
+#include "grace/detail/vector_base-inl.h"
 
 namespace grace {
 
-template <size_t Dims, typename T>
-struct Vector;
-
 template <typename T>
-struct Vector<3, T> : detail::VectorMembers<3, sizeof(T), T>
+struct Vector<3, T> : detail::vector_base<3, sizeof(T), T>
 {
     typedef T value_type;
 
+    T x;
+    T y;
+    T z;
+
     // Zero-initialized.
-    GRACE_HOST_DEVICE Vector() :
-        Base() {}
+    GRACE_HOST_DEVICE Vector();
 
-    GRACE_HOST_DEVICE Vector(const T x, const T y, const T z) :
-        Base(x, y, z) {}
+    GRACE_HOST_DEVICE Vector(const T x, const T y, const T z);
 
-    GRACE_HOST_DEVICE Vector(const T s) :
-        Base(s, s, s) {}
+    GRACE_HOST_DEVICE explicit Vector(const T s);
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const U data[3]) :
-        Base(data[0], data[1], data[2]) {}
+    GRACE_HOST_DEVICE explicit Vector(const U data[3]);
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const Vector<3, U>& vec) :
-        Base(vec.x, vec.y, vec.z) {}
+    GRACE_HOST_DEVICE Vector(const Vector<3, U>& vec);
 
     // vec.w == vec[3] ignored.
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const Vector<4, U>& vec) :
-        Base(vec.x, vec.y, vec.z) {}
+    GRACE_HOST_DEVICE explicit Vector(const Vector<4, U>& vec);
 
 #ifdef __CUDACC__
     // float must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const float3& xyz) :
-        Base(xyz.x, xyz.y, xyz.z) {}
+    GRACE_HOST_DEVICE Vector(const float3& xyz);
 
     // double must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const double3& xyz) :
-        Base(xyz.x, xyz.y, xyz.z) {}
+    GRACE_HOST_DEVICE Vector(const double3& xyz);
 
     // w ignored.
     // float must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const float4& xyzw) :
-        Base(xyzw.z, xyzw.y, xyzw.z) {}
+    GRACE_HOST_DEVICE explicit Vector(const float4& xyzw);
 
     // w ignored.
     // double must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const double4& xyzw) :
-        Base(xyzw.z, xyzw.y, xyzw.z) {}
+    GRACE_HOST_DEVICE explicit Vector(const double4& xyzw);
 #endif
 
     template <typename U>
@@ -68,57 +59,49 @@ struct Vector<3, T> : detail::VectorMembers<3, sizeof(T), T>
     // overhead.
     GRACE_HOST_DEVICE T& operator[](int i);
     GRACE_HOST_DEVICE const T& operator[](int i) const;
-
-private:
-    typedef detail::VectorMembers<3, sizeof(T), T> Base;
 };
 
 template <typename T>
-struct Vector<4, T> : detail::VectorMembers<4, sizeof(T), T>
+struct Vector<4, T> : detail::vector_base<4, sizeof(T), T>
 {
     typedef T value_type;
 
+    T x;
+    T y;
+    T z;
+    T w;
+
     // Zero-initialized.
-    GRACE_HOST_DEVICE Vector() :
-        Base() {}
+    GRACE_HOST_DEVICE Vector();
 
-    GRACE_HOST_DEVICE Vector(const T x, const T y, const T z, const T w) :
-        Base(x, y, z, w) {}
+    GRACE_HOST_DEVICE Vector(const T x, const T y, const T z, const T w);
 
-    GRACE_HOST_DEVICE Vector(const T s) :
-        Base(s, s, s, s) {}
+    GRACE_HOST_DEVICE explicit Vector(const T s);
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const U data[4]) :
-        Base(data[0], data[1], data[2], data[3]) {}
+    GRACE_HOST_DEVICE explicit Vector(const U data[4]);
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const Vector<4, U>& vec) :
-        Base(vec.x, vec.y, vec.z, vec.w) {}
+    GRACE_HOST_DEVICE Vector(const Vector<4, U>& vec);
 
     // U must be convertible to T.
     template <typename U>
-    GRACE_HOST_DEVICE Vector(const Vector<3, U>& vec, const U w) :
-        Base(vec.x, vec.y, vec.z, w) {}
+    GRACE_HOST_DEVICE Vector(const Vector<3, U>& vec, const U w);
 
 #ifdef __CUDACC__
     // float must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const float3& xyz, const float w) :
-        Base(xyz.x, xyz.y, xyz.z, w) {}
+    GRACE_HOST_DEVICE Vector(const float3& xyz, const float w);
 
     // double must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const double3& xyz, const double w) :
-        Base(xyz.x, xyz.y, xyz.z, w) {}
+    GRACE_HOST_DEVICE Vector(const double3& xyz, const double w);
 
     // float must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const float4& xyzw) :
-        Base(xyzw.x, xyzw.y, xyzw.z, xyzw.w) {}
+    GRACE_HOST_DEVICE Vector(const float4& xyzw);
 
     // double must be convertible to T.
-    GRACE_HOST_DEVICE Vector(const double4& xyzw) :
-        Base(xyzw.x, xyzw.y, xyzw.z, xyzw.w) {}
+    GRACE_HOST_DEVICE Vector(const double4& xyzw);
 #endif
 
     // U must be convertible to T.
@@ -130,9 +113,6 @@ struct Vector<4, T> : detail::VectorMembers<4, sizeof(T), T>
     // overhead.
     GRACE_HOST_DEVICE T& operator[](int i);
     GRACE_HOST_DEVICE const T& operator[](int i) const;
-
-private:
-    typedef detail::VectorMembers<4, sizeof(T), T> Base;
 };
 
 

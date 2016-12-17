@@ -7,37 +7,10 @@ namespace grace {
 
 namespace detail {
 
-// Default case occurs when Dims > 4 or Tsize > 8. Use alignment of underlying T
-// T type.
+// Default case occurs when Dims > 4 or (Tsize > 8 and Tsize != 16).
 // This also catches the non-vector Dims == 1.
 template <size_t Dims, size_t Tsize, typename T>
-struct VectorMembers
-{
-    T array[Dims];
-
-    GRACE_HOST_DEVICE VectorMembers()
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = 0;
-    }
-
-    template <typename U>
-    GRACE_HOST_DEVICE VectorMembers(U init[Dims])
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = init[i];
-    }
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<Dims, Usize, U>& rhs)
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = rhs[i];
-
-        return *this;
-    }
-};
+struct vector_base {};
 
 
 //
@@ -47,134 +20,12 @@ struct VectorMembers
 // If sizeof(T) == 8, 8 should be our minimum alignment. It wastes no space, and
 // allows for efficient vector4 loads on CUDA devices.
 template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<Dims, 8, T>
-{
-    T array[Dims];
-
-    GRACE_HOST_DEVICE VectorMembers()
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = 0;
-    }
-
-    template <typename U>
-    GRACE_HOST_DEVICE VectorMembers(U init[Dims])
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = init[i];
-    }
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<Dims, Usize, U>& rhs)
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = rhs[i];
-
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<Dims, 8, T> {};
 
 // If sizeof(T) == 16, 16 should be our alignment. It wastes no space, and
 // allows for efficient vector4 loads on CUDA devices.
 template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<Dims, 16, T>
-{
-    T array[Dims];
-
-    GRACE_HOST_DEVICE VectorMembers()
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = 0;
-    }
-
-    template <typename U>
-    GRACE_HOST_DEVICE VectorMembers(U init[Dims])
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = init[i];
-    }
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<Dims, Usize, U>& rhs)
-    {
-        for (size_t i = 0; i < Dims; ++i)
-            array[i] = rhs[i];
-
-        return *this;
-    }
-};
-
-
-//
-// Vector<{2, 3, 4}, T> partial specializations.
-//
-
-template <size_t Tsize, typename T>
-struct VectorMembers<2, Tsize, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
-
-template <size_t Tsize, typename T>
-struct VectorMembers<3, Tsize, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
-
-template <size_t Tsize, typename T>
-struct VectorMembers<4, Tsize, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
 
 
 // The below template specializations balance the most-efficient alignment
@@ -194,90 +45,6 @@ struct VectorMembers<4, Tsize, T>
 //  5+    D    D    D    D    D    D    D    8    D    16
 //
 // A 'D' denotes the default specification, i.e. whatever the compiler wants.
-//
-// Also note that the below specializations for Dims = {2, 3, 4} combined with
-// sizeof(T) = {8, 16} are necessary to resolve the ambiguity in the
-// separate Dims = {2, 3, 4} and sizeof(T) = {8, 16} partial specializations
-// above.
-
-
-//
-// 16-byte T
-//
-
-// Vector<2, >
-// Required to resolve ambiguity when Dims == 2 and sizeof(T) == 16.
-// No padding (should be) added by the compiler.
-template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 16, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
-
-// Vector<3, >
-// Required to resolve ambiguity when Dims == 3 and sizeof(T) == 16.
-// No padding (should be) added by the compiler.
-template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 16, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
-
-// Vector<4, >
-// Required to resolve ambiguity when Dims == 4 and sizeof(T) == 16.
-// No padding (should be) added by the compiler.
-template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 16, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
 
 
 //
@@ -286,71 +53,15 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 16, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 8, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<2, 8, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 8, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<3, 8, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 8, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<4, 8, T> {};
 
 
 //
@@ -359,71 +70,15 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 8, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 7, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<2, 7, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<3, 7, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<3, 7, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 7, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<4, 7, T> {};
 
 
 //
@@ -432,71 +87,15 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 7, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<2, 6, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<2, 6, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 6, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<3, 6, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<4, 6, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<4, 6, T> {};
 
 
 //
@@ -505,71 +104,15 @@ GRACE_ALIGNED_STRUCT(8) VectorMembers<4, 6, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<2, 5, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<2, 5, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 5, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<3, 5, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<4, 5, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<4, 5, T> {};
 
 
 //
@@ -578,71 +121,15 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<4, 5, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<2, 4, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<2, 4, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 4, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<3, 4, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 4, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<4, 4, T> {};
 
 
 //
@@ -651,71 +138,15 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 4, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<2, 3, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<2, 3, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 3, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<3, 3, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 3, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(16) vector_base<4, 3, T> {};
 
 
 //
@@ -724,71 +155,15 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 3, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<2, 2, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<2, 2, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<3, 2, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<3, 2, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) VectorMembers<4, 2, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(8) vector_base<4, 2, T> {};
 
 
 //
@@ -797,71 +172,15 @@ GRACE_ALIGNED_STRUCT(8) VectorMembers<4, 2, T>
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(2) VectorMembers<2, 1, T>
-{
-    T x;
-    T y;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y) : x(x), y(y) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<2, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(2) vector_base<2, 1, T> {};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 1, T>
-{
-    T x;
-    T y;
-    T z;
-
-    GRACE_HOST_DEVICE VectorMembers() : x(0), y(0), z(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z) : x(x), y(y), z(z) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<3, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<3, 1, T> {};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) VectorMembers<4, 1, T>
-{
-    T x;
-    T y;
-    T z;
-    T w;
-
-    GRACE_HOST_DEVICE VectorMembers() :
-        x(0), y(0), z(0), w(0) {}
-    GRACE_HOST_DEVICE VectorMembers(const T x, const T y, const T z, const T w)
-        : x(x), y(y), z(z), w(w) {}
-
-    template <size_t Usize, typename U>
-    GRACE_HOST_DEVICE VectorMembers& operator=(
-        const VectorMembers<4, Usize, U>& rhs)
-    {
-        x = rhs.x;
-        y = rhs.y;
-        z = rhs.z;
-        w = rhs.w;
-        return *this;
-    }
-};
+GRACE_ALIGNED_STRUCT(4) vector_base<4, 1, T> {};
 
 } // namespace detail
 
