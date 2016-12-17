@@ -1,6 +1,7 @@
 #pragma once
 
-#include "grace/vector.h"
+// No grace/vector.h include.
+// This should only ever be included by grace/vector.h.
 
 namespace grace {
 

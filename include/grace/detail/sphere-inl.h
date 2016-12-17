@@ -1,6 +1,7 @@
 #pragma once
 
-#include "grace/sphere.h"
+// No grace/sphere.h include.
+// This should only ever be included by grace/sphere.h.
 
 namespace grace {
 

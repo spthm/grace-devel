@@ -1,6 +1,7 @@
 #pragma once
 
-#include "grace/aabb.h"
+// No grace/aabb.h include.
+// This should only ever be included by grace/aabb.h.
 
 namespace grace {
 

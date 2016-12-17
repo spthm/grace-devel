@@ -1,7 +1,7 @@
 #pragma once
 
-#include "grace/aligned_malloc.h"
-#include "grace/types.h"
+// No grace/alligned_allocator.h include.
+// This should only ever be included by grace/aligned_allocator.h.
 
 #include <limits>
 #include <memory>
