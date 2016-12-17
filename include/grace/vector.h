@@ -6,21 +6,9 @@
 
 namespace grace {
 
-// Defining a vector with Dims = {2, 3, 4} with sizeof(T) >= 9 (excepting
-// sizeof(T) == 16) results in .data() and operator[] implementations which are
-// not reliable. Specifically, *(vec.data() + i) and vec[i] are guaranteed to
-// return the correct value if and only if i == 0.
 template <size_t Dims, typename T>
 struct Vector;
 
-// template <typename T>
-// GRACE_ALIGNED_STRUCT(16) Vector<3, T>
-// {
-//     typedef T value_type;
-
-//     T x;
-//     T y;
-//     T z;
 template <typename T>
 struct Vector<3, T> : detail::VectorMembers<3, sizeof(T), T>
 {
@@ -75,29 +63,16 @@ struct Vector<3, T> : detail::VectorMembers<3, sizeof(T), T>
     template <typename U>
     GRACE_HOST_DEVICE Vector& operator=(const Vector<3, U>& rhs);
 
-    // Generally unsafe, but detail::VectorMember<3, T> ensures it is safe iff
-    // T is a 1, 2, 4 or 8-byte type.
-    GRACE_HOST_DEVICE T* data();
-    GRACE_HOST_DEVICE const T* data() const;
-
-    // Generally unsafe, but detail::VectorMember<3, T> ensures it is safe iff
-    // T is a 1, 2, 4 or 8-byte type.
-    GRACE_HOST_DEVICE T& operator[](size_t i);
-    GRACE_HOST_DEVICE const T& operator[](size_t i) const;
+    // Always safe, but will always incur some runtime overhead when i is not
+    // known at compile-time. When i is known at compile time, likely no
+    // overhead.
+    GRACE_HOST_DEVICE T& operator[](int i);
+    GRACE_HOST_DEVICE const T& operator[](int i) const;
 
 private:
     typedef detail::VectorMembers<3, sizeof(T), T> Base;
 };
 
-// template <typename T>
-// GRACE_ALIGNED_STRUCT(16) Vector<4, T>
-// {
-//     typedef T value_type;
-
-//     T x;
-//     T y;
-//     T z;
-//     T w;
 template <typename T>
 struct Vector<4, T> : detail::VectorMembers<4, sizeof(T), T>
 {
@@ -150,18 +125,11 @@ struct Vector<4, T> : detail::VectorMembers<4, sizeof(T), T>
     template <typename U>
     GRACE_HOST_DEVICE Vector& operator=(const Vector<4, U>& rhs);
 
-    // Generally unsafe, but detail::VectorMember<3, T> ensures it is safe iff
-    // T is a 1, 2, 4 or 8-byte type.
-    GRACE_HOST_DEVICE T* data();
-    GRACE_HOST_DEVICE const T* data() const;
-
-    // Generally unsafe, but detail::VectorMember<3, T> ensures it is safe iff
-    // T is a 1, 2, 4 or 8-byte type.
-    GRACE_HOST_DEVICE T& operator[](size_t i);
-    GRACE_HOST_DEVICE const T& operator[](size_t i) const;
-
-    GRACE_HOST_DEVICE Vector<3, T>& vec3();
-    GRACE_HOST_DEVICE const Vector<3, T>& vec3() const;
+    // Always safe, but will always incur some runtime overhead when i is not
+    // known at compile-time. When i is known at compile time, likely no
+    // overhead.
+    GRACE_HOST_DEVICE T& operator[](int i);
+    GRACE_HOST_DEVICE const T& operator[](int i) const;
 
 private:
     typedef detail::VectorMembers<4, sizeof(T), T> Base;

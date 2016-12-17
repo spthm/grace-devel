@@ -2,6 +2,7 @@
 
 // No grace/vector.h include.
 // This should only ever be included by grace/vector.h.
+#include <grace/error.h>
 
 namespace grace {
 
@@ -16,46 +17,28 @@ Vector<4, T>& Vector<4, T>::operator=(const Vector<4, U>& rhs)
 
 template <typename T>
 GRACE_HOST_DEVICE
-T* Vector<4, T>::data()
+T& Vector<4, T>::operator[](int i)
 {
-    return reinterpret_cast<T*>(this);
+    switch (i) {
+        case 0: return this->x;
+        case 1: return this->y;
+        case 2: return this->z;
+        case 3: return this->w;
+    }
+    GRACE_ASSERT(0, vector4_invalid_index_access);
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
-const T* Vector<4, T>::data() const
+const T& Vector<4, T>::operator[](int i) const
 {
-    return reinterpret_cast<const T*>(this);
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-T& Vector<4, T>::operator[](size_t i)
-{
-    return this->data()[i];
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-const T& Vector<4, T>::operator[](size_t i) const
-{
-    // Overloads to const data().
-    return this->data()[i];
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-Vector<3, T>& Vector<4, T>::vec3()
-{
-    return *reinterpret_cast<Vector<3, T>*>(this->data());
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-const Vector<3, T>& Vector<4, T>::vec3() const
-{
-    // Overloads to const data().
-    return *reinterpret_cast<const Vector<3, T>*>(this->data());
+    switch (i) {
+        case 0: return this->x;
+        case 1: return this->y;
+        case 2: return this->z;
+        case 3: return this->w;
+    }
+    GRACE_ASSERT(0, vector4_invalid_index_access);
 }
 
 } // namespace grace

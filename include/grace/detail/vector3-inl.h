@@ -2,6 +2,7 @@
 
 // No grace/vector.h include.
 // This should only ever be included by grace/vector.h.
+#include <grace/error.h>
 
 namespace grace {
 
@@ -16,34 +17,26 @@ Vector<3, T>& Vector<3, T>::operator=(const Vector<3, U>& rhs)
 
 template <typename T>
 GRACE_HOST_DEVICE
-T* Vector<3, T>::data()
+T& Vector<3, T>::operator[](int i)
 {
-    // Element order in memory guaranteed identical to order of declaration.
-    // However, depending on the architecture and compiler, this may be unsafe
-    // for sizeof(T) < 4: there may be padding after each element.
-    return reinterpret_cast<T*>(this);
+    switch (i) {
+        case 0: return this->x;
+        case 1: return this->y;
+        case 2: return this->z;
+    }
+    GRACE_ASSERT(0, vector3_invalid_index_access);
 }
 
 template <typename T>
 GRACE_HOST_DEVICE
-const T* Vector<3, T>::data() const
+const T& Vector<3, T>::operator[](int i) const
 {
-    return reinterpret_cast<const T*>(this);
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-T& Vector<3, T>::operator[](size_t i)
-{
-    return this->data()[i];
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
-const T& Vector<3, T>::operator[](size_t i) const
-{
-    // Overloads to const data().
-    return this->data()[i];
+    switch (i) {
+        case 0: return this->x;
+        case 1: return this->y;
+        case 2: return this->z;
+    }
+    GRACE_ASSERT(0, vector3_invalid_index_access);
 }
 
 } // namespace grace

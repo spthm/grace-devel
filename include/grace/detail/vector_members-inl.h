@@ -111,8 +111,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<Dims, 16, T>
 // Vector<{2, 3, 4}, T> partial specializations.
 //
 
-// Vector<2, T> always has x, y members, but for arbitrary T array-accessor is
-// unsafe!
 template <size_t Tsize, typename T>
 struct VectorMembers<2, Tsize, T>
 {
@@ -132,8 +130,6 @@ struct VectorMembers<2, Tsize, T>
     }
 };
 
-// Vector<3, > always has x, y and z members, but for arbitrary T array-accessor
-// is unsafe.
 template <size_t Tsize, typename T>
 struct VectorMembers<3, Tsize, T>
 {
@@ -155,8 +151,6 @@ struct VectorMembers<3, Tsize, T>
     }
 };
 
-// Vector<4, > always has x, y, z and w members, but for arbitrary T
-// array-accessor is unsafe.
 template <size_t Tsize, typename T>
 struct VectorMembers<4, Tsize, T>
 {
@@ -190,22 +184,16 @@ struct VectorMembers<4, Tsize, T>
 // both are optimal. For other sizeof(T) values, keeping struct padding to a
 // minimum is favoured. The alignments are given by the table below.
 //
-// Further, padding is explicitly added to increase safety when accessing
-// members as an array/pointer. GRACE_ALIGNED_STRUCT is thus not strictly
-// needed, but is left for clarity of intent. Explicit padding is also
-// identified in the table below.
+//                   alignof(Vector<Dims, T>)
+//                          sizeof(T)
+// Dims   1    2    3    4    5    6    7    8    9+   16
+//  1     D    D    D    D    D    D    D    8    D    16
+//  2     2    4    8    8    4    4    16   16   D    16
+//  3     4    8    4    16   16   4    8    16   D    16
+//  4     4    8    16   16   4    8    16   16   D    16
+//  5+    D    D    D    D    D    D    D    8    D    16
 //
-//               alignof(Vector<Dims, T>) (explicitly padded y/n)
-//                                   sizeof(T)
-// Dims    1     2       3        4      5      6       7       8      9+    16
-//  1      x     x       x        x      x      x       x      8 (n)   x   16 (n)
-//  2    2 (n)  4 (n)   8 (y)   8 (n)   4 (y)  4 (n)  16 (y)  16 (n)   x   16 (n)
-//  3    4 (y)  8 (y)   4 (y)  16 (y)  16 (y)  4 (y)   8 (y)  16 (y)   x   16 (n)
-//  4    4 (n)  8 (n)  16 (y)  16 (n)   4 (n)  8 (n)  16 (y)  16 (n)   x   16 (n)
-//  5+     x     x       x        x      x      x       x      8 (n)   x   16 (n)
-//
-// An 'x' denotes the default specification and no explicit padding, i.e.
-// whatever the compiler wants.
+// A 'D' denotes the default specification, i.e. whatever the compiler wants.
 //
 // Also note that the below specializations for Dims = {2, 3, 4} combined with
 // sizeof(T) = {8, 16} are necessary to resolve the ambiguity in the
@@ -219,7 +207,7 @@ struct VectorMembers<4, Tsize, T>
 
 // Vector<2, >
 // Required to resolve ambiguity when Dims == 2 and sizeof(T) == 16.
-// No explicit padding. No padding added by compiler.
+// No padding (should be) added by the compiler.
 template <typename T>
 GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 16, T>
 {
@@ -241,7 +229,7 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 16, T>
 
 // Vector<3, >
 // Required to resolve ambiguity when Dims == 3 and sizeof(T) == 16.
-// No explicit padding. No padding added by compiler.
+// No padding (should be) added by the compiler.
 template <typename T>
 GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 16, T>
 {
@@ -265,7 +253,7 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 16, T>
 
 // Vector<4, >
 // Required to resolve ambiguity when Dims == 4 and sizeof(T) == 16.
-// No explicit padding. No padding added by compiler.
+// No padding (should be) added by the compiler.
 template <typename T>
 GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 16, T>
 {
@@ -336,9 +324,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 8, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[8]; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<4, >
@@ -390,9 +375,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<2, 7, T>
         y = rhs.y;
         return *this;
     }
-
-private:
-    char padding[2];
 };
 
 // Vector<3, >
@@ -415,9 +397,6 @@ GRACE_ALIGNED_STRUCT(8) VectorMembers<3, 7, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[3];
 };
 
 // Vector<4, >
@@ -444,9 +423,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 7, T>
         w = rhs.w;
         return *this;
     }
-
-private:
-    char padding[4];
 };
 
 
@@ -494,9 +470,6 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 6, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[2];
 };
 
 // Vector<4, >
@@ -548,9 +521,6 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<2, 5, T>
         y = rhs.y;
         return *this;
     }
-
-private:
-    char padding[2];
 };
 
 // Vector<3, >
@@ -573,9 +543,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 5, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[1];
 };
 
 // Vector<4, >
@@ -649,9 +616,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<3, 4, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[4]; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<4, >
@@ -703,9 +667,6 @@ GRACE_ALIGNED_STRUCT(8) VectorMembers<2, 3, T>
         y = rhs.y;
         return *this;
     }
-
-private:
-    char padding[2]; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<3, >
@@ -728,9 +689,6 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 3, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[3]; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<4, >
@@ -757,9 +715,6 @@ GRACE_ALIGNED_STRUCT(16) VectorMembers<4, 3, T>
         w = rhs.w;
         return *this;
     }
-
-private:
-    char padding[4]; // Prevent compiler from inserting padding between public members.
 };
 
 
@@ -807,9 +762,6 @@ GRACE_ALIGNED_STRUCT(8) VectorMembers<3, 2, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding[2]; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<4, >
@@ -883,9 +835,6 @@ GRACE_ALIGNED_STRUCT(4) VectorMembers<3, 1, T>
         z = rhs.z;
         return *this;
     }
-
-private:
-    char padding; // Prevent compiler from inserting padding between public members.
 };
 
 // Vector<4, >
