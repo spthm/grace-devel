@@ -216,46 +216,6 @@ GRACE_HOST_DEVICE void test_vector4_accessors_impl(
     ASSERT_EQUAL(vec_7b.w,  vec_7b[ 3]);
     ASSERT_EQUAL(vec_8b.w,  vec_8b[ 3]);
     ASSERT_EQUAL(vec_16b.w, vec_16b[3]);
-
-    ASSERT_EQUAL(vec_1b.x,  *(vec_1b.data()  + 0));
-    ASSERT_EQUAL(vec_2b.x,  *(vec_2b.data()  + 0));
-    ASSERT_EQUAL(vec_3b.x,  *(vec_3b.data()  + 0));
-    ASSERT_EQUAL(vec_4b.x,  *(vec_4b.data()  + 0));
-    ASSERT_EQUAL(vec_5b.x,  *(vec_5b.data()  + 0));
-    ASSERT_EQUAL(vec_6b.x,  *(vec_6b.data()  + 0));
-    ASSERT_EQUAL(vec_7b.x,  *(vec_7b.data()  + 0));
-    ASSERT_EQUAL(vec_8b.x,  *(vec_8b.data()  + 0));
-    ASSERT_EQUAL(vec_16b.x, *(vec_16b.data() + 0));
-
-    ASSERT_EQUAL(vec_1b.y,  *(vec_1b.data()  + 1));
-    ASSERT_EQUAL(vec_2b.y,  *(vec_2b.data()  + 1));
-    ASSERT_EQUAL(vec_3b.y,  *(vec_3b.data()  + 1));
-    ASSERT_EQUAL(vec_4b.y,  *(vec_4b.data()  + 1));
-    ASSERT_EQUAL(vec_5b.y,  *(vec_5b.data()  + 1));
-    ASSERT_EQUAL(vec_6b.y,  *(vec_6b.data()  + 1));
-    ASSERT_EQUAL(vec_7b.y,  *(vec_7b.data()  + 1));
-    ASSERT_EQUAL(vec_8b.y,  *(vec_8b.data()  + 1));
-    ASSERT_EQUAL(vec_16b.y, *(vec_16b.data() + 1));
-
-    ASSERT_EQUAL(vec_1b.z,  *(vec_1b.data()  + 2));
-    ASSERT_EQUAL(vec_2b.z,  *(vec_2b.data()  + 2));
-    ASSERT_EQUAL(vec_3b.z,  *(vec_3b.data()  + 2));
-    ASSERT_EQUAL(vec_4b.z,  *(vec_4b.data()  + 2));
-    ASSERT_EQUAL(vec_5b.z,  *(vec_5b.data()  + 2));
-    ASSERT_EQUAL(vec_6b.z,  *(vec_6b.data()  + 2));
-    ASSERT_EQUAL(vec_7b.z,  *(vec_7b.data()  + 2));
-    ASSERT_EQUAL(vec_8b.z,  *(vec_8b.data()  + 2));
-    ASSERT_EQUAL(vec_16b.z, *(vec_16b.data() + 2));
-
-    ASSERT_EQUAL(vec_1b.w,  *(vec_1b.data()  + 3));
-    ASSERT_EQUAL(vec_2b.w,  *(vec_2b.data()  + 3));
-    ASSERT_EQUAL(vec_3b.w,  *(vec_3b.data()  + 3));
-    ASSERT_EQUAL(vec_4b.w,  *(vec_4b.data()  + 3));
-    ASSERT_EQUAL(vec_5b.w,  *(vec_5b.data()  + 3));
-    ASSERT_EQUAL(vec_6b.w,  *(vec_6b.data()  + 3));
-    ASSERT_EQUAL(vec_7b.w,  *(vec_7b.data()  + 3));
-    ASSERT_EQUAL(vec_8b.w,  *(vec_8b.data()  + 3));
-    ASSERT_EQUAL(vec_16b.w, *(vec_16b.data() + 3));
 }
 
 GRACE_HOST_DEVICE void test_vector4_accessors(
