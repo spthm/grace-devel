@@ -107,9 +107,10 @@ GRACE_HOST void morton_keys(
     const int MAX_KEY_63 = (1u << 21) - 1;
     const int MAX_KEY_30 = (1u << 10) - 1;
     const int span = CHAR_BIT * sizeof(KeyType) > 32 ? MAX_KEY_63 : MAX_KEY_30;
-    float3 scale = make_float3(span / (AABB_top.x - AABB_bot.x),
-                               span / (AABB_top.y - AABB_bot.y),
-                               span / (AABB_top.z - AABB_bot.z));
+    Real3 scale;
+    scale.x = span / (AABB_top.x - AABB_bot.x);
+    scale.y = span / (AABB_top.y - AABB_bot.y);
+    scale.z = span / (AABB_top.z - AABB_bot.z);
 
     morton::morton_keys(d_prims_iter, N_primitives, AABB_bot, scale,
                         d_keys_iter, centroid);
