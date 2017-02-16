@@ -24,7 +24,21 @@ std::ostream& operator<<(std::ostream& os, const ThreeSF& lhs)
     std::string v_str = v_ss.str();
     int last, n;
 
-    if (v < 0.1) { last = 6; n = 1; }
+    if (v >= 1000.) {
+        int v_sig, v_round;
+        std::istringstream(v_str.substr(0, 3)) >> v_sig;
+        std::istringstream(v_str.substr(3, 1)) >> v_round;
+        if (v_round >= 5) { ++v_sig; }
+
+        int n = v_str.find('.');
+        if (n == std::string::npos) { n = v_str.length(); }
+
+	// If the string is shorter than 7 characters, i.e. shorter than
+        // x.xx(x), xx.x(x) and xxx(.x), pad with whitespace up to that length.
+	std::string pad = n < 7 ? std::string(7 - n, ' ') : "";
+        return os << v_sig << std::string(n - 3, '0') << pad;
+    }
+    else if (v < 0.1) { last = 6; n = 1; }
     else if (v < 1.) { last = 5; n = 1; }
     else if (v < 10.) { last = 4; n = 1; }
     else if (v < 100.) { last = 4; n = 1; }
@@ -68,7 +82,7 @@ void print_row(const int rng, const double p, const size_t size_bytes,
         return;
 
     std::cout << "|    " << ThreeSF(p) << "    ";
-    std::cout << "|  " << ThreeSF(size) << "  ";
+    std::cout << "|  " << std::setw(5) << ThreeSF(size) << "  ";
     std::cout << "|  " << ThreeSF(tinit) << "   ";
     std::cout << "|  " << ThreeSF(tgen);
     std::cout << std::endl;
