@@ -1,13 +1,14 @@
+#include "print_table.h"
+
 #include "grace/cuda/detail/prngstates-inl.cuh"
 
 #include "helper/cuda_timer.cuh"
 
 #include <thrust/device_vector.h>
 
-#include <iomanip>
-#include <iostream>
+#define BITMASK 0xf
 
-template <typename RngDeviceStatesT>
+template <unsigned int bitmask, typename RngDeviceStatesT>
 __global__ void generate_randoms_kernel(
     RngDeviceStatesT states,
     const size_t n,
@@ -20,14 +21,18 @@ __global__ void generate_randoms_kernel(
     for (int i = tid; i < n; i += blockDim.x * gridDim.x)
     {
         unsigned int x = curand(&state);
-        if ((x & 0xf) == 0xf) { ++count; }
+        if (bitmask) {
+          if ((x & bitmask) == bitmask) { ++count; }
+        }
     }
 
     states.save_state(state);
-    results[tid] = count;
+    if (bitmask) {
+      results[tid] = count;
+    }
 }
 
-template <typename RngStatesT>
+template <unsigned int bitmask, typename RngStatesT>
 void generate_randoms(
     RngStatesT& states,
     const size_t n,
@@ -43,19 +48,12 @@ void generate_randoms(
 
     // Round down! We cannot generate more threads than there are states.
     const int num_blocks = std::min(n, max_states) / NT;
-    generate_randoms_kernel<<<NT, num_blocks>>>(
+    generate_randoms_kernel<bitmask>
+    <<<NT, num_blocks>>>(
         states.device_states(),
         n,
         thrust::raw_pointer_cast(d_results.data()));
 }
-
-enum
-{
-    PHILOX,
-    XORWOW,
-    MRG32,
-    num_generators
-};
 
 typedef grace::detail::RngStates<curandStatePhilox4_32_10_t> PhiloxStates; // GRACE default
 typedef grace::detail::RngStates<curandStateXORWOW_t> XORWOWStates; // CUDA default
@@ -63,8 +61,7 @@ typedef grace::detail::RngStates<curandStateMRG32k3a_t> MRG32States;
 
 int main(int argc, char* argv[])
 {
-    std::cout.fill(' ');
-    std::cout.setf(std::ios::fixed, std::ios::floatfield);
+    cout_init();
 
     size_t max_n = 100000000;
     int n_iter = 10;
@@ -87,10 +84,9 @@ int main(int argc, char* argv[])
 
     double init_timings[num_generators];
     double rand_timings[num_generators];
+    double fraction_set[num_generators];
     for (size_t n = 1000; n < max_n + 1; n *= 10)
     {
-        std::cout << "n: " << n << std::endl;
-
         for (int i = 0; i < num_generators; ++i)
         {
             init_timings[i] = 0.0;
@@ -120,71 +116,80 @@ int main(int argc, char* argv[])
             CUDATimer timer;
             timer.start();
 
-            generate_randoms(philox_states, n, d_results);
-            if (i >= 0) rand_timings[PHILOX] += timer.split();
-            else
-            {
+            if (i >= 0) {
+                generate_randoms<0>(philox_states, n, d_results);
+                rand_timings[PHILOX] += timer.split();
+            }
+            else {
+                generate_randoms<BITMASK>(philox_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
-                std::cout << "  Fraction of numbers with low four bits set: "
-                          << std::setw(8) << (double)tot / n
-                          << " (PHILOX)" << std::endl;
+                fraction_set[PHILOX] = (double)tot / n;
                 thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
-            generate_randoms(xorwow_states, n, d_results);
-            if (i >= 0) rand_timings[XORWOW] += timer.split();
-            else
-            {
+            if (i >= 0) {
+                generate_randoms<0>(xorwow_states, n, d_results);
+                rand_timings[XORWOW] += timer.split();
+            }
+            else {
+                generate_randoms<BITMASK>(xorwow_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
-                std::cout << "  Fraction of numbers with low four bits set: "
-                          << std::setw(8) << (double)tot / n
-                          << " (XORWOW)" << std::endl;
+                fraction_set[XORWOW] = (double)tot / n;
                 thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
-            generate_randoms(mrg32_states, n, d_results);
-            if (i >= 0) rand_timings[MRG32] += timer.split();
-            else
-            {
+            if (i >= 0) {
+                generate_randoms<0>(mrg32_states, n, d_results);
+                rand_timings[MRG32] += timer.split();
+            }
+            else {
+                generate_randoms<BITMASK>(mrg32_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
-                std::cout << "  Fraction of numbers with low four bits set: "
-                          << std::setw(8) << (double)tot / n
-                          << " (MRG32)" << std::endl;
+                fraction_set[MRG32] = (double)tot / n;
                 thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
         }
 
-        std::cout << "  States' size: " << std::setw(9)
-                  << philox_states.size_bytes() / 1024. / 1024.
-                  << " MiB (PHILOX)" << std::endl
-                  << "  States' size: " << std::setw(9)
-                  << xorwow_states.size_bytes() / 1024. / 1024.
-                  << " MiB (XORWOW)" << std::endl
-                  << "  States' size: " << std::setw(9)
-                  << mrg32_states.size_bytes() / 1024. / 1024.
-                  << " MiB (MRG32)" << std::endl;
-        std::cout << "  Time to init: " << std::setw(10)
-                  << init_timings[PHILOX] / n_iter << " ms (PHILOX)"
-                  << std::endl
-                  << "  Time to init: " << std::setw(10)
-                  << init_timings[XORWOW] / n_iter << " ms (XORWOW)" <<
-                  std::endl
-                  << "  Time to init: " << std::setw(10)
-                  << init_timings[MRG32] / n_iter << " ms (MGR32)"
-                  << std::endl;
-        std::cout << "  Time to generate: " << std::setw(10)
-                  << rand_timings[PHILOX] / n_iter << " ms (PHILOX)"
-                  << std::endl
-                  << "  Time to generate: " << std::setw(10)
-                  << rand_timings[XORWOW] / n_iter << " ms (XORWOW)"
-                  << std::endl
-                  << "  Time to generate: " << std::setw(10)
-                  << rand_timings[MRG32] / n_iter << " ms (MGR32)"
-                  << std::endl
-                  << std::endl;
+        print_header(n);
+        print_row(PHILOX, fraction_set[PHILOX], philox_states.size_bytes(),
+                  init_timings[PHILOX], rand_timings[PHILOX]);
+        print_row(XORWOW, fraction_set[XORWOW], xorwow_states.size_bytes(),
+                  init_timings[XORWOW], rand_timings[XORWOW]);
+        print_row(MRG32, fraction_set[MRG32], mrg32_states.size_bytes(),
+                  init_timings[MRG32], rand_timings[MRG32]);
+        print_footer();
+
+        // std::cout << "  States' size: " << std::setw(9)
+        //           << philox_states.size_bytes() / 1024. / 1024.
+        //           << " MiB (PHILOX)" << std::endl
+        //           << "  States' size: " << std::setw(9)
+        //           << xorwow_states.size_bytes() / 1024. / 1024.
+        //           << " MiB (XORWOW)" << std::endl
+        //           << "  States' size: " << std::setw(9)
+        //           << mrg32_states.size_bytes() / 1024. / 1024.
+        //           << " MiB (MRG32)" << std::endl;
+        // std::cout << "  Time to init: " << std::setw(10)
+        //           << init_timings[PHILOX] / n_iter << " ms (PHILOX)"
+        //           << std::endl
+        //           << "  Time to init: " << std::setw(10)
+        //           << init_timings[XORWOW] / n_iter << " ms (XORWOW)" <<
+        //           std::endl
+        //           << "  Time to init: " << std::setw(10)
+        //           << init_timings[MRG32] / n_iter << " ms (MGR32)"
+        //           << std::endl;
+        // std::cout << "  Time to generate: " << std::setw(10)
+        //           << rand_timings[PHILOX] / n_iter << " ms (PHILOX)"
+        //           << std::endl
+        //           << "  Time to generate: " << std::setw(10)
+        //           << rand_timings[XORWOW] / n_iter << " ms (XORWOW)"
+        //           << std::endl
+        //           << "  Time to generate: " << std::setw(10)
+        //           << rand_timings[MRG32] / n_iter << " ms (MGR32)"
+        //           << std::endl
+        //           << std::endl;
     }
 
     return EXIT_SUCCESS;
