@@ -6,9 +6,30 @@
 
 #include <thrust/device_vector.h>
 
-#define BITMASK 0xf
+// #define BITMASK 0x1
+#define BITMASK 0x3
+// #define BITMASK 0x7
+// #define BITMASK 0xf
 
-template <unsigned int bitmask, typename RngDeviceStatesT>
+// XORWOW, MRG32
+template <typename StateT>
+__device__ float3 normal3(StateT& state)
+{
+    float2 xy = curand_normal2(&state);
+    float z = curand_normal(&state);
+    return make_float3(xy.x, xy.y, z);
+}
+// Philox is the only generator with a curand_normal4() function.
+// This appears to be faster than the above at a blocksize of 128, but not at
+// 256, on a Tesla M2090...
+template <>
+__device__ float3 normal3(curandStatePhilox4_32_10_t& state)
+{
+    float4 xyzw = curand_normal4(&state);
+    return make_float3(xyzw.x, xyzw.y, xyzw.z);
+}
+
+template <typename RngDeviceStatesT>
 __global__ void generate_randoms_kernel(
     RngDeviceStatesT states,
     const size_t n,
@@ -20,19 +41,24 @@ __global__ void generate_randoms_kernel(
     unsigned int count = 0;
     for (int i = tid; i < n; i += blockDim.x * gridDim.x)
     {
-        unsigned int x = curand(&state);
-        if (bitmask) {
-          if ((x & bitmask) == bitmask) { ++count; }
-        }
+        // Note that if nothing is done with the generated normal values, then
+        // (at least in some cases), the compiler appears to optimize out the
+        // conversion to normal, leaving only the state modification.
+        // But we want to include any overhead specific to generating normal
+        // values!
+        // This is particularly important for Philox, where the state transition
+        // is essentially an increment operation.
+        float3 xyz = normal3(state);
+        float t = fma(xyz.x,  xyz.y, xyz.z);
+        unsigned int u = reinterpret_cast<unsigned int&>(t);
+        if ((u & BITMASK) == BITMASK) { ++count; }
     }
 
     states.save_state(state);
-    if (bitmask) {
-      results[tid] = count;
-    }
+    results[tid] = count;
 }
 
-template <unsigned int bitmask, typename RngStatesT>
+template <typename RngStatesT>
 void generate_randoms(
     RngStatesT& states,
     const size_t n,
@@ -48,8 +74,7 @@ void generate_randoms(
 
     // Round down! We cannot generate more threads than there are states.
     const int num_blocks = std::min(n, max_states) / NT;
-    generate_randoms_kernel<bitmask>
-    <<<NT, num_blocks>>>(
+    generate_randoms_kernel<<<NT, num_blocks>>>(
         states.device_states(),
         n,
         thrust::raw_pointer_cast(d_results.data()));
@@ -116,36 +141,33 @@ int main(int argc, char* argv[])
             CUDATimer timer;
             timer.start();
 
+            generate_randoms(philox_states, n, d_results);
             if (i >= 0) {
-                generate_randoms<0>(philox_states, n, d_results);
-                rand_timings[PHILOX] += timer.split();
+              rand_timings[PHILOX] += timer.split();
             }
             else {
-                generate_randoms<BITMASK>(philox_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 fraction_set[PHILOX] = (double)tot / n;
                 thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
+            generate_randoms(xorwow_states, n, d_results);
             if (i >= 0) {
-                generate_randoms<0>(xorwow_states, n, d_results);
-                rand_timings[XORWOW] += timer.split();
+              rand_timings[XORWOW] += timer.split();
             }
             else {
-                generate_randoms<BITMASK>(xorwow_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 fraction_set[XORWOW] = (double)tot / n;
                 thrust::fill(d_results.begin(), d_results.end(), 0u);
             }
 
+            generate_randoms(mrg32_states, n, d_results);
             if (i >= 0) {
-                generate_randoms<0>(mrg32_states, n, d_results);
-                rand_timings[MRG32] += timer.split();
+              rand_timings[MRG32] += timer.split();
             }
             else {
-                generate_randoms<BITMASK>(mrg32_states, n, d_results);
                 unsigned int tot = thrust::reduce(d_results.begin(),
                                                   d_results.end());
                 fraction_set[MRG32] = (double)tot / n;
@@ -153,7 +175,7 @@ int main(int argc, char* argv[])
             }
         }
 
-        print_header(n);
+        print_header(n, BITMASK);
         print_row(PHILOX, fraction_set[PHILOX], philox_states.size_bytes(),
                   init_timings[PHILOX], rand_timings[PHILOX]);
         print_row(XORWOW, fraction_set[XORWOW], xorwow_states.size_bytes(),
@@ -161,35 +183,6 @@ int main(int argc, char* argv[])
         print_row(MRG32, fraction_set[MRG32], mrg32_states.size_bytes(),
                   init_timings[MRG32], rand_timings[MRG32]);
         print_footer();
-
-        // std::cout << "  States' size: " << std::setw(9)
-        //           << philox_states.size_bytes() / 1024. / 1024.
-        //           << " MiB (PHILOX)" << std::endl
-        //           << "  States' size: " << std::setw(9)
-        //           << xorwow_states.size_bytes() / 1024. / 1024.
-        //           << " MiB (XORWOW)" << std::endl
-        //           << "  States' size: " << std::setw(9)
-        //           << mrg32_states.size_bytes() / 1024. / 1024.
-        //           << " MiB (MRG32)" << std::endl;
-        // std::cout << "  Time to init: " << std::setw(10)
-        //           << init_timings[PHILOX] / n_iter << " ms (PHILOX)"
-        //           << std::endl
-        //           << "  Time to init: " << std::setw(10)
-        //           << init_timings[XORWOW] / n_iter << " ms (XORWOW)" <<
-        //           std::endl
-        //           << "  Time to init: " << std::setw(10)
-        //           << init_timings[MRG32] / n_iter << " ms (MGR32)"
-        //           << std::endl;
-        // std::cout << "  Time to generate: " << std::setw(10)
-        //           << rand_timings[PHILOX] / n_iter << " ms (PHILOX)"
-        //           << std::endl
-        //           << "  Time to generate: " << std::setw(10)
-        //           << rand_timings[XORWOW] / n_iter << " ms (XORWOW)"
-        //           << std::endl
-        //           << "  Time to generate: " << std::setw(10)
-        //           << rand_timings[MRG32] / n_iter << " ms (MGR32)"
-        //           << std::endl
-        //           << std::endl;
     }
 
     return EXIT_SUCCESS;

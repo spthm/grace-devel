@@ -9,7 +9,7 @@ enum
 };
 
 void cout_init();
-void print_header(const size_t N);
+void print_header(const size_t N, const unsigned int bitmask);
 void print_row(const int rng, const double p, const size_t size_bytes,
                const double tinit, const double tgen);
 void print_footer();

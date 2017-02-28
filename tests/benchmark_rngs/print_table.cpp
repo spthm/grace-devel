@@ -55,12 +55,26 @@ void cout_init()
     std::cout.setf(std::ios::fixed, std::ios::floatfield);
 }
 
-void print_header(const size_t N)
+void print_header(const size_t N, const unsigned int bitmask)
 {
     std::cout << "                         N = " << std::setw(10) << N
-              << std::endl
-              << "  RNG  | P(x = ... 1111) |          State          | Tgen (ms)"
-              << std::endl
+              << std::endl;
+    if (bitmask == 1u) {
+    std::cout << "  RNG  |   P(x = ... 1)  |          State          | Tgen (ms)";
+    }
+    else if (bitmask == 3u) {
+    std::cout << "  RNG  |  P(x = ... 11)  |          State          | Tgen (ms)";
+    }
+    else if (bitmask == 7u) {
+    std::cout << "  RNG  |  P(x = ... 111) |          State          | Tgen (ms)";
+    }
+    else if (bitmask == 15u) {
+    std::cout << "  RNG  | P(x = ... 1111) |          State          | Tgen (ms)";
+    }
+    else  {
+    std::cout << "  RNG  |   P(x & M = M)  |          State          | Tgen (ms)";
+    }
+    std::cout << std::endl
               << "       |                 | Size (MiB) | Tinit (ms) |"
               << std::endl
               << "-------|-----------------|------------|------------|----------"
@@ -81,7 +95,8 @@ void print_row(const int rng, const double p, const size_t size_bytes,
         // Throw.
         return;
 
-    std::cout << "|    " << ThreeSF(p) << "    ";
+    // Width of 6 good down to p = 0.0xxx.
+    std::cout << "|    " << std::setw(6) << ThreeSF(p) << "    ";
     std::cout << "|  " << std::setw(5) << ThreeSF(size) << "  ";
     std::cout << "|  " << ThreeSF(tinit) << "   ";
     std::cout << "|  " << ThreeSF(tgen);
