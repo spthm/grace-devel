@@ -242,8 +242,8 @@ const RngDeviceStates<StateT> RngStates<StateT>::device_states() const
 // Convenience typedefs
 //
 
-typedef RngStates<curandStatePhilox4_32_10_t> PrngStates;
-typedef RngDeviceStates<curandStatePhilox4_32_10_t> PrngDeviceStates;
+typedef RngStates<curandStateXORWOW_t> PrngStates;
+typedef RngDeviceStates<curandStateXORWOW_t> PrngDeviceStates;
 
 } // namespace detail
 
