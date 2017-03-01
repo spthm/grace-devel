@@ -2,8 +2,6 @@
 
 #include "grace/types.h"
 
-#include "cuda_runtime_api.h"
-
 #include <assert.h>
 #include <iostream>
 
@@ -32,6 +30,11 @@ template <> struct grace_static_assert<true> {};
 #endif
 
 #define GRACE_GOT_TO() std::cerr << "At " << __FILE__ << "@" << __LINE__ << std::endl;
+
+
+#ifdef __CUDACC__
+
+#include "cuda_runtime_api.h"
 
 // Wrap around all calls to CUDA functions to handle errors.
 #define GRACE_CUDA_CHECK(code) { grace::cuda_error_check((code), __FILE__, __LINE__); }
@@ -66,3 +69,5 @@ GRACE_HOST void cuda_kernel_check(const char* file, int line, bool terminate=tru
 }
 
 } // namespace grace
+
+#endif // ifdef __CUDACC__
