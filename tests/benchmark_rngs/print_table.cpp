@@ -110,7 +110,7 @@ void print_row(const int rng, const double p, const size_t size_bytes,
         return;
 
     std::cout << "|    " << ThreeSF(p, 9) << "    ";
-    std::cout << "|  " << ThreeSF(size, 7) << "   ";
+    std::cout << "|  " << ThreeSF(size, 8) << "  ";
     std::cout << "|  " << ThreeSF(tinit, 9) << "   ";
     std::cout << "|  " << ThreeSF(tgen, 8);
     std::cout << std::endl;
