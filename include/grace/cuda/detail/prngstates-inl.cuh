@@ -11,8 +11,18 @@ namespace grace {
 
 namespace detail {
 
-// Forward declaration so device-side class can friend host-side.
+//
+// Forward declarations.
+//
+
+size_t max_device_threads(const int device_id);
+// So device-side class can friend host-side.
 template <typename StateT> class RngStates;
+
+
+//
+// Class declarations
+//
 
 template <typename StateT>
 class RngDeviceStates
@@ -34,6 +44,11 @@ public:
     friend class RngStates<StateT>;
 };
 
+// A class to initialize states on the current device, or, if provided,
+// any device. The target device cannot be modified after initialization.
+// Resource allocation happens at initialization, and only at initialization.
+// All state initialization always occurs on the original device; the current
+// device is _temporarily_ set to the RngStates' device if necessary.
 template <typename StateT>
 class RngStates : private NonCopyable<RngStates<StateT> >
 {
@@ -70,7 +85,11 @@ public:
 
     GRACE_HOST ~RngStates();
 
+    GRACE_HOST int device() const;
+
     GRACE_HOST void init_states();
+
+    GRACE_HOST void init_states(const unsigned long long seed);
 
     GRACE_HOST void set_seed(const unsigned long long seed);
 
@@ -83,7 +102,9 @@ public:
     GRACE_HOST const RngDeviceStates<StateT> device_states() const;
 
 private:
-    GRACE_HOST void set_device_num_states();
+    GRACE_HOST void alloc_states();
+    GRACE_HOST int swap_device() const;
+    GRACE_HOST void unswap_device(const int device) const;
 };
 
 template <typename StateT>
@@ -133,7 +154,8 @@ RngStates<StateT>::RngStates(const unsigned long long seed)
     : _states(NULL), _seed(seed)
 {
     GRACE_CUDA_CHECK(cudaGetDevice(&_device_id));
-    set_device_num_states();
+    _num_states = max_device_threads(_device_id);
+    alloc_states();
     init_states();
 }
 
@@ -144,6 +166,7 @@ RngStates<StateT>::RngStates(const size_t num_states,
     : _states(NULL), _num_states(num_states), _seed(seed)
 {
     GRACE_CUDA_CHECK(cudaGetDevice(&_device_id));
+    alloc_states();
     init_states();
 }
 
@@ -153,7 +176,8 @@ RngStates<StateT>::RngStates(const int device_id,
                              const unsigned long long seed)
     : _states(NULL), _device_id(device_id), _seed(seed)
 {
-    set_device_num_states();
+    _num_states = max_device_threads(_device_id);
+    alloc_states();
     init_states();
 }
 
@@ -163,6 +187,7 @@ RngStates<StateT>::RngStates(const int device_id, const size_t num_states,
                              const unsigned long long seed)
     : _states(NULL), _device_id(device_id), _num_states(num_states), _seed(seed)
 {
+    alloc_states();
     init_states();
 }
 
@@ -175,21 +200,30 @@ RngStates<StateT>::~RngStates()
 
 template <typename StateT>
 GRACE_HOST
+int RngStates<StateT>::device() const
+{
+    return _device_id;
+}
+
+template <typename StateT>
+GRACE_HOST
 void RngStates<StateT>::init_states()
 {
-    int cur_device_id;
-    GRACE_CUDA_CHECK(cudaGetDevice(&cur_device_id));
+    int entry_device = swap_device();
 
-    GRACE_CUDA_CHECK(cudaSetDevice(_device_id));
-    GRACE_CUDA_CHECK(cudaFree(_states));
-    cudaError_t err = cudaMalloc((void**)(&_states),
-                                 _num_states * sizeof(state_type));
-    GRACE_CUDA_CHECK(err);
     const int num_blocks = (_num_states + _block_size - 1) / _block_size;
     init_PRNG_states_kernel<<<num_blocks, _block_size>>>(
         _states, _seed, _num_states);
 
-    GRACE_CUDA_CHECK(cudaSetDevice(cur_device_id));
+    unswap_device(entry_device);
+}
+
+template <typename StateT>
+GRACE_HOST
+void RngStates<StateT>::init_states(const unsigned long long seed)
+{
+    set_seed(seed);
+    init_states();
 }
 
 template <typename StateT>
@@ -215,16 +249,6 @@ size_t RngStates<StateT>::size_bytes() const
 
 template <typename StateT>
 GRACE_HOST
-void RngStates<StateT>::set_device_num_states()
-{
-    cudaDeviceProp dp;
-    GRACE_CUDA_CHECK(cudaGetDeviceProperties(&dp, _device_id));
-    GRACE_CUDA_CHECK(cudaSetDevice(_device_id));
-    _num_states = dp.multiProcessorCount * dp.maxThreadsPerMultiProcessor;
-}
-
-template <typename StateT>
-GRACE_HOST
 RngDeviceStates<StateT> RngStates<StateT>::device_states()
 {
     return RngDeviceStates<StateT>(_states, _num_states);
@@ -237,6 +261,39 @@ const RngDeviceStates<StateT> RngStates<StateT>::device_states() const
     return RngDeviceStates<StateT>(_states, _num_states);
 }
 
+template <typename StateT>
+GRACE_HOST
+void RngStates<StateT>::alloc_states()
+{
+    int entry_device = swap_device();
+
+    if (_states != NULL) {
+        GRACE_CUDA_CHECK(cudaFree(_states));
+    }
+    cudaError_t err = cudaMalloc((void**)(&_states),
+                                 _num_states * sizeof(state_type));
+    GRACE_CUDA_CHECK(err);
+
+    unswap_device(entry_device);
+}
+
+template <typename StateT>
+GRACE_HOST
+int RngStates<StateT>::swap_device() const
+{
+    int cur;
+    GRACE_CUDA_CHECK(cudaGetDevice(&cur));
+    GRACE_CUDA_CHECK(cudaSetDevice(_device_id));
+    return cur;
+}
+
+template <typename StateT>
+GRACE_HOST
+void RngStates<StateT>::unswap_device(const int device) const
+{
+    GRACE_CUDA_CHECK(cudaSetDevice(device));
+}
+
 
 //
 // Convenience typedefs
@@ -244,6 +301,18 @@ const RngDeviceStates<StateT> RngStates<StateT>::device_states() const
 
 typedef RngStates<curandStateXORWOW_t> PrngStates;
 typedef RngDeviceStates<curandStateXORWOW_t> PrngDeviceStates;
+
+
+//
+// Helper function definitions
+//
+
+size_t max_device_threads(const int device_id)
+{
+    cudaDeviceProp dp;
+    GRACE_CUDA_CHECK(cudaGetDeviceProperties(&dp, device_id));
+    return dp.multiProcessorCount * dp.maxThreadsPerMultiProcessor;
+}
 
 } // namespace detail
 
