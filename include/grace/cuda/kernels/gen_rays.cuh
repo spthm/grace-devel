@@ -25,6 +25,8 @@ namespace grace {
 
 namespace detail {
 
+typedef curandStateXORWOW_t curandStateT;
+
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions for ray generation
 ////////////////////////////////////////////////////////////////////////////////
@@ -98,7 +100,7 @@ GRACE_DEVICE float3 image_plane_coord(
 ////////////////////////////////////////////////////////////////////////////////
 
 __global__ void init_PRNG_kernel(
-    curandState* const prng_states,
+    curandStateT* const prng_states,
     const unsigned long long seed,
     const int N)
 {
@@ -120,7 +122,7 @@ __global__ void init_PRNG_kernel(
  */
 template <typename Real4, typename KeyType>
 __global__ void gen_uniform_rays_kernel(
-    const curandState* const prng_states,
+    curandStateT* const prng_states,
     const Real4 ol, // ox, oy, oz, length.
     Ray* const rays,
     KeyType* const keys,
@@ -128,7 +130,7 @@ __global__ void gen_uniform_rays_kernel(
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    curandStateT state = prng_states[tid];
 
     while (tid < N_rays)
     {
@@ -152,11 +154,13 @@ __global__ void gen_uniform_rays_kernel(
 
         tid += blockDim.x * gridDim.x;
     }
+
+    prng_states[threadIdx.x + blockIdx.x * blockDim.x] = state;
 }
 
 template <typename Real4, typename KeyType>
 __global__ void gen_uniform_rays_single_octant_kernel(
-    const curandState* const prng_states,
+    curandStateT* const prng_states,
     const Real4 ol, // ox, oy, oz, length.
     Ray* const rays,
     KeyType* const keys,
@@ -165,7 +169,7 @@ __global__ void gen_uniform_rays_single_octant_kernel(
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    curandStateT state = prng_states[tid];
 
     int3 sign;
     sign.x = (octant & 0x4) ? 1 : -1;
@@ -194,6 +198,8 @@ __global__ void gen_uniform_rays_single_octant_kernel(
 
         tid += blockDim.x * gridDim.x;
     }
+
+    prng_states[threadIdx.x + blockIdx.x * blockDim.x] = state;
 }
 
 template <RaySortType SortType, typename Real3, typename PointType,
@@ -237,7 +243,7 @@ __global__ void one_to_many_rays_kernel(
 
 template <typename Real, typename Real3>
 __global__ void plane_parallel_random_rays_kernel(
-    const curandState* const prng_states,
+    curandStateT* const prng_states,
     const int width,
     const int height,
     const size_t n_rays,
@@ -252,7 +258,7 @@ __global__ void plane_parallel_random_rays_kernel(
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    curandStateT state = prng_states[tid];
 
     for ( ; tid < n_rays; tid += blockDim.x * gridDim.x)
     {
@@ -303,6 +309,8 @@ __global__ void plane_parallel_random_rays_kernel(
 
         rays[tid] = ray;
     }
+
+    prng_states[threadIdx.x + blockIdx.x * blockDim.x] = state;
 }
 
 template <typename Real, typename Real3>
@@ -407,7 +415,7 @@ GRACE_HOST void init_PRNG(
     const int max_states,
     const int factor,
     const unsigned long long seed,
-    curandState** d_prng_states,
+    curandStateT** d_prng_states,
     int* N_states)
 {
     const int block_size = 128; // For init_PRNG_kernel
@@ -429,7 +437,7 @@ GRACE_HOST void init_PRNG(
 
     cudaError_t cuerr = cudaMalloc(
         (void**)d_prng_states,
-        N * sizeof(curandState));
+        N * sizeof(curandStateT));
     GRACE_CUDA_CHECK(cuerr);
 
     // Initialize the P-RNG states.
@@ -452,7 +460,7 @@ GRACE_HOST void uniform_random_rays(
 {
     const float4 origin = make_float4(ox, oy, oz, length);
 
-    curandState* d_prng_states;
+    curandStateT* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
@@ -487,7 +495,7 @@ GRACE_HOST void uniform_random_rays_single_octant(
 {
     const float4 origin = make_float4(ox, oy, oz, length);
 
-    curandState* d_prng_states;
+    curandStateT* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
@@ -619,7 +627,7 @@ GRACE_HOST void plane_parallel_random_rays(
 {
     const size_t N_rays = static_cast<size_t>(width) * height;
 
-    curandState* d_prng_states;
+    curandStateT* d_prng_states;
     int N_states;
     init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
