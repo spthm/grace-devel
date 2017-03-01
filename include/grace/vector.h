@@ -6,6 +6,9 @@
 
 namespace grace {
 
+template <size_t Dims, typename T>
+struct Vector;
+
 template <typename T>
 struct Vector<3, T> : detail::vector_base<3, sizeof(T), T>
 {
