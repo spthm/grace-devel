@@ -71,7 +71,9 @@ T& Vector<3, T>::operator[](int i)
         case 1: return this->y;
         case 2: return this->z;
     }
+
     GRACE_ASSERT(0, vector3_invalid_index_access);
+    return this->x;
 }
 
 template <typename T>
@@ -83,7 +85,9 @@ const T& Vector<3, T>::operator[](int i) const
         case 1: return this->y;
         case 2: return this->z;
     }
+
     GRACE_ASSERT(0, vector3_invalid_index_access);
+    return this->x;
 }
 
 } // namespace grace
