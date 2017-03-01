@@ -125,13 +125,15 @@ int main(int argc, char* argv[])
             CUDATimer timer;
             timer.start();
 
-            philox_states.init_states();
+            // New state each time to (try to) avoid any clever compiler
+            // optimization.
+            philox_states.init_states(123456789 + i);
             if (i >= 0) init_timings[PHILOX] += timer.split();
 
-            xorwow_states.init_states();
+            xorwow_states.init_states(123456789 + i);
             if (i >= 0) init_timings[XORWOW] += timer.split();
 
-            mrg32_states.init_states();
+            mrg32_states.init_states(123456789 + i);
             if (i >= 0) init_timings[MRG32] += timer.split();
         }
 
@@ -177,11 +179,17 @@ int main(int argc, char* argv[])
 
         print_header(n, BITMASK);
         print_row(PHILOX, fraction_set[PHILOX], philox_states.size_bytes(),
-                  init_timings[PHILOX], rand_timings[PHILOX]);
+                  init_timings[PHILOX] / (double)(n_iter),
+                  rand_timings[PHILOX] / (double)(n_iter));
+
         print_row(XORWOW, fraction_set[XORWOW], xorwow_states.size_bytes(),
-                  init_timings[XORWOW], rand_timings[XORWOW]);
+                  init_timings[XORWOW] / (double)(n_iter),
+                  rand_timings[XORWOW] / (double)(n_iter));
+
         print_row(MRG32, fraction_set[MRG32], mrg32_states.size_bytes(),
-                  init_timings[MRG32], rand_timings[MRG32]);
+                  init_timings[MRG32] / (double)(n_iter),
+                  rand_timings[MRG32] / (double)(n_iter));
+
         print_footer();
     }
 
