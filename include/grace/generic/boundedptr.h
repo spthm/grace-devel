@@ -4,6 +4,21 @@
 
 namespace grace {
 
+//
+// Forward declarations
+//
+
+// Required for below.
+template <typename T>
+class BoundedPtr;
+// Required for the friend declaration in BoundedPtr.
+template <typename T>
+GRACE_HOST_DEVICE typename BoundedPtr<T>::difference_type operator-(const BoundedPtr<T>&, const BoundedPtr<T>&);
+template <typename T>
+GRACE_HOST_DEVICE bool operator==(const BoundedPtr<T>&, const BoundedPtr<T>&);
+template <typename T>
+GRACE_HOST_DEVICE void swap(BoundedPtr<T>&, BoundedPtr<T>&);
+
 // A pointer which may only access the underlying array in a specific range.
 // For efficiency, range checking only occurs in debug mode.
 // No checks are made on the alignment of the pointer; in order to ensure
@@ -45,21 +60,35 @@ public:
 
     // Note this is not the copy constructor, because a copy constructor cannot
     // be a template. We use the default copy constructor. It is explicit, so it
-    // is also not a converting constructor; explicit because e.g. we don't want
-    // operator+() to work for BoundedPtrs with different value_types.
+    // is also not a converting constructor. It is explicit because converting
+    // the underlying pointer from T* to U* is a non-trivial operation, and
+    // should not be done implicitly.
+    // This unfortunately means that, for some char* p and size_t s,
+    //   BoundedPtr<char> c(p, s); // OK
+    //   BoundedPtr<double> d = c; // INVALID
+    //   BoundedPtr<double> d2(c); // OK
+    //   d2 = c; // OK
+    // because the copy-assignment operator also cannot be a template; for the
+    // second line to work, we would need to allow implicit conversions. (The
+    // template below is simply an assignment operator, and hence can be used
+    // only after construction.)
+    // Also note that, even if this were not specified as explicit, the various
+    // operator[...] non-member functions accepting BoundedPtr<T> types would
+    // still never accept a BoundedPtr<U> --- the type deduction only considers
+    // exact matches, and does not take into account valid conversions. There is
+    // an exception to this rule if the function definition is within the class
+    // definition (which is only possible for friend functions, and not done
+    // here).
+    // This does not apply to member functions, which would accept a
+    // BoundedPtr<U> and implicitly convert it to a BoundedPtr<T>, if the
+    // below were not specified explicit.
     template <typename U>
     GRACE_HOST_DEVICE explicit BoundedPtr(const BoundedPtr<U>& other);
 
-    // Again, copy-assigment operator must not be a templte. We use the default
+    // Again, copy-assigment operator must not be a template. We use the default
     // copy-assignment operator.
     template <typename U>
     GRACE_HOST_DEVICE BoundedPtr<T>& operator=(const BoundedPtr<U>& other);
-
-    // It doesn't make sense to swap BoundedPtrs of different value_types.
-    friend void swap(BoundedPtr<T>& lhs, BoundedPtr<T>& rhs);
-
-    // Ensures alignment, increasing address when necessary.
-    GRACE_HOST_DEVICE void align_to(const size_t alignment);
 
     GRACE_HOST_DEVICE T& operator*();
 
@@ -73,15 +102,17 @@ public:
 
     GRACE_HOST_DEVICE const T* operator->() const;
 
-    GRACE_HOST_DEVICE difference_type operator-(const BoundedPtr<T>& other) const;
-
     GRACE_HOST_DEVICE BoundedPtr<T>& operator+=(const difference_type n);
 
     GRACE_HOST_DEVICE BoundedPtr<T>& operator-=(const difference_type n);
 
-    // Could be implemented from operator<; not done so for efficiency.
-    GRACE_HOST_DEVICE friend bool operator==(const BoundedPtr<T>& lhs,
-                                             const BoundedPtr<T>& rhs);
+    friend difference_type operator-<T>(const BoundedPtr<T>& lhs,
+                                        const BoundedPtr<T>& rhs);
+    // Could be implemented from operator<. Not done so for efficiency.
+    friend bool operator==<T>(const BoundedPtr<T>& lhs,
+                              const BoundedPtr<T>& rhs);
+    // It doesn't make sense to swap BoundedPtrs of different value_types.
+    friend void swap<T>(BoundedPtr<T>& lhs, BoundedPtr<T>& rhs);
 
 private:
     // Same type so they may safely be compared.
@@ -91,6 +122,9 @@ private:
     T* begin_;
     T* end_;
     T* ptr_;
+
+    // Ensures alignment, increasing address when necessary.
+    GRACE_HOST_DEVICE void align_to(const size_t alignment);
 };
 
 //
@@ -117,26 +151,37 @@ GRACE_HOST_DEVICE BoundedPtr<T>& operator--(BoundedPtr<T>& bptr);
 template <typename T>
 GRACE_HOST_DEVICE BoundedPtr<T> operator--(BoundedPtr<T>& bptr, int);
 
+template <typename T>
 GRACE_HOST_DEVICE BoundedPtr<T> operator+(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs);
+                                          const typename BoundedPtr<T>::difference_type rhs);
 
-GRACE_HOST_DEVICE BoundedPtr<T> operator+(const difference_type lhs,
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T> operator+(const typename BoundedPtr<T>::difference_type lhs,
                                           const BoundedPtr<T>& rhs);
 
+template <typename T>
 GRACE_HOST_DEVICE BoundedPtr<T> operator-(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs);
+                                          const typename BoundedPtr<T>::difference_type rhs);
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator!=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs);
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator>(const BoundedPtr<T>& lhs,
                                  const BoundedPtr<T>& rhs);
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator<=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs);
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator>=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs);
+
+template <typename T>
+GRACE_HOST_DEVICE void swap(BoundedPtr<T>& lhs,
+                            BoundedPtr<T>& rhs);
 
 } // namespace grace
 

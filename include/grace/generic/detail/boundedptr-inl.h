@@ -17,23 +17,34 @@ GRACE_HOST_DEVICE
 BoundedPtr<T>::BoundedPtr(char* const begin, const size_t bytes)
     : begin_(reinterpret_cast<T*>(begin)),
       end_(reinterpret_cast<T*>(begin + bytes)),
-      ptr_(reinterpret_cast<T*>(begin)) {}
+      ptr_(reinterpret_cast<T*>(begin))
+{
+    align_to(GRACE_ALIGNOF(T));
+}
 
 template <typename T>
 GRACE_HOST_DEVICE
 BoundedPtr<T>::BoundedPtr(char* const begin, char* const end)
     : begin_(reinterpret_cast<T*>(begin)),
       end_(reinterpret_cast<T*>(end)),
-      ptr_(reinterpret_cast<T*>(begin)) {}
+      ptr_(reinterpret_cast<T*>(begin))
+{
+    align_to(GRACE_ALIGNOF(T));
+}
 
-template <typename T, typename U>
+template <typename T>
+template <typename U>
 GRACE_HOST_DEVICE
 BoundedPtr<T>::BoundedPtr(const BoundedPtr<U>& other)
     : begin_(reinterpret_cast<T*>(other.begin_)),
       end_(reinterpret_cast<T*>(other.end_)),
-      ptr_(reinterpret_cast<T*>(other.ptr_)) {}
+      ptr_(reinterpret_cast<T*>(other.ptr_))
+{
+    align_to(GRACE_ALIGNOF(T));
+}
 
-template <typename T, typename U>
+template <typename T>
+template <typename U>
 GRACE_HOST_DEVICE
 BoundedPtr<T>& BoundedPtr<T>::operator=(const BoundedPtr<U>& other)
 {
@@ -60,7 +71,7 @@ GRACE_HOST_DEVICE
 T& BoundedPtr<T>::operator*()
 {
     GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-    GRACE_ASSERT(ptr_ + sizeof(T) < end_, boundedptr_memory_overflow);
+    GRACE_ASSERT(ptr_ + 1 <= end_, boundedptr_memory_overflow);
 
     return *ptr_;
 }
@@ -70,7 +81,7 @@ GRACE_HOST_DEVICE
 const T& BoundedPtr<T>::operator*() const
 {
     GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-    GRACE_ASSERT(ptr_ + sizeof(T) < end_, boundedptr_memory_overflow);
+    GRACE_ASSERT(ptr_ + 1 <= end_, boundedptr_memory_overflow);
 
     return *ptr_;
 }
@@ -105,13 +116,6 @@ const T* BoundedPtr<T>::operator->() const
 
 template <typename T>
 GRACE_HOST_DEVICE
-BoundedPtr<T>::difference_type BoundedPtr<T>::operator-(const BoundedPtr<T>& other) const
-{
-    return ptr_ - other.ptr_;
-}
-
-template <typename T>
-GRACE_HOST_DEVICE
 BoundedPtr<T>& BoundedPtr<T>::operator+=(const difference_type n)
 {
     ptr_ += n;
@@ -128,8 +132,23 @@ BoundedPtr<T>& BoundedPtr<T>::operator-=(const difference_type n)
 
 
 //
-// BoundedPtr-related friend and free functions
+// BoundedPtr friend functions
 //
+
+template <typename T>
+GRACE_HOST_DEVICE
+typename BoundedPtr<T>::difference_type operator-(const BoundedPtr<T>& lhs,
+                                                  const BoundedPtr<T>& rhs)
+{
+    return lhs.ptr_ - rhs.ptr_;
+}
+
+template <typename T>
+GRACE_HOST_DEVICE
+bool operator==(const BoundedPtr<T>& lhs, const BoundedPtr<T>& rhs)
+{
+    return lhs.ptr_ == rhs.ptr_;
+}
 
 template <typename T>
 GRACE_HOST_DEVICE
@@ -145,12 +164,10 @@ void swap(BoundedPtr<T>& lhs, BoundedPtr<T>& rhs)
     swap(lhs.end_, rhs.end_);
 }
 
-template <typename T>
-GRACE_HOST_DEVICE
-bool operator==(const BoundedPtr<T>& lhs, const BoundedPtr<T>& rhs)
-{
-    return lhs.ptr_ == rhs.ptr_;
-}
+
+//
+// BoundedPtr-related free functions
+//
 
 template <typename T>
 GRACE_HOST_DEVICE
@@ -193,33 +210,41 @@ GRACE_HOST_DEVICE BoundedPtr<T> operator--(BoundedPtr<T>& bptr, int)
    return prev;
 }
 
-GRACE_HOST_DEVICE BoundedPtr<T> operator+(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs)
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T> operator+(
+    const BoundedPtr<T>& lhs,
+    const typename BoundedPtr<T>::difference_type rhs)
 {
     BoundedPtr<T> bptr = lhs;
     bptr += rhs;
     return bptr;
 }
 
-GRACE_HOST_DEVICE BoundedPtr<T> operator+(const difference_type lhs,
-                                          const BoundedPtr<T>& rhs)
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T> operator+(
+    const typename BoundedPtr<T>::difference_type lhs,
+    const BoundedPtr<T>& rhs)
 {
     // Swap sides.
     return rhs + lhs;
 }
 
-GRACE_HOST_DEVICE BoundedPtr<T> operator-(const BoundedPtr<T>& lhs,
-                                          const difference_type rhs)
+template <typename T>
+GRACE_HOST_DEVICE BoundedPtr<T> operator-(
+    const BoundedPtr<T>& lhs,
+    const typename BoundedPtr<T>::difference_type rhs)
 {
     return lhs + (-rhs);
 }
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator!=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs)
 {
     return !(lhs == rhs);
 }
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator>(const BoundedPtr<T>& lhs,
                                  const BoundedPtr<T>& rhs)
 {
@@ -227,12 +252,14 @@ GRACE_HOST_DEVICE bool operator>(const BoundedPtr<T>& lhs,
     return rhs < lhs;
 }
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator<=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs)
 {
     return !(lhs > rhs);
 }
 
+template <typename T>
 GRACE_HOST_DEVICE bool operator>=(const BoundedPtr<T>& lhs,
                                   const BoundedPtr<T>& rhs)
 {

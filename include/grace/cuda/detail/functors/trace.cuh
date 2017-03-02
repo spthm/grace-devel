@@ -100,7 +100,7 @@ public:
         // We *must* cast from the default pointer-to-char to the data type we
         // wish to store in shared memory for dereferencing and indexing
         // operators to work correctly.
-        BoundedPtr<InType> in_iter = smem_iter;
+        BoundedPtr<InType> in_iter(smem_iter);
 
         for (int i = threadIdx.x; i < count; i += blockDim.x)
         {
@@ -183,7 +183,7 @@ public:
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
-        BoundedPtr<double> Wk_lookup = smem_iter;
+        BoundedPtr<double> Wk_lookup(smem_iter);
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
@@ -222,7 +222,7 @@ public:
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
-        BoundedPtr<double> Wk_lookup = smem_iter;
+        BoundedPtr<double> Wk_lookup(smem_iter);
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
