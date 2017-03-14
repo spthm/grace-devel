@@ -26,6 +26,8 @@ namespace grace {
 namespace detail {
 
 typedef curandStateXORWOW_t curandStateT;
+// typedef curandStatePhilox4_32_10_t curandStateT;
+// typedef curandStateMRG32k3a_t curandStateT;
 
 ////////////////////////////////////////////////////////////////////////////////
 // Helper functions for ray generation
