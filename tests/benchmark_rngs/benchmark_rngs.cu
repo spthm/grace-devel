@@ -1,6 +1,6 @@
 #include "print_table.h"
 
-#include "grace/cuda/detail/prngstates-inl.cuh"
+#include "grace/cuda/prngstates.cuh"
 
 #include "helper/cuda_timer.cuh"
 
@@ -29,13 +29,13 @@ __device__ float3 normal3(curandStatePhilox4_32_10_t& state)
     return make_float3(xyzw.x, xyzw.y, xyzw.z);
 }
 
-template <typename RngDeviceStatesT>
+template <typename StateT>
 __global__ void generate_randoms_kernel(
-    RngDeviceStatesT states,
+    grace::RngDeviceStates<StateT> states,
     const size_t n,
     unsigned int* const results)
 {
-    typename RngDeviceStatesT::state_type state = states.load_state();
+    StateT state = states.load_state();
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     unsigned int count = 0;
@@ -58,31 +58,26 @@ __global__ void generate_randoms_kernel(
     results[tid] = count;
 }
 
-template <typename RngStatesT>
+template <typename StateT>
 void generate_randoms(
-    RngStatesT& states,
+    grace::RngStates<StateT>& states,
     const size_t n,
     thrust::device_vector<unsigned int>& d_results)
 {
     const int NT = 128;
-    cudaDeviceProp props;
-    int device_id;
-    GRACE_CUDA_CHECK(cudaGetDevice(&device_id));
-    GRACE_CUDA_CHECK(cudaGetDeviceProperties(&props, device_id));
-    const size_t max_states = props.multiProcessorCount
-                                * props.maxThreadsPerMultiProcessor;
+    const size_t num_states = states.size();
 
-    // Round down! We cannot generate more threads than there are states.
-    const int num_blocks = std::min(n, max_states) / NT;
+    // We cannot generate more threads than there are states.
+    const int num_blocks = num_states / NT;
     generate_randoms_kernel<<<NT, num_blocks>>>(
         states.device_states(),
         n,
         thrust::raw_pointer_cast(d_results.data()));
 }
 
-typedef grace::detail::RngStates<curandStatePhilox4_32_10_t> PhiloxStates; // GRACE default
-typedef grace::detail::RngStates<curandStateXORWOW_t> XORWOWStates; // CUDA default
-typedef grace::detail::RngStates<curandStateMRG32k3a_t> MRG32States;
+typedef grace::RngStates<curandStatePhilox4_32_10_t> PhiloxStates; // GRACE default
+typedef grace::RngStates<curandStateXORWOW_t> XORWOWStates; // CUDA default
+typedef grace::RngStates<curandStateMRG32k3a_t> MRG32States;
 
 int main(int argc, char* argv[])
 {
