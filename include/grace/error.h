@@ -16,7 +16,8 @@
 // GRACE_ASSERT(a > b);
 // GRACE_ASSERT(a > b, some_unused_variable_name_as_error_message);
 // Where the error 'message' must be a valid, unused variable name.
-#define GRACE_ASSERT(...) GRACE_SELECT_ASSERT(__VA_ARGS__, GRACE_ASSERT_MSG, GRACE_ASSERT_NOMSG)(__VA_ARGS__)
+#define GRACE_MSVC_VAARGS_FIX( x ) x
+#define GRACE_ASSERT(...) GRACE_MSVC_VAARGS_FIX(GRACE_SELECT_ASSERT(__VA_ARGS__, GRACE_ASSERT_MSG, GRACE_ASSERT_NOMSG)(__VA_ARGS__))
 #else
 #define GRACE_ASSERT(...)
 #endif // GRACE_DEBUG
