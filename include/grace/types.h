@@ -46,6 +46,8 @@
 // which should preferentially be used where available.
 #if __cplusplus >= 201103L
 #define GRACE_ALIGNOF(T) alignof(T)
+#elif defined(__CUDACC__)
+#define GRACE_ALIGNOF(T) __alignof(T)
 #elif defined(__GNUC__)
 #define GRACE_ALIGNOF(T) __alignof__ (T)
 #elif defined(__clang__)
