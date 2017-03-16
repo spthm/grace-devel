@@ -1,5 +1,7 @@
 #pragma once
 
+#include "grace/cuda/prngstates.cuh"
+
 #include "grace/aabb.h"
 #include "grace/types.h"
 #include "grace/ray.h"
@@ -14,26 +16,22 @@
 namespace grace {
 
 // Generates isotropically distributed rays, emanating from a point.
-// ox, oy and oz are the co-ordinates of the origin for all rays.
+// origin specifies co-ordinates of the origin for all rays.
 // length is the length of all rays.
-// seed may optionally be specified as a seed to the underlying random number
-//      generator. Using the same seed on the same device with the same origin
-//      will always generate identical rays. Identical seeds across multiple
-//      devices are not guaranteed to generate identical rays.
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays(
-    Ray* const d_rays_ptr,
+    const Vector<3, Real> origin,
+    const Real length,
     const size_t N_rays,
-    const Vector<3, Real> origin,
-    const Real length,
-    const unsigned long long seed = 1234);
+    RngStates<StateT>& rng,
+    Ray* const d_rays_ptr);
 
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays(
-    thrust::device_vector<Ray>& d_rays,
     const Vector<3, Real> origin,
     const Real length,
-    const unsigned long long seed = 1234);
+    RngStates<StateT>& rng,
+    thrust::device_vector<Ray>& d_rays);
 
 // Similar to uniform_random_rays, except rays are confined to a single octant.
 // The octant is specified as 'XYZ', where X, Y and Z are one of P or M.
@@ -44,65 +42,65 @@ GRACE_HOST void uniform_random_rays(
 // E.g. PPP: all rays are in the +ve x, +ve y and +ve z octant;
 //      MPM: all rays are in the -ve x, +ve y and -ve z octant.
 // Octants are defined in grace/types.h.
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays_single_octant(
-    Ray* const d_rays_ptr,
+    const Vector<3, Real> origin,
+    const Real length,
     const size_t N_rays,
-    const Vector<3, Real> origin,
-    const Real length,
-    const enum Octants octant = PPP,
-    const unsigned long long seed = 1234);
+    RngStates<StateT>& rng,
+    Ray* const d_rays_ptr,
+    const enum Octants octant = PPP);
 
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays_single_octant(
-    thrust::device_vector<Ray>& d_rays,
     const Vector<3, Real> origin,
     const Real length,
-    const enum Octants octant = PPP,
-    const unsigned long long seed = 1234);
+    RngStates<StateT>& rng,
+    thrust::device_vector<Ray>& d_rays,
+    const enum Octants octant = PPP);
 
 // Generates rays emanating from a single point to N other points.
-// ox, oy and oz are the co-ordinates of the origin for all rays.
+// origin specifies co-ordinates of the origin for all rays.
 // d_points_ptr points to an array of Real3-like (.x, .y and .z members)
 //              co-ordinates, specifying the location of each ray's end point.
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
+    const size_t N_rays,
+    Ray* const d_rays_ptr,
     const enum RaySortType sort_type = DirectionSort);
 
 // If d_rays.size() < d_points.size(), d_rays will be resized.
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays(
-    thrust::device_vector<Ray>& d_rays,
     const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
+    thrust::device_vector<Ray>& d_rays,
     const enum RaySortType sort_type = DirectionSort);
 
 // Generates rays emanating from a single point to N other points.
-// ox, oy and oz are the co-ordinates of the origin for all rays.
+// origin specifies co-ordinates of the origin for all rays.
 // d_points_ptr points to an array of Real3-like (.x, .y and .z members)
 //              co-ordinates, specifying the location of each ray's end point.
 // When an endpoint sort is desired, and AABBs for the input points are already
 // known, this saves re-computing them, which would occur if calling
 // one_to_many_rays without providing AABBs.
 template <typename Real, typename PointType>
-GRACE_HOST void one_to_many_rays(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
+GRACE_HOST void one_to_many_rays_endsort(
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const AABB<Real>& aabb);
+    const size_t N_rays,
+    const AABB<Real>& aabb,
+    Ray* const d_rays_ptr);
 
 // If d_rays.size() < d_points.size(), d_rays will be resized.
 template <typename Real, typename PointType>
-GRACE_HOST void one_to_many_rays(
-    thrust::device_vector<Ray>& d_rays,
+GRACE_HOST void one_to_many_rays_endsort(
     const Vector<3, Real> origin,
     const thrust::device_vector<PointType>& d_points,
-    const AABB<Real>& aabb);
+    const AABB<Real>& aabb,
+    thrust::device_vector<Ray>& d_rays);
 
 // width and height: the dimensions of the grid of rays to generate
 // base: a point at one corner of the ray-grid plane
@@ -136,27 +134,27 @@ GRACE_HOST void one_to_many_rays(
 // w = (-5, 0, 0)
 // h = (0, 6, 0)
 // direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void plane_parallel_random_rays(
-    Ray* const d_rays_ptr,
-    const int width,
-    const int height,
     const Vector<3, Real>& base,
     const Vector<3, Real>& w,
     const Vector<3, Real>& h,
     const Real length,
-    const unsigned long long seed = 1234);
+    const int width,
+    const int height,
+    RngStates<StateT>& rng,
+    Ray* const d_rays_ptr);
 
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void plane_parallel_random_rays(
-    thrust::device_vector<Ray>& d_rays,
-    const int width,
-    const int height,
     const Vector<3, Real>& base,
     const Vector<3, Real>& w,
     const Vector<3, Real>& h,
     const Real length,
-    const unsigned long long seed = 1234);
+    const int width,
+    const int height,
+    RngStates<StateT>& rng,
+    thrust::device_vector<Ray>& d_rays);
 
 // Similar to plane_parallel_random_rays, except ray origins are fixed at the
 // cell centres for a given grid. Useful for emulating an orthogonal projection
@@ -188,23 +186,23 @@ GRACE_HOST void plane_parallel_random_rays(
 // direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
 template <typename Real>
 GRACE_HOST void orthogonal_projection_rays(
-    Ray* const d_rays_ptr,
-    const int width,
-    const int height,
     const Vector<3, Real>& base,
     const Vector<3, Real>& w,
     const Vector<3, Real>& h,
-    const Real length);
+    const Real length,
+    const int width,
+    const int height,
+    Ray* const d_rays_ptr);
 
 template <typename Real>
 GRACE_HOST void orthogonal_projection_rays(
-    thrust::device_vector<Ray>& d_rays,
-    const int width,
-    const int height,
     const Vector<3, Real>& base,
     const Vector<3, Real>& w,
     const Vector<3, Real>& h,
-    const Real length);
+    const Real length,
+    const int width,
+    const int height,
+    thrust::device_vector<Ray>& d_rays);
 
 } // namespace grace
 

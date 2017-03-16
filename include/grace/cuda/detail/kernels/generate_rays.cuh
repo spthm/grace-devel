@@ -28,9 +28,30 @@ namespace grace {
 
 namespace detail {
 
-////////////////////////////////////////////////////////////////////////////////
+//
 // Helper functions for ray generation
-////////////////////////////////////////////////////////////////////////////////
+//
+
+GRACE_DEVICE float3 rand3_normal(curandStateXORWOW_t& state)
+{
+    float2 xy = curand_normal2(&state);
+    float z = curand_normal(&state);
+    return make_float3(xy.x, xy.y, z);
+}
+GRACE_DEVICE float3 rand3_normal(curandStateMRG32k3a_t& state)
+{
+    float2 xy = curand_normal2(&state);
+    float z = curand_normal(&state);
+    return make_float3(xy.x, xy.y, z);
+}
+// Philox is the only generator with a curand_normal4() function.
+// Whether or not this is actually faster seems to vary with device,
+// blocksize and kernel.
+GRACE_DEVICE float3 rand3_normal(curandStatePhilox4_32_10_t& state)
+{
+    float4 xyzw = curand_normal4(&state);
+    return make_float3(xyzw.x, xyzw.y, xyzw.z);
+}
 
 // Returns a 30-bit morton key for the given ray, which must have its normalized
 // direction vector set.
@@ -96,34 +117,18 @@ GRACE_DEVICE float3 image_plane_coord(
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//
 // Kernels
-////////////////////////////////////////////////////////////////////////////////
-
-__global__ void init_PRNG_kernel(
-    curandState* const prng_states,
-    const unsigned long long seed,
-    const int N)
-{
-    unsigned int tid = threadIdx.x + blockIdx.x * blockDim.x;
-
-    if (tid < N) {
-        // Following the cuRAND documentation, each thread receives the same
-        // seed value, no offset, and a *different* sequence value.
-        // This should prevent any correlations if a single state is used to
-        // generate multiple random numbers.
-        curand_init(seed, tid, 0, &prng_states[tid]);
-    }
-}
+//
 
 /* N normally distributed values (mean 0, fixed variance) normalized
  * to one gives us a uniform distribution on the unit N-dimensional
  * hypersphere. See e.g. Wolfram "[Hyper]Sphere Point Picking" and
  * http://www.math.niu.edu/~rusin/known-math/96/sph.rand
  */
-template <typename T, typename KeyType>
+template <typename T, typename StateT, typename KeyType>
 __global__ void gen_uniform_rays_kernel(
-    const curandState* const prng_states,
+    RngDeviceStates<StateT> prng_states,
     const Vector<3, T> origin,
     const T length,
     Ray* const rays,
@@ -132,17 +137,15 @@ __global__ void gen_uniform_rays_kernel(
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    StateT state = prng_states.load_state();
 
     while (tid < N_rays)
     {
-        float dx, dy, dz;
+        float3 d;
         Ray ray;
 
-        dx = curand_normal(&state);
-        dy = curand_normal(&state);
-        dz = curand_normal(&state);
-        set_normalized_ray_direction(dx, dy, dz, ray);
+        d = rand3_normal(state);
+        set_normalized_ray_direction(d.x, d.y, d.z, ray);
 
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
         keys[tid] = ray_dir_morton_key(ray);
@@ -157,11 +160,13 @@ __global__ void gen_uniform_rays_kernel(
 
         tid += blockDim.x * gridDim.x;
     }
+
+    prng_states.save_state(state);
 }
 
-template <typename T, typename KeyType>
+template <typename T, typename StateT, typename KeyType>
 __global__ void gen_uniform_rays_single_octant_kernel(
-    const curandState* const prng_states,
+    RngDeviceStates<StateT> prng_states,
     const Vector<3, T> origin,
     const T length,
     Ray* const rays,
@@ -171,7 +176,7 @@ __global__ void gen_uniform_rays_single_octant_kernel(
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    StateT state = prng_states.load_state();
 
     int3 sign;
     sign.x = (octant & 0x4) ? 1 : -1;
@@ -180,13 +185,14 @@ __global__ void gen_uniform_rays_single_octant_kernel(
 
     while (tid < N_rays)
     {
-        float dx, dy, dz;
+        float3 d;
         Ray ray;
 
-        dx = sign.x * fabsf(curand_normal(&state));
-        dy = sign.y * fabsf(curand_normal(&state));
-        dz = sign.z * fabsf(curand_normal(&state));
-        set_normalized_ray_direction(dx, dy, dz, ray);
+        d = rand3_normal(state);
+        d.x = sign.x * fabsf(d.x);
+        d.y = sign.y * fabsf(d.y);
+        d.z = sign.z * fabsf(d.z);
+        set_normalized_ray_direction(d.x, d.y, d.z, ray);
 
         // morton_key requires *floats* in (0, 1) for 30-bit keys.
         keys[tid] = ray_dir_morton_key(ray);
@@ -201,6 +207,8 @@ __global__ void gen_uniform_rays_single_octant_kernel(
 
         tid += blockDim.x * gridDim.x;
     }
+
+    prng_states.save_state(state);
 }
 
 template <RaySortType SortType, typename T, typename PointType, typename KeyType>
@@ -242,9 +250,9 @@ __global__ void one_to_many_rays_kernel(
     }
 }
 
-template <typename Real>
+template <typename Real, typename StateT>
 __global__ void plane_parallel_random_rays_kernel(
-    const curandState* const prng_states,
+    RngDeviceStates<StateT> prng_states,
     const int width,
     const int height,
     const size_t n_rays,
@@ -259,7 +267,7 @@ __global__ void plane_parallel_random_rays_kernel(
 
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
-    curandState state = prng_states[tid];
+    StateT state = prng_states.load_state();
 
     for ( ; tid < n_rays; tid += blockDim.x * gridDim.x)
     {
@@ -311,6 +319,8 @@ __global__ void plane_parallel_random_rays_kernel(
 
         rays[tid] = ray;
     }
+
+    prng_states.save_state(state);
 }
 
 template <typename Real>
@@ -393,79 +403,24 @@ __global__ void perspective_projection_rays_kernel(
 }
 
 
-////////////////////////////////////////////////////////////////////////////////
+//
 // Kernel wrappers
-////////////////////////////////////////////////////////////////////////////////
-
-// We launch only enough blocks to ~fill the hardware, minimizing the number
-// of threads which must call the expensive curand_init().
 //
-// Up to max_states will be generated, and the number of states will be an
-// integer multiple of factor.
-//
-// If max_states is not itself an integer multiple of factor, then the
-// maximum number of states which may be returned is the smallest number greater
-// than max_states which is a multiple of factor.
-//
-// The number of states is returned in N_states.
-//
-// Reusing the same state to produce multiple, different random numbers should
-// not lead to any (significant) correlation effects.
-GRACE_HOST void init_PRNG(
-    const int max_states,
-    const int factor,
-    const unsigned long long seed,
-    curandState** d_prng_states,
-    int* N_states)
-{
-    const int block_size = 128; // For init_PRNG_kernel
-    int device_ID, N_SMs;
-    cudaDeviceProp prop;
-    GRACE_CUDA_CHECK(cudaGetDevice(&device_ID));
-    GRACE_CUDA_CHECK(cudaGetDeviceProperties(&prop, device_ID));
-    N_SMs = prop.multiProcessorCount;
 
-    // Ideally we would have the smaller of:
-    //     max_states
-    //     3 * N_SMs * block_size,
-    // but this must be rounded up to a multiple of factor.
-    int N = std::min(3 * N_SMs * block_size, max_states);
-    N = factor * (N + factor - 1) / factor;
-    *N_states = N;
 
-    const int num_blocks = (N + block_size - 1) / block_size;
-
-    cudaError_t cuerr = cudaMalloc(
-        (void**)d_prng_states,
-        N * sizeof(curandState));
-    GRACE_CUDA_CHECK(cuerr);
-
-    // Initialize the P-RNG states.
-    init_PRNG_kernel<<<num_blocks, block_size>>>(
-        *d_prng_states,
-        seed,
-        N);
-    GRACE_KERNEL_CHECK();
-}
-
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
     const Real length,
-    const unsigned long long seed)
+    const size_t N_rays,
+    RngDeviceStates<StateT> d_states,
+    Ray* const d_rays_ptr)
 {
-    curandState* d_prng_states;
-    int N_states;
-    init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
-
     thrust::device_vector<uinteger32> d_keys(N_rays);
 
-    // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    const int num_blocks = d_states.size() / RAYS_THREADS_PER_BLOCK;
     gen_uniform_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-        d_prng_states,
+        d_states,
         origin,
         length,
         d_rays_ptr,
@@ -473,32 +428,25 @@ GRACE_HOST void uniform_random_rays(
         N_rays);
     GRACE_KERNEL_CHECK();
 
-    GRACE_CUDA_CHECK(cudaFree(d_prng_states));
-
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
 }
 
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays_single_octant(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
     const Real length,
     const enum Octants octant,
-    const unsigned long long seed)
+    const size_t N_rays,
+    RngDeviceStates<StateT> d_states,
+    Ray* const d_rays_ptr)
 {
-    curandState* d_prng_states;
-    int N_states;
-    init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
-
     thrust::device_vector<uinteger32> d_keys(N_rays);
 
-    // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    const int num_blocks = d_states.size() / RAYS_THREADS_PER_BLOCK;
     gen_uniform_rays_single_octant_kernel
         <<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-            d_prng_states,
+            d_states,
             origin,
             length,
             d_rays_ptr,
@@ -507,8 +455,6 @@ GRACE_HOST void uniform_random_rays_single_octant(
             octant);
     GRACE_KERNEL_CHECK();
 
-    GRACE_CUDA_CHECK(cudaFree(d_prng_states));
-
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
 }
@@ -516,10 +462,10 @@ GRACE_HOST void uniform_random_rays_single_octant(
 // No sorting of rays (useful when particles are already spatially sorted).
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_nosort(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
-    const PointType* const d_points_ptr)
+    const PointType* const d_points_ptr,
+    const size_t N_rays,
+    Ray* const d_rays_ptr)
 {
     const int num_blocks = std::min(grace::MAX_BLOCKS,
                                     (int)((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -538,10 +484,10 @@ GRACE_HOST void one_to_many_rays_nosort(
 // direction vectors.
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_dirsort(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
-    const PointType* const d_points_ptr)
+    const PointType* const d_points_ptr,
+    const size_t N_rays,
+    Ray* const d_rays_ptr)
 {
     const int num_blocks = std::min(grace::MAX_BLOCKS,
                                     (int)((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -566,11 +512,11 @@ GRACE_HOST void one_to_many_rays_dirsort(
 // points.
 template <typename Real, typename PointType>
 GRACE_HOST void one_to_many_rays_endsort(
-    Ray* const d_rays_ptr,
-    const size_t N_rays,
     const Vector<3, Real> origin,
     const PointType* const d_points_ptr,
-    const AABB<Real>& aabb)
+    const size_t N_rays,
+    const AABB<Real>& aabb,
+    Ray* const d_rays_ptr)
 {
     thrust::device_vector<uinteger32> d_keys(N_rays);
     uinteger32* d_keys_ptr = thrust::raw_pointer_cast(d_keys.data());
@@ -595,22 +541,18 @@ GRACE_HOST void one_to_many_rays_endsort(
                         thrust::device_ptr<Ray>(d_rays_ptr));
 }
 
-template <typename Real>
+template <typename Real, typename StateT>
 GRACE_HOST void plane_parallel_random_rays(
-    Ray* const d_rays_ptr,
-    const int width,
-    const int height,
     const Vector<3, Real> base,
     const Vector<3, Real> w,
     const Vector<3, Real> h,
     const Real length,
-    const unsigned long long seed)
+    const int width,
+    const int height,
+    RngDeviceStates<StateT> d_states,
+    Ray* const d_rays_ptr)
 {
     const size_t N_rays = static_cast<size_t>(width) * height;
-
-    curandState* d_prng_states;
-    int N_states;
-    init_PRNG(N_rays, RAYS_THREADS_PER_BLOCK, seed, &d_prng_states, &N_states);
 
     Vector<3, Real> delta_w, delta_h, direction;
 
@@ -619,10 +561,9 @@ GRACE_HOST void plane_parallel_random_rays(
 
     direction = normalize(cross(w, h));
 
-    // init_PRNG guarantees N_states is a multiple of RAYS_THREADS_PER_BLOCK.
-    const int num_blocks = N_states / RAYS_THREADS_PER_BLOCK;
+    const int num_blocks = d_states.size() / RAYS_THREADS_PER_BLOCK;
     plane_parallel_random_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
-        d_prng_states,
+        d_states,
         width,
         height,
         N_rays,
@@ -633,20 +574,18 @@ GRACE_HOST void plane_parallel_random_rays(
         direction,
         d_rays_ptr);
     GRACE_KERNEL_CHECK();
-
-    GRACE_CUDA_CHECK(cudaFree(d_prng_states));
 }
 
 template <typename Real>
 GRACE_HOST void orthographic_projection_rays(
-    Ray* const d_rays_ptr,
-    const int resolution_x,
-    const int resolution_y,
     const Vector<3, Real> camera_position,
     const Vector<3, Real> look_at,
     const Vector<3, Real> view_up,
     const Real vertical_extent,
-    const Real length)
+    const Real length,
+    const int resolution_x,
+    const int resolution_y,
+    Ray* const d_rays_ptr)
 {
     // The kernel generates the points at which each ray intersects the image
     // plane, but in the camera's co-ordinate system: this plane is centred at
@@ -692,14 +631,14 @@ GRACE_HOST void orthographic_projection_rays(
 
 template <typename Real>
 GRACE_HOST void pinhole_camera_rays(
-    Ray* const d_rays_ptr,
-    const int resolution_x,
-    const int resolution_y,
     const Vector<3, Real> camera_position,
     const Vector<3, Real> look_at,
     const Vector<3, Real> view_up,
     const Real FOVy,
-    const Real length)
+    const Real length,
+    const int resolution_x,
+    const int resolution_y,
+    Ray* const d_rays_ptr)
 {
     // The kernel generates the points at which each ray intersects the image
     // plane, but in the camera's co-ordinate system: the camera is located at
