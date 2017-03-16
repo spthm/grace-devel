@@ -6,7 +6,7 @@
 namespace grace {
 
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) AABB
+struct GRACE_ALIGNAS(16) AABB
 {
     typedef T value_type;
     typedef Vector<3, T> vec_type;

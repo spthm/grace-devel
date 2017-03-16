@@ -64,25 +64,24 @@
 //   struct alignas(16) foo { ... }
 // which should preferentially be used where available.
 // NVCC, where this is most important (to enable efficient 2- and 4-wide loads
-// on the device) as the simple struct __align__(16) syntax,
+// on the device) as the simple __align__(16) syntax,
 //   http://docs.nvidia.com/cuda/cuda-c-programming-guide/index.html#device-memory-accesses
-// GCC requires __attribute__ to come immediately after 'struct',
+// GCC (and clang?) have __attribute__
 //   https://gcc.gnu.org/onlinedocs/gcc/Type-Attributes.html#Type-Attributes
-// MSVC instead requires __declspec to come before 'struct',
+// MSVC has __declspec
 //   https://msdn.microsoft.com/en-us/library/83ythb65.aspx
+// And Intel supports both GCC and MSVC formats.
 #if __cplusplus >= 201103L
-#define GRACE_ALIGNED_STRUCT(x) struct alignas(x)
+#define GRACE_ALIGNAS(x) alignas(x)
 #elif defined(__CUDACC__)
-#define GRACE_ALIGNED_STRUCT(x) struct __align__(x)
-#elif defined(__GNUC__) || defined (__clang__)
-#define GRACE_ALIGNED_STRUCT(x) struct __attribute__ ((aligned(x)))
-#elif defined(__INTEL_COMPILER)
-#define GRACE_ALIGNED_STRUCT(x) __attribute__((align(x))) struct
+#define GRACE_ALIGNAS(x) __align__(x)
+#elif defined(__GNUC__) || defined (__clang__) || defined(__INTEL_COMPILER)
+#define GRACE_ALIGNAS(x) __attribute__ ((aligned(x)))
 #elif defined(_MSC_VER)
-#define GRACE_ALIGNED_STRUCT(x) __declspec(align(x)) struct
+#define GRACE_ALIGNAS(x) __declspec(align(x))
 #else
 #warning Compiler not detected, struct alignment may be inconsistent.
-#define GRACE_ALIGNED_STRUCT(x) struct
+#define GRACE_ALIGNAS(x)
 #endif
 
 namespace grace {

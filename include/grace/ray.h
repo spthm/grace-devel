@@ -4,7 +4,7 @@
 
 namespace grace {
 
-GRACE_ALIGNED_STRUCT(16) Ray
+struct GRACE_ALIGNAS(16) Ray
 {
     float dx, dy, dz;
     float ox, oy, oz;

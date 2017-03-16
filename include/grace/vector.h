@@ -10,7 +10,7 @@ template <size_t Dims, typename T>
 struct Vector;
 
 template <typename T>
-GRACE_ALIGNED_STRUCT((detail::vector_alignment<3, T>::value))
+struct GRACE_ALIGNAS((detail::vector_alignment<3, T>::value))
 Vector<3, T>
 {
     typedef T value_type;
@@ -66,7 +66,7 @@ Vector<3, T>
 };
 
 template <typename T>
-GRACE_ALIGNED_STRUCT((detail::vector_alignment<4, T>::value))
+struct GRACE_ALIGNAS((detail::vector_alignment<4, T>::value))
 Vector<4, T>
 {
     typedef T value_type;
