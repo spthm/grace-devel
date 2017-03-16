@@ -9,8 +9,19 @@ namespace detail {
 
 // Default case occurs when Dims > 4 or (Tsize > 8 and Tsize != 16).
 // This also catches the non-vector Dims == 1.
-template <size_t Dims, size_t Tsize, typename T>
-struct vector_base {};
+// This default case is why we need to pass T as a template argument, even
+// though it is not used by any other vector_alignment_ specialization.
+template <size_t Dims, typename T, size_t Tsize>
+struct vector_alignment_
+{
+    static const int value = GRACE_ALIGNOF(T);
+};
+
+template <size_t Dims, typename T>
+struct vector_alignment
+{
+    static const int value = vector_alignment_<Dims, T, sizeof(T)>::value;
+};
 
 
 // The below template specializations balance the most-efficient alignment
@@ -39,12 +50,18 @@ struct vector_base {};
 // If sizeof(T) == 8, 8 should be our minimum alignment. It wastes no space, and
 // allows for efficient vector4 loads on CUDA devices.
 template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<Dims, 8, T> {};
+struct vector_alignment_<Dims, T, 8>
+{
+    static const int value = 8;
+};
 
 // If sizeof(T) == 16, 16 should be our alignment. It wastes no space, and
 // allows for efficient vector4 loads on CUDA devices.
 template <size_t Dims, typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
+struct vector_alignment_<Dims, T, 16>
+{
+    static const int value = 16;
+};
 
 
 //
@@ -53,15 +70,24 @@ GRACE_ALIGNED_STRUCT(16) vector_base<Dims, 16, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<2, 8, T> {};
+struct vector_alignment_<2, T, 8>
+{
+    static const int value = 16;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<3, 8, T> {};
+struct vector_alignment_<3, T, 8>
+{
+    static const int value = 16;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<4, 8, T> {};
+struct vector_alignment_<4, T, 8>
+{
+    static const int value = 16;
+};
 
 
 //
@@ -70,15 +96,24 @@ GRACE_ALIGNED_STRUCT(16) vector_base<4, 8, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<2, 7, T> {};
+struct vector_alignment_<2, T, 7>
+{
+    static const int value = 16;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<3, 7, T> {};
+struct vector_alignment_<3, T, 7>
+{
+    static const int value = 8;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<4, 7, T> {};
+struct vector_alignment_<4, T, 7>
+{
+    static const int value = 16;
+};
 
 
 //
@@ -87,15 +122,24 @@ GRACE_ALIGNED_STRUCT(16) vector_base<4, 7, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<2, 6, T> {};
+struct vector_alignment_<2, T, 6>
+{
+    static const int value = 4;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<3, 6, T> {};
+struct vector_alignment_<3, T, 6>
+{
+    static const int value = 4;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<4, 6, T> {};
+struct vector_alignment_<4, T, 6>
+{
+    static const int value = 8;
+};
 
 
 //
@@ -104,15 +148,24 @@ GRACE_ALIGNED_STRUCT(8) vector_base<4, 6, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<2, 5, T> {};
+struct vector_alignment_<2, T, 5>
+{
+    static const int value = 4;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<3, 5, T> {};
+struct vector_alignment_<3, T, 5>
+{
+    static const int value = 16;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<4, 5, T> {};
+struct vector_alignment_<4, T, 5>
+{
+    static const int value = 4;
+};
 
 
 //
@@ -121,15 +174,24 @@ GRACE_ALIGNED_STRUCT(4) vector_base<4, 5, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<2, 4, T> {};
+struct vector_alignment_<2, T, 4>
+{
+    static const int value = 8;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<3, 4, T> {};
+struct vector_alignment_<3, T, 4>
+{
+    static const int value = 16;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<4, 4, T> {};
+struct vector_alignment_<4, T, 4>
+{
+    static const int value = 16;
+};
 
 
 //
@@ -138,15 +200,24 @@ GRACE_ALIGNED_STRUCT(16) vector_base<4, 4, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<2, 3, T> {};
+struct vector_alignment_<2, T, 3>
+{
+    static const int value = 8;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<3, 3, T> {};
+struct vector_alignment_<3, T, 3>
+{
+    static const int value = 4;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(16) vector_base<4, 3, T> {};
+struct vector_alignment_<4, T, 3>
+{
+    static const int value = 16;
+};
 
 
 //
@@ -155,15 +226,24 @@ GRACE_ALIGNED_STRUCT(16) vector_base<4, 3, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<2, 2, T> {};
+struct vector_alignment_<2, T, 2>
+{
+    static const int value = 4;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<3, 2, T> {};
+struct vector_alignment_<3, T, 2>
+{
+    static const int value = 8;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(8) vector_base<4, 2, T> {};
+struct vector_alignment_<4, T, 2>
+{
+    static const int value = 8;
+};
 
 
 //
@@ -172,15 +252,24 @@ GRACE_ALIGNED_STRUCT(8) vector_base<4, 2, T> {};
 
 // Vector<2, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(2) vector_base<2, 1, T> {};
+struct vector_alignment_<2, T, 1>
+{
+    static const int value = 2;
+};
 
 // Vector<3, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<3, 1, T> {};
+struct vector_alignment_<3, T, 1>
+{
+    static const int value = 4;
+};
 
 // Vector<4, >
 template <typename T>
-GRACE_ALIGNED_STRUCT(4) vector_base<4, 1, T> {};
+struct vector_alignment_<4, T, 1>
+{
+    static const int value = 4;
+};
 
 } // namespace detail
 

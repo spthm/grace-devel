@@ -2,7 +2,7 @@
 
 #include "grace/types.h"
 
-#include "grace/detail/vector_base-inl.h"
+#include "grace/detail/vector_alignment-inl.h"
 
 namespace grace {
 
@@ -10,7 +10,8 @@ template <size_t Dims, typename T>
 struct Vector;
 
 template <typename T>
-struct Vector<3, T> : detail::vector_base<3, sizeof(T), T>
+GRACE_ALIGNED_STRUCT((detail::vector_alignment<3, T>::value))
+Vector<3, T>
 {
     typedef T value_type;
 
@@ -65,7 +66,8 @@ struct Vector<3, T> : detail::vector_base<3, sizeof(T), T>
 };
 
 template <typename T>
-struct Vector<4, T> : detail::vector_base<4, sizeof(T), T>
+GRACE_ALIGNED_STRUCT((detail::vector_alignment<4, T>::value))
+Vector<4, T>
 {
     typedef T value_type;
 
