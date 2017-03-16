@@ -72,7 +72,7 @@ T& Vector<3, T>::operator[](int i)
         case 2: return this->z;
     }
 
-    GRACE_ASSERT(0, vector3_invalid_index_access);
+    GRACE_ASSERT(0, VECTOR3_INVALID_INDEX_ACCESS);
     return this->x;
 }
 
@@ -86,7 +86,7 @@ const T& Vector<3, T>::operator[](int i) const
         case 2: return this->z;
     }
 
-    GRACE_ASSERT(0, vector3_invalid_index_access);
+    GRACE_ASSERT(0, VECTOR3_INVALID_INDEX_ACCESS);
     return this->x;
 }
 

@@ -81,7 +81,7 @@ T& Vector<4, T>::operator[](int i)
         case 3: return this->w;
     }
 
-    GRACE_ASSERT(0, vector4_invalid_index_access);
+    GRACE_ASSERT(0, VECTOR4_INVALID_INDEX_ACCESS);
     return this->x;
 }
 
@@ -96,7 +96,7 @@ const T& Vector<4, T>::operator[](int i) const
         case 3: return this->w;
     }
 
-    GRACE_ASSERT(0, vector4_invalid_index_access);
+    GRACE_ASSERT(0, VECTOR4_INVALID_INDEX_ACCESS);
     return this->x;
 }
 

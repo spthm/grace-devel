@@ -70,8 +70,8 @@ template <typename T>
 GRACE_HOST_DEVICE
 T& BoundedPtr<T>::operator*()
 {
-    GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-    GRACE_ASSERT(ptr_ + 1 <= end_, boundedptr_memory_overflow);
+    GRACE_ASSERT(ptr_ >= begin_, BOUNDEDPTR_MEMORY_UNDERFLOW);
+    GRACE_ASSERT(ptr_ + 1 <= end_, BOUNDEDPTR_MEMORY_OVERFLOW);
 
     return *ptr_;
 }
@@ -80,8 +80,8 @@ template <typename T>
 GRACE_HOST_DEVICE
 const T& BoundedPtr<T>::operator*() const
 {
-    GRACE_ASSERT(ptr_ >= begin_, boundedptr_memory_underflow);
-    GRACE_ASSERT(ptr_ + 1 <= end_, boundedptr_memory_overflow);
+    GRACE_ASSERT(ptr_ >= begin_, BOUNDEDPTR_MEMORY_UNDERFLOW);
+    GRACE_ASSERT(ptr_ + 1 <= end_, BOUNDEDPTR_MEMORY_OVERFLOW);
 
     return *ptr_;
 }
