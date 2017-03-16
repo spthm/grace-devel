@@ -7,6 +7,7 @@
 #include "statistics.cuh"
 
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/ray.h"
 #include "grace/vector.h"
 
@@ -28,15 +29,17 @@ int main(int argc, char* argv[]) {
         N_rays = 32 * (size_t)std::strtol(argv[1], NULL, 10);
     }
     if (argc > 2) {
-      save_out = (std::string(argv[2]) == "save") ? true : false;
+        save_out = (std::string(argv[2]) == "save") ? true : false;
     }
 
     std::cout << "For details of these tests, see isotropic_stats.md"
               << std::endl
               << std::endl;
 
+    grace::PrngStates rng_states;
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 1.f);
+    grace::uniform_random_rays(grace::Vector<3, float>(), 1.f, rng_states,
+                               d_rays);
 
     // Ray directions are always floats.
     float R2 = resultant_length_squared(d_rays);

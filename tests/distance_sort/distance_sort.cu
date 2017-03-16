@@ -6,6 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/sphere.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
@@ -118,6 +119,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<int> h_ray_offsets(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
+    grace::PrngStates rng_states;
     thrust::host_vector<float> h_distances; // Will be resized.
 
     // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
@@ -128,7 +130,7 @@ int main(int argc, char* argv[]) {
     float length = 2.f;
 
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, origin, length);
+    grace::uniform_random_rays(origin, length, rng_states, d_rays);
     trace_distances(d_rays, d_spheres, d_tree, h_ray_offsets, h_distances);
 
     int failures = verify_intersection_order(h_ray_offsets, h_distances,

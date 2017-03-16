@@ -7,6 +7,7 @@
 #include "stats_math.cuh"
 
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/ray.h"
 #include "grace/vector.h"
 
@@ -43,10 +44,11 @@ int main(int argc, char* argv[])
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<grace::Ray> h_rays(N_rays);
+    grace::PrngStates rng_states;
 
     grace::Vector<3, float> origin = grace::Vector<3, float>(0.f, 0.f, 0.f);
     float length = 1;
-    grace::uniform_random_rays(d_rays, origin, length);
+    grace::uniform_random_rays(origin, length, rng_states, d_rays);
 
     h_rays = d_rays;
 

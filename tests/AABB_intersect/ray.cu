@@ -1,6 +1,7 @@
 #include "ray.cuh" // THIS
 #include "grace/ray.h" // GRACE
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -57,11 +58,9 @@ void isotropic_rays(
 {
     const size_t N_rays = h_rays.size();
 
+    grace::PrngStates rng_states;
     thrust::device_vector<grace::Ray> d_grace_rays(N_rays);
-    grace::uniform_random_rays(
-        thrust::raw_pointer_cast(d_grace_rays.data()),
-        N_rays,
-        origin, length);
+    grace::uniform_random_rays(origin, length, rng_states, d_grace_rays);
 
     // Copy GRACE-type rays to the required ray type.
     thrust::host_vector<grace::Ray> h_grace_rays = d_grace_rays;

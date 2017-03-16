@@ -107,7 +107,7 @@ int main(int argc, char* argv[])
         // already sorted by their Hilbert keys, which is a better spatial
         // locality sort than is typically achieved with Morton keys, as is
         // done by grace.
-        grace::one_to_many_rays(d_rays, origin, d_spheres, grace::NoSort);
+        grace::one_to_many_rays(origin, d_spheres, d_rays, grace::NoSort);
         if (i >= 0) t_genray_nosort += timer.split();
 
         grace::trace_cumulative_sph(d_rays,
@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 
         // Direction-based sort.
 
-        grace::one_to_many_rays(d_rays, origin, d_spheres,
+        grace::one_to_many_rays(origin, d_spheres, d_rays,
                                 grace::DirectionSort);
         if (i >= 0) t_genray_dirkey += timer.split();
 
@@ -146,11 +146,10 @@ int main(int argc, char* argv[])
 
         // Ray end-point sort.
 
-        grace::one_to_many_rays(d_rays, origin, d_spheres, grace::EndPointSort);
+        grace::one_to_many_rays(origin, d_spheres, d_rays, grace::EndPointSort);
         // Using the already-computed AABBs is supported by GRACE, and would
-        // be faster here; note the lack of grace::EndPointSort, which is
-        // implicit:
-        // grace::one_to_many_rays(d_rays, origin, d_spheres, aabb);
+        // be faster here; note the lack of grace::EndPointSort:
+        // grace::one_to_many_rays_endsort(d_rays, origin, d_spheres, aabb);
         if (i >= 0) t_genray_endkey += timer.split();
 
         grace::trace_cumulative_sph(d_rays,

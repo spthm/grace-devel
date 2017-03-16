@@ -7,6 +7,7 @@
 #include "intersection.h"
 
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/generic/bits.h"
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
@@ -87,8 +88,10 @@ int main(int argc, char* argv[])
     thrust::transform(h_spheres.begin(), h_spheres.end(), h_spheres.begin(),
                       expand_functor(high.r));
 
+    grace::PrngStates rng_states;
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 2E4f);
+    grace::uniform_random_rays(grace::Vector<3, float>(), 2E4f, rng_states,
+                               d_rays);
     thrust::host_vector<grace::Ray> h_rays = d_rays;
     d_rays.clear(); d_rays.shrink_to_fit();
 

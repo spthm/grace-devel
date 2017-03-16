@@ -6,6 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
@@ -51,11 +52,13 @@ int main(int argc, char* argv[])
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
+    grace::PrngStates rng_states;
 
     SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
     SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, grace::Vector<3, float>(), 2E4f);
+    grace::uniform_random_rays(grace::Vector<3, float>(), 2E4f, rng_states,
+                               d_rays);
 
     grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
     double total = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end());

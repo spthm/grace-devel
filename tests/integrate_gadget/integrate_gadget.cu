@@ -6,6 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/aabb.h"
 #include "grace/ray.h"
@@ -66,6 +67,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<float> d_integrals(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
+    grace::PrngStates rng_states;
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
@@ -78,7 +80,8 @@ int main(int argc, char* argv[])
 
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
                d_tree);
-    plane_parallel_rays_z(N_per_side, mins, maxs, d_rays, &area_per_ray);
+    plane_parallel_rays_z(N_per_side, mins, maxs, rng_states, d_rays,
+                          &area_per_ray);
     grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
 
     // ~ Integrate over x and y.

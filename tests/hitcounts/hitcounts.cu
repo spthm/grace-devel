@@ -7,6 +7,7 @@
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/ray.h"
 #include "grace/sphere.h"
 #include "grace/vector.h"
@@ -52,6 +53,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
     grace::Tree d_tree(N, max_per_leaf);
+    grace::PrngStates rng_states;
 
     // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
     SphereType high = SphereType(1.f, 1.f, 1.f, 0.1f);
@@ -61,7 +63,7 @@ int main(int argc, char* argv[])
     float length = 2.f;
 
     random_spheres_tree(low, high, N, d_spheres, d_tree);
-    grace::uniform_random_rays(d_rays, origin, length);
+    grace::uniform_random_rays(origin, length, rng_states, d_rays);
     grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
 
     int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,

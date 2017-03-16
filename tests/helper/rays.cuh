@@ -77,21 +77,21 @@ GRACE_HOST void orthogonal_rays_z(
     Vector<3, T> view_up(0.f, 1.f, 0.f);
     float length = 2 * span.z;
 
-    grace::orthographic_projection_rays(d_rays, N_side, N_side, camera_position,
-                                        look_at, view_up, span.y, length);
+    grace::orthographic_projection_rays(camera_position, look_at, view_up, span.y,
+                                        length, N_side, N_side, d_rays);
 }
 
 // Generates semi-randomized plane-parallel rays in the +z direction, covering
 // all ray-grid cells in range (mins.x/y/z - maxs.r) to (maxs.x/y/z + maxs.r).
 // Ray origins are randomized with each ray's cell, and ray order is not
 // specified (i.e. may not be useful for image generation).
-template <typename T>
+template <typename T, typename StateT>
 void plane_parallel_rays_z(const size_t N_side,
                            const grace::Sphere<T> mins,
                            const grace::Sphere<T> maxs,
+                           grace::RngStates<StateT>& rng,
                            thrust::device_vector<grace::Ray>& d_rays,
-                           float* area = NULL,
-                           unsigned int seed = 1234)
+                           float* area = NULL)
 {
     Vector<3, T> span = box_span(mins, maxs);
 
@@ -108,6 +108,6 @@ void plane_parallel_rays_z(const size_t N_side,
         *area = per_ray_area(span, N_side);
     }
 
-    grace::plane_parallel_random_rays(d_rays, N_side, N_side, base, w, h,
-                                      length, seed);
+    grace::plane_parallel_random_rays(base, w, h, length, N_side, N_side, rng,
+                                      d_rays);
 }

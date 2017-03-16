@@ -6,6 +6,7 @@
 
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/generate_rays.cuh"
+#include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/ray.h"
@@ -76,6 +77,7 @@ int main(int argc, char* argv[])
               << std::endl;
 
 
+    grace::PrngStates rng_states;
     grace::Tree d_tree(N, max_per_leaf);
     build_tree(d_spheres, d_tree);
 
@@ -103,7 +105,7 @@ int main(int argc, char* argv[])
         // Don't include above memory allocations in t_genray.
         timer.split();
 
-        grace::uniform_random_rays(d_rays, origin, length);
+        grace::uniform_random_rays(origin, length, rng_states, d_rays);
         if (i >= 0) t_genray += timer.split();
 
         grace::trace_cumulative_sph(d_rays,
