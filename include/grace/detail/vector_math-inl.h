@@ -353,6 +353,80 @@ OutType operator_reduce(const Vector<4, InType>& u,
 
 
 //
+// Vector-vector compound-assignment
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator+=(Vector<Dims, T>& u, const Vector<Dims, T>& v)
+{
+    u = detail::operator_loop(u, v, plus<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator-=(Vector<Dims, T>& u, const Vector<Dims, T>& v)
+{
+    u = detail::operator_loop(u, v, minus<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator*=(Vector<Dims, T>& u, const Vector<Dims, T>& v)
+{
+    u = detail::operator_loop(u, v, multiplies<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator/=(Vector<Dims, T>& u, const Vector<Dims, T>& v)
+{
+    u = detail::operator_loop(u, v, divides<T>());
+    return u;
+}
+
+
+//
+// Vector-vector compound-assignment
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator+=(Vector<Dims, T>& u, const T& s)
+{
+    u = detail::operator_loop(u, s, plus<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator-=(Vector<Dims, T>& u, const T& s)
+{
+    u = detail::operator_loop(u, s, minus<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator*=(Vector<Dims, T>& u, const T& s)
+{
+    u = detail::operator_loop(u, s, multiplies<T>());
+    return u;
+}
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator/=(Vector<Dims, T>& u, const T& s)
+{
+    u = detail::operator_loop(u, s, divides<T>());
+    return u;
+}
+
+
+//
 // Comparison operations
 //
 

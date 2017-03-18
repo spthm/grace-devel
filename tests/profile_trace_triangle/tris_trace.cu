@@ -1,24 +1,23 @@
 #include "tris_trace.cuh"
 
-#include "grace/cuda/functors/trace.cuh"
-#include "grace/cuda/kernels/bintree_trace.cuh"
+#include "grace/cuda/detail/functors/trace.cuh"
+#include "grace/cuda/detail/kernels/bintree_trace.cuh"
 
 
 void setup_cameras(
-    const float3 bots, const float3 tops, const float FOVy_degrees,
+    const grace::AABB<float> aabb,
+    const float FOVy_degrees,
     const int resolution_x, const int resolution_y,
-    std::vector<float3>& camera_positions, float3* look_at, float3* view_up,
+    std::vector<grace::Vector<3, float> >& camera_positions,
+    grace::Vector<3, float>* look_at,
+    grace::Vector<3, float>* view_up,
     float* FOVy_radians, float* ray_length)
 {
-    const float3 size = make_float3(tops.x - bots.x,
-                                    tops.y - bots.y,
-                                    tops.z - bots.z);
-    const float3 center = make_float3((bots.x + tops.x) / 2.,
-                                      (bots.y + tops.y) / 2.,
-                                      (bots.z + tops.z) / 2.);
+    const grace::Vector<3, float> size = aabb.size();
+    const grace::Vector<3, float> center = aabb.center();
 
     *look_at = center;
-    *view_up = make_float3(0.f, 1.f, 0.f);
+    *view_up = grace::Vector<3, float>(0.f, 1.f, 0.f);
     *ray_length = 100. * size.z;
 
     *FOVy_radians = FOVy_degrees * 3.141 / 180.;
@@ -31,13 +30,13 @@ void setup_cameras(
     float L_y = 1.1 * size.y / *FOVy_radians;
     float camera_z = look_at->z + std::max(L_x, L_y);
 
-    camera_positions.push_back(make_float3(bots.x - 0.1 * size.x,
-                                           tops.y + 0.3 * size.y,
-                                           camera_z));
-    camera_positions.push_back(make_float3(tops.x + 0.1 * size.x,
-                                           bots.y - 0.3 * size.y,
-                                           camera_z));
-    camera_positions.push_back(make_float3(center.x, center.y, camera_z));
+    camera_positions.push_back(grace::Vector<3, float>(aabb.min.x - 0.1 * size.x,
+                                                       aabb.max.y + 0.3 * size.y,
+                                                       camera_z));
+    camera_positions.push_back(grace::Vector<3, float>(aabb.max.x + 0.1 * size.x,
+                                                       aabb.min.y - 0.3 * size.y,
+                                                       camera_z));
+    camera_positions.push_back(grace::Vector<3, float>(center.x, center.y, camera_z));
 }
 
 void trace_closest_tri(

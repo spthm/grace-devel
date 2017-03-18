@@ -3,12 +3,12 @@ include ../Makefile.common
 OBJS = profile_trace_triangle.o \
 tris_trace.o \
 triangle.o \
-../helper/vector_math.o ../helper/read_ply.o ../helper/ply.o
+../helper/read_ply.o ../helper/ply.o
 
 NVCCDEPS += triangle.cuh \
 tris_trace.cuh \
 tris_tree.cuh \
-../helper/vector_math.cuh ../helper/read_ply.hpp ../helper/ply.h
+../helper/read_ply.hpp ../helper/ply.h
 
 INCLUDES += -I../helper/ $(CUDA_INC)
 

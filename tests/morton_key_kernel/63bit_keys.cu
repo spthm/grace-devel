@@ -51,9 +51,9 @@ int main(int argc, char* argv[])
     thrust::host_vector<KeyT> h_keys(N);
     const KeyT MAX_KEY = (1u << 21) - 1;
     for (size_t i = 0; i < N; ++i) {
-        KeyT ux = static_cast<KeyT>((h_points[i].x - aabb.min.x) * MAX_KEY);
-        KeyT uy = static_cast<KeyT>((h_points[i].y - aabb.min.y) * MAX_KEY);
-        KeyT uz = static_cast<KeyT>((h_points[i].z - aabb.min.z) * MAX_KEY);
+        KeyT ux = (KeyT)((h_points[i].x - aabb.min.x) / aabb.size().x * MAX_KEY);
+        KeyT uy = (KeyT)((h_points[i].y - aabb.min.y) / aabb.size().y * MAX_KEY);
+        KeyT uz = (KeyT)((h_points[i].z - aabb.min.z) / aabb.size().z * MAX_KEY);
 
         h_keys[i] = grace::morton_key(ux, uy, uz);
     }

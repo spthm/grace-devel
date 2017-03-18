@@ -156,52 +156,107 @@ GRACE_HOST void plane_parallel_random_rays(
     RngStates<StateT>& rng,
     thrust::device_vector<Ray>& d_rays);
 
-// Similar to plane_parallel_random_rays, except ray origins are fixed at the
-// cell centres for a given grid. Useful for emulating an orthogonal projection
-// camera.
-// Rays are ordered such that they increase along the direction of w first, then
-// h.
+// Generates rays for an orthographic projection; this is the projection
+// achieved from a perspective projection an infinite distance from the object,
+// and with an infinite focal length.
 //
-// d_rays will be resized only if its current size is too small to contain
-// width * height rays; it will never be reduced in size.
+// Rays emanate in a common direction parallel to (look_at - camera_position)
+// (the length of the resultant vector is not used), and the view orientation is
+// specified by the vector view_up. resolution_x rays are generated along the
+// horizontal, and resolution_y along the vertical, for a total of
+// N = resolution_x * resolution_y rays.
 //
-// width and height: the dimensions of the grid of rays to generate
-// base: a point at one corner of the ray-grid plane
-// w: a vector defining the width of the plane, beginning from base
-//    n = width rays are generated along w from base, for m = height rows
-// h: a vector defining the height of the plane, beginning from base
-//    m = height rays are generated along h from base, for n = width columns
-// length: the length of all rays
+// Square pixels are always assumed, and the aspect ratio of the image is
+// given by the ratio resolution_x / resolution_y.
 //
-// A grid of width * height cells, covering an area |w| * |h|, is produced.
-// The centre of each cell in this grid defines a ray origin. base is located at
-// one corner of this grid. Hence, no ray will have origin == base.
-// The direction of all rays is normalize(cross(w, h)).
+// The total extent rays cover along the image vertical is specified by
+// vertical_extent; the corresponding horizontal_extent is the vertical extent
+// multiplied by the aspect ratio.
 //
-// For rays originating at z = 10, travelling in the -z direction, and covering
-// an area |w| * |h| = 5 * 6 = 30:
-// base = (5, 0, 10)
-// w = (-5, 0, 0)
-// h = (0, 6, 0)
-// direction = normalize(cross(w, h)) = normalize((0, 0, -30)) = (0, 0, -1)
+// The ray length, length, is fixed for all rays.
+//
+// The ray at index 0 corresponds to the top-left of the image plane, and the
+// ray at index resolution_x * resolution_y - 1 corresponds to the bottom-right
+// of the image plane. Rays are ordered such that they increase along the
+// horizontal first, then the vertical.
+//
+// Note that view_up need only be approximate. The upward direction in the image
+// plane is parallel to the vector
+//     view_up - view_direction * (dot(view_direction, view_up)),
+// where view_direction is parallel to the vector (look_at - camera_position).
+// That is to say, the vertical in the image plane is the direction view_up
+// with all components in the direction of view_direction removed.
 template <typename Real>
-GRACE_HOST void orthogonal_projection_rays(
-    const Vector<3, Real>& base,
-    const Vector<3, Real>& w,
-    const Vector<3, Real>& h,
+GRACE_HOST void orthographic_projection_rays(
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
+    const Real vertical_extent,
     const Real length,
-    const int width,
-    const int height,
+    const int resolution_x,
+    const int resolution_y,
     Ray* const d_rays_ptr);
 
 template <typename Real>
-GRACE_HOST void orthogonal_projection_rays(
-    const Vector<3, Real>& base,
-    const Vector<3, Real>& w,
-    const Vector<3, Real>& h,
+GRACE_HOST void orthographic_projection_rays(
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
+    const Real vertical_extent,
     const Real length,
-    const int width,
-    const int height,
+    const int resolution_x,
+    const int resolution_y,
+    thrust::device_vector<Ray>& d_rays);
+
+// Generates rays in a pinhole-camera model. Rays emanate from a common origin
+// camera_position and, have a vertical field-of-view FOVy in the image plane.
+// FOVy should be provided in radians.
+//
+// The centre of view is located at look_at, and the view orientation is
+// specified by the vector view_up. resolution_x rays are generated along the
+// horizontal, and resolution_y along the vertical, for a total of
+// N = resolution_x * resolution_y rays. Unlike a true pinhole-camera, the
+// resulting image is not vertically flipped.
+//
+// Square pixels are always assumed, and the aspect ratio of the image is
+// given by the ratio resolution_x / resolution_y. The horizontal field-of-view,
+// FOVx, can be computed via
+//     tan(FOVx / 2) = aspect_ratio * tan(FOVy / 2)
+//
+// The ray length, length, is fixed for all rays; note therefore that the plane
+// on which all rays terminate is a spherical surface.
+//
+// The ray at index 0 corresponds to the top-left of the image plane, and the
+// ray at index resolution_x * resolution_y - 1 corresponds to the bottom-right
+// of the image plane. Rays are ordered such that they increase along the
+// horizontal first, then the vertical.
+//
+// Note that view_up need only be approximate. The upward direction in the image
+// plane is parallel to the vector
+//     view_up - view_direction * (dot(view_direction, view_up)),
+// where view_direction is parallel to the vector (look_at - camera_position).
+// That is to say, the vertical in the image plane is the direction view_up
+// with all components in the direction of view_direction removed.
+template <typename Real>
+GRACE_HOST void pinhole_camera_rays(
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
+    const Real FOVy,
+    const Real length,
+    const int resolution_x,
+    const int resolution_y,
+    Ray* const d_rays_ptr);
+
+template <typename Real>
+GRACE_HOST void pinhole_camera_rays(
+    const Vector<3, Real> camera_position,
+    const Vector<3, Real> look_at,
+    const Vector<3, Real> view_up,
+    const Real FOVy,
+    const Real length,
+    const int resolution_x,
+    const int resolution_y,
     thrust::device_vector<Ray>& d_rays);
 
 } // namespace grace

@@ -4,13 +4,13 @@ OBJS = render_triangle.o \
 tris_trace.o \
 tris_render.o \
 triangle.o \
-../helper/vector_math.o ../helper/read_ply.o ../helper/ply.o
+../helper/read_ply.o ../helper/ply.o
 
 NVCCDEPS += triangle.cuh \
 tris_trace.cuh \
 tris_tree.cuh \
 tris_render.cuh \
-../helper/vector_math.cuh ../helper/read_ply.hpp ../helper/ply.h
+../helper/read_ply.hpp ../helper/ply.h
 
 INCLUDES += -I../helper/ $(CUDA_INC)
 

@@ -1,17 +1,17 @@
 #include "tris_trace.cuh"
 
-#include "helper/vector_math.cuh"
+#include "grace/cuda/detail/kernel_config.h"
+#include "grace/cuda/detail/functors/trace.cuh"
+#include "grace/cuda/detail/kernels/bintree_trace.cuh"
 
-#include "grace/cuda/kernel_config.h"
-#include "grace/cuda/functors/trace.cuh"
-#include "grace/cuda/kernels/bintree_trace.cuh"
+#include "grace/vector.h"
 
 static __global__ void shadow_rays_kernel(
     const grace::Ray* const primary_rays,
     const size_t N_rays,
     const PrimaryRayResult* const primary_results,
     const int light_index,
-    const float3* lights_pos,
+    const grace::Vector<3, float>* lights_pos,
     grace::Ray* const shadow_rays)
 {
     for (int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -26,24 +26,26 @@ static __global__ void shadow_rays_kernel(
         {
             float t_min = primary_results[tid].t_min;
 
-            float3 O = make_float3(ray.ox, ray.oy, ray.oz);
-            float3 D = make_float3(ray.dx, ray.dy, ray.dz);
+            grace::Vector<3, float> O(ray.ox, ray.oy, ray.oz);
+            grace::Vector<3, float> D(ray.dx, ray.dy, ray.dz);
 
             // Point needs to be moved off surface to prevent numerical artefacts.
-            float3 point = O + fmaxf(0.f, (t_min - 1e-4f)) * D;
-            float3 light_vector = lights_pos[light_index] - point;
-            float light_distance = magnitude(light_vector);
-            float3 L = light_vector / light_distance;
+            grace::Vector<3, float> point = O + fmaxf(0.f, (t_min - 1e-4f)) * D;
+            grace::Vector<3, float> light_vector = lights_pos[light_index] - point;
+            float light_distance = norm(light_vector);
+            grace::Vector<3, float> L = light_vector / light_distance;
 
             shadow_ray.ox = point.x; shadow_ray.oy = point.y; shadow_ray.oz = point.z;
             shadow_ray.dx = L.x; shadow_ray.dy = L.y; shadow_ray.dz = L.z;
-            shadow_ray.length = light_distance;
+            shadow_ray.start = 0;
+            shadow_ray.end = light_distance;
         }
         else
         {
             shadow_ray.ox = 0.f; shadow_ray.oy = 0.f; shadow_ray.oz = 0.f;
             shadow_ray.dx = 0.f; shadow_ray.dy = 0.f; shadow_ray.dz = 1.f;
-            shadow_ray.length = -1.f;
+            shadow_ray.start = 0;
+            shadow_ray.end = -1.f;
         }
 
         shadow_rays[tid] = shadow_ray;
@@ -52,7 +54,7 @@ static __global__ void shadow_rays_kernel(
 
 void generate_shadow_rays(
     const int light_index,
-    const thrust::device_vector<float3>& d_lights_pos,
+    const thrust::device_vector<grace::Vector<3, float> >& d_lights_pos,
     const thrust::device_vector<grace::Ray>& d_primary_rays,
     const thrust::device_vector<PrimaryRayResult>& d_primary_results,
     thrust::device_vector<grace::Ray>& d_shadow_rays)

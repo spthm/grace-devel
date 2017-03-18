@@ -197,6 +197,48 @@ Vector<Dims, T> min(const Vector<Dims, T>& u, const Vector<Dims, T>& v);
 
 
 //
+// Vector-vector compound assignment
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator+=(Vector<Dims, T>& u, const Vector<Dims, T>& v);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator-=(Vector<Dims, T>& u, const Vector<Dims, T>& v);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator*=(Vector<Dims, T>& u, const Vector<Dims, T>& v);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator/=(Vector<Dims, T>& u, const Vector<Dims, T>& v);
+
+
+//
+// Vector-scalar compound assignment
+//
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator+=(Vector<Dims, T>& v, const T& s);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator-=(Vector<Dims, T>& v, const T& s);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator*=(Vector<Dims, T>& v, const T& s);
+
+template <size_t Dims, typename T>
+GRACE_HOST_DEVICE
+Vector<Dims, T>& operator/=(Vector<Dims, T>& v, const T& s);
+
+
+//
 // Vector-vector arithmetic
 //
 

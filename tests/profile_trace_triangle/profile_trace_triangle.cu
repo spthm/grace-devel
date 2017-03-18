@@ -9,8 +9,10 @@
 #include "tris_trace.cuh"
 
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/gen_rays.cuh"
+#include "grace/cuda/generate_rays.cuh"
+#include "grace/aabb.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 
 #include <thrust/device_vector.h>
@@ -79,15 +81,15 @@ int main(int argc, char* argv[])
                                              << std::endl
               << std::endl;
 
-    float3 bots, tops;
+    grace::AABB<float> aabb;
     grace::Tree d_tree(N, max_per_leaf);
-    build_tree_tris(d_tris, d_tree, &bots, &tops);
+    build_tree_tris(d_tris, d_tree, &aabb);
 
-    std::vector<float3> camera_positions;
-    float3 look_at, view_up;
+    std::vector<grace::Vector<3, float> > camera_positions;
+    grace::Vector<3, float> look_at, view_up;
     float FOVy_radians, ray_length;
     float FOVy_degrees = 50.f;
-    setup_cameras(bots, tops, FOVy_degrees, N_per_side, N_per_side,
+    setup_cameras(aabb, FOVy_degrees, N_per_side, N_per_side,
                   camera_positions, &look_at, &view_up,
                   &FOVy_radians, &ray_length);
 
@@ -105,9 +107,10 @@ int main(int argc, char* argv[])
             // Don't include above memory allocations in t_genray.
             timer.split();
 
-            pinhole_camera_rays(d_rays, N_per_side, N_per_side,
-                                camera_positions[j], look_at, view_up,
-                                FOVy_radians, ray_length);
+            pinhole_camera_rays(camera_positions[j], look_at, view_up,
+                                FOVy_radians, ray_length,
+                                N_per_side, N_per_side,
+                                d_rays);
             if (i >= 0) t_genray += timer.split();
 
             trace_closest_tri(

@@ -19,13 +19,13 @@ INTEGRATION_TEST_DIRS = segmented_scan \
 	sphere_intersection \
 	tree_traversal
 
-DUMP_DIRS = project_gadget project_triangle hitcounts
+DUMP_DIRS = project_gadget render_triangle hitcounts
 
 PROFILE_DIRS = AABB_intersect \
 	profile_one_to_many_rays_gadget \
 	profile_project_gadget \
-	profile_project_triangle \
 	profile_trace_gadget \
+	profile_trace_triangle \
 	profile_tree \
 	profile_tree_gadget \
 	profile_tree_triangle

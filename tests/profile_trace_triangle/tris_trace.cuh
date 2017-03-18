@@ -2,9 +2,11 @@
 
 #include "triangle.cuh"
 
+#include "grace/aabb.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/util/bound_iter.cuh"
+#include "grace/generic/boundedptr.h"
 
 #include <thrust/device_vector.h>
 
@@ -25,11 +27,10 @@ struct RayIntersect_tri
      * cannot optimize the register usage here or within intersect() in the
      * context of the calling kernel.
      */
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ bool operator()(
         const grace::Ray& ray, const Triangle& tri,
         RayData_tri& ray_data, const int /*lane*/,
-        const grace::gpu::BoundIter<char> /*sm_iter*/) const
+        const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         float t;
         bool hit = false;
@@ -50,11 +51,10 @@ struct RayIntersect_tri
 
 struct OnHit_tri
 {
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray&,
                                RayData_tri& ray_data, const int tri_idx,
                                const Triangle&, const int /*lane*/,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         ray_data.data = tri_idx;
     }
@@ -62,20 +62,22 @@ struct OnHit_tri
 
 struct RayEntry_tri
 {
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray& ray,
                                RayData_tri& ray_data,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         ray_data.data = -1;
-        ray_data.t_min = ray.length * (1.f + AABB_EPSILON);
+        ray_data.t_min = ray.end * (1.f + AABB_EPSILON);
     }
 };
 
 void setup_cameras(
-    const float3 bots, const float3 tops, const float FOVy_degrees,
+    const grace::AABB<float> aabb,
+    const float FOVy_degrees,
     const int resolution_x, const int resolution_y,
-    std::vector<float3>& camera_positions, float3* look_at, float3* view_up,
+    std::vector<grace::Vector<3, float> >& camera_positions,
+    grace::Vector<3, float>* look_at,
+    grace::Vector<3, float>* view_up,
     float* FOVy_radians, float* ray_length);
 
 void trace_closest_tri(

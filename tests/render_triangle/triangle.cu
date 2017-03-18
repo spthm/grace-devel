@@ -1,35 +1,35 @@
 #include "triangle.cuh"
 
 __host__ __device__ void TriangleAABB::operator()(
-    const Triangle& tri, float3* bot, float3* top) const
+    const Triangle& tri, grace::AABB<float>* aabb) const
 {
-    float3 v0 = tri.v;
-    float3 v1 = v0 + tri.e1;
-    float3 v2 = v0 + tri.e2;
+    grace::Vector<3, float> v0 = tri.v;
+    grace::Vector<3, float> v1 = v0 + tri.e1;
+    grace::Vector<3, float> v2 = v0 + tri.e2;
 
-    bot->x = min(v0.x, min(v1.x, v2.x));
-    bot->y = min(v0.y, min(v1.y, v2.y));
-    bot->z = min(v0.z, min(v1.z, v2.z));
+    aabb->min.x = min(v0.x, min(v1.x, v2.x));
+    aabb->min.y = min(v0.y, min(v1.y, v2.y));
+    aabb->min.z = min(v0.z, min(v1.z, v2.z));
 
-    top->x = max(v0.x, max(v1.x, v2.x));
-    top->y = max(v0.y, max(v1.y, v2.y));
-    top->z = max(v0.z, max(v1.z, v2.z));
+    aabb->max.x = max(v0.x, max(v1.x, v2.x));
+    aabb->max.y = max(v0.y, max(v1.y, v2.y));
+    aabb->max.z = max(v0.z, max(v1.z, v2.z));
 
     // Some PLY files contain triangles which are zero-sized in one or more
     // dimensions, but GRACE is not robust to zero-sized AABBs.
-    if (bot->x == top->x) {
-        float scale = abs(bot->x);
-        bot->x -= AABB_EPSILON * scale;
-        top->x += AABB_EPSILON * scale;
+    if (aabb->min.x == aabb->max.x) {
+        float scale = abs(aabb->min.x);
+        aabb->min.x -= AABB_EPSILON * scale;
+        aabb->max.x += AABB_EPSILON * scale;
     }
-    if (bot->y == top->y) {
-        float scale = abs(bot->y);
-        bot->y -= AABB_EPSILON * scale;
-        top->y += AABB_EPSILON * scale;
+    if (aabb->min.y == aabb->max.y) {
+        float scale = abs(aabb->min.y);
+        aabb->min.y -= AABB_EPSILON * scale;
+        aabb->max.y += AABB_EPSILON * scale;
     }
-    if (bot->z == top->z) {
-        float scale = abs(bot->z);
-        bot->z -= AABB_EPSILON * scale;
-        top->z += AABB_EPSILON * scale;
+    if (aabb->min.z == aabb->max.z) {
+        float scale = abs(aabb->min.z);
+        aabb->min.z -= AABB_EPSILON * scale;
+        aabb->max.z += AABB_EPSILON * scale;
     }
 }

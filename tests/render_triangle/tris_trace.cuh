@@ -2,9 +2,11 @@
 
 #include "triangle.cuh"
 
+#include "grace/aabb.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/util/bound_iter.cuh"
+#include "grace/generic/boundedptr.h"
 
 #include <thrust/device_vector.h>
 
@@ -34,11 +36,10 @@ struct RayIntersect_tri
      * cannot optimize the register usage here or within intersect() in the
      * context of the calling kernel.
      */
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ bool operator()(
         const grace::Ray& ray, const Triangle& tri,
         RayData_tri& ray_data, const int /*lane*/,
-        const grace::gpu::BoundIter<char> /*sm_iter*/) const
+        const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         float t;
         bool hit = false;
@@ -59,11 +60,10 @@ struct RayIntersect_tri
 
 struct OnHit_tri
 {
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray&,
                                RayData_tri& ray_data, const int tri_idx,
                                const Triangle&, const int /*lane*/,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         ray_data.hit_idx = tri_idx;
     }
@@ -71,13 +71,12 @@ struct OnHit_tri
 
 struct RayEntry_tri
 {
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int /*ray_idx*/, const grace::Ray& ray,
                                RayData_tri& ray_data,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         ray_data.hit_idx = -1;
-        ray_data.t_min = ray.length * (1.f + AABB_EPSILON);
+        ray_data.t_min = ray.end * (1.f + AABB_EPSILON);
     }
 };
 
@@ -89,10 +88,9 @@ private:
 public:
     PrimaryRayExit_tri(PrimaryRayResult* const store) : store(store) {}
 
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int ray_idx, const grace::Ray& ray,
                                RayData_tri& ray_data,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         store[ray_idx].idx = ray_data.hit_idx;
         store[ray_idx].t_min = ray_data.t_min;
@@ -107,10 +105,9 @@ private:
 public:
     ShadowRayExit_tri(ShadowRayResult* const store) : store(store) {}
 
-    // grace::gpu::BoundIter is not callable on the host.
     __device__ void operator()(const int ray_idx, const grace::Ray& ray,
                                RayData_tri& ray_data,
-                               const grace::gpu::BoundIter<char> /*smem_iter*/) const
+                               const grace::BoundedPtr<char> /*smem_ptr*/) const
     {
         store[ray_idx].idx = ray_data.hit_idx;
     }
@@ -118,7 +115,7 @@ public:
 
 void generate_shadow_rays(
     const int light_index,
-    const thrust::device_vector<float3>& d_lights_pos,
+    const thrust::device_vector<grace::Vector<3, float> >& d_lights_pos,
     const thrust::device_vector<grace::Ray>& d_primary_rays,
     const thrust::device_vector<PrimaryRayResult>& d_primary_results,
     thrust::device_vector<grace::Ray>& d_shadow_rays);

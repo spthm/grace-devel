@@ -4,13 +4,14 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/types.h"
 #include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/nodes.h"
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"
 #include "grace/sphere.h"
+#include "grace/types.h"
+#include "grace/vector.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/read_gadget.cuh"
 
@@ -81,7 +82,7 @@ int main(int argc, char* argv[])
         timer.start();
 
         thrust::device_vector<SphereType> d_spheres = h_spheres;
-        thrust::device_vector<float3> d_centroids(N);
+        thrust::device_vector<grace::Vector<3, float> > d_centroids(N);
         thrust::device_vector<grace::uinteger32> d_keys(N);
         thrust::device_vector<float> d_deltas(N + 1);
         grace::Tree d_tree(N, max_per_leaf);
@@ -89,17 +90,19 @@ int main(int argc, char* argv[])
         // Don't include above memory allocations in t_morton.
         timer.split();
 
-        grace::AABB::compute_centroids(
+        grace::detail::compute_centroids(
             thrust::raw_pointer_cast(d_spheres.data()),
             N,
             thrust::raw_pointer_cast(d_centroids.data()),
-            grace::CentroidSphere());
-        float3 bots, tops;
-        grace::min_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &bots);
-        grace::max_vec3(thrust::raw_pointer_cast(d_centroids.data()), N, &tops);
+            grace::CentroidSphere<float>());
+        grace::AABB<float> aabb;
+        grace::min_vec3(thrust::raw_pointer_cast(d_centroids.data()), N,
+                        &(aabb.min));
+        grace::max_vec3(thrust::raw_pointer_cast(d_centroids.data()), N,
+                        &(aabb.max));
         if (i >= 0) t_bounds += timer.split();
 
-        grace::morton_keys_sph(d_spheres, bots, tops, d_keys);
+        grace::morton_keys_sph(d_spheres, aabb, d_keys);
         if (i >= 0) t_morton += timer.split();
 
         thrust::sort_by_key(d_keys.begin(), d_keys.end(),

@@ -9,8 +9,10 @@
 #include "tris_render.cuh"
 
 #include "grace/cuda/nodes.h"
-#include "grace/cuda/gen_rays.cuh"
+#include "grace/cuda/generate_rays.cuh"
+#include "grace/aabb.h"
 #include "grace/ray.h"
+#include "grace/vector.h"
 #include "helper/images.hpp"
 
 #include <thrust/device_vector.h>
@@ -70,23 +72,22 @@ int main(int argc, char* argv[])
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<float> d_pixels(N_rays);
-    thrust::device_vector<float3> d_lights_pos;
+    thrust::device_vector<grace::Vector<3, float> > d_lights_pos;
     thrust::device_vector<float> d_shaded_tris;
     grace::Tree d_tree(N, max_per_leaf);
 
-    float3 bots, tops;
-    build_tree_tris(d_tris, d_tree, &bots, &tops);
-    setup_lights(bots, tops, d_lights_pos);
+    grace::AABB<float> aabb;
+    build_tree_tris(d_tris, d_tree, &aabb);
+    setup_lights(aabb, d_lights_pos);
 
-    float3 camera_position, look_at, view_up;
+    grace::Vector<3, float> camera_position, look_at, view_up;
     float FOVy_degrees, FOVy_radians, ray_length;
     FOVy_degrees = 50.f;
-    setup_camera(bots, tops, FOVy_degrees, N_per_side, N_per_side,
+    setup_camera(aabb, FOVy_degrees, N_per_side, N_per_side,
                  &camera_position, &look_at, &view_up,
                  &FOVy_radians, &ray_length);
-    pinhole_camera_rays(d_rays, N_per_side, N_per_side,
-                        camera_position, look_at, view_up, FOVy_radians,
-                        ray_length);
+    pinhole_camera_rays(camera_position, look_at, view_up, FOVy_radians,
+                        ray_length, N_per_side, N_per_side, d_rays);
 
     shade_triangles(d_tris, d_lights_pos, d_shaded_tris);
     render(d_rays, d_tris, d_tree, d_lights_pos, d_shaded_tris, d_pixels);

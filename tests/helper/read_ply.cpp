@@ -156,9 +156,9 @@ int read_triangles(const std::string& ply_fname,
         PLYVertex v2 = vlist[face.vertex_indices[1]];
         PLYVertex v3 = vlist[face.vertex_indices[2]];
 
-        tri.v1 = make_float3(v1.x, v1.y, v1.z);
-        tri.v2 = make_float3(v2.x, v2.y, v2.z);
-        tri.v3 = make_float3(v3.x, v3.y, v3.z);
+        tri.v1 = grace::Vector<3, float>(v1.x, v1.y, v1.z);
+        tri.v2 = grace::Vector<3, float>(v2.x, v2.y, v2.z);
+        tri.v3 = grace::Vector<3, float>(v3.x, v3.y, v3.z);
 
         tris[i] = tri;
     }

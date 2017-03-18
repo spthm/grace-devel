@@ -112,7 +112,7 @@ GRACE_HOST void morton_keys(
     const int span = CHAR_BIT * sizeof(KeyType) > 32 ? MAX_KEY_63 : MAX_KEY_30;
     Vector<3, Real> scale = (Real)(span) / aabb.size();
 
-    morton::morton_keys(d_prims_iter, N_primitives, AABB_bot, scale,
+    morton::morton_keys(d_prims_iter, N_primitives, aabb.min, scale,
                         d_keys_iter, centroid);
 }
 

@@ -396,7 +396,8 @@ __global__ void perspective_projection_rays_kernel(
         ray.ox = camera_position.x;
         ray.oy = camera_position.y;
         ray.oz = camera_position.z;
-        ray.length = length;
+        ray.start = 0;
+        ray.end = length;
 
         rays[tid] = ray;
     }
@@ -610,8 +611,9 @@ GRACE_HOST void orthographic_projection_rays(
 
     // Do this here once rather than by each thread in the kernel.
     // Halved because kernel generates image plane x, y co-ordinates in (-1, 1).
-    v *= horizontal_extent / 2.;
-    u *= vertical_extent / 2.;
+    Real two = 2.;
+    v *= horizontal_extent / two;
+    u *= vertical_extent / two;
 
     const int num_blocks = std::min(grace::MAX_BLOCKS,
                                (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
@@ -669,6 +671,9 @@ GRACE_HOST void pinhole_camera_rays(
     Real n_prefactor = 1. / std::tan(FOVy / 2.);
     n *= n_prefactor;
 
+    const int num_blocks = std::min(grace::MAX_BLOCKS,
+                               (int) ((N_rays + RAYS_THREADS_PER_BLOCK - 1)
+                                       / RAYS_THREADS_PER_BLOCK));
     perspective_projection_rays_kernel<<<num_blocks, RAYS_THREADS_PER_BLOCK>>>(
         resolution_x,
         resolution_y,

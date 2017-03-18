@@ -10,26 +10,29 @@
 #include <thrust/sort.h>
 
 template <typename T>
-GRACE_HOST Vector<3, T> box_center(const grace::Sphere<T> mins,
-                                   const grace::Sphere<T> maxs)
+GRACE_HOST grace::Vector<3, T> box_center(const grace::Sphere<T> mins,
+                                          const grace::Sphere<T> maxs)
 {
-    Vector<3, T> center = (mins.center() + maxs.center()) / 2.;
+    T two = 2;
+    grace::Vector<3, T> center = (mins.center() + maxs.center()) / two;
     return center;
 }
 
 template <typename T>
-GRACE_HOST Vector<3, T> box_span(const grace::Sphere<T> mins,
-                                 const grace::Sphere<T> maxs)
+GRACE_HOST grace::Vector<3, T> box_span(const grace::Sphere<T> mins,
+                                        const grace::Sphere<T> maxs)
 {
     // maxs.r == padding beyond bounds (e.g. maximum SPH radius).
     // Offset x, y and z on all sides by this value to avoid clipping (e.g. of
     // SPH particle volumes).
-    Vector<3, T> span = maxs.center() - mins.center() + 2. * maxs.r;
+    T two = 2;
+    grace::Vector<3, T> span = maxs.center() - mins.center() + two * maxs.r;
     return span;
 }
 
 template <typename T>
-GRACE_HOST float per_ray_area(const Vector<3, T> span, const size_t N_side)
+GRACE_HOST float per_ray_area(const grace::Vector<3, T> span,
+                              const size_t N_side)
 {
     const float cell_x = span.x / N_side;
     const float cell_y = span.y / N_side;
@@ -61,8 +64,8 @@ GRACE_HOST void orthogonal_rays_z(
     thrust::device_vector<grace::Ray>& d_rays,
     float* area = NULL)
 {
-    Vector<3, T> center = box_center(mins, maxs);
-    Vector<3, T> span = box_span(mins, maxs);
+    grace::Vector<3, T> center = box_center(mins, maxs);
+    grace::Vector<3, T> span = box_span(mins, maxs);
     // Maintain square aspect ratio, but contain everything in bounds.
     if (span.x > span.y) { span.y = span.x; }
     else if (span.y > span.x) { span.x = span.y; }
@@ -71,14 +74,14 @@ GRACE_HOST void orthogonal_rays_z(
         *area = per_ray_area(span, N_side);
     }
 
-    Vector<3, T> camera_position(center.x, center.y, span.z);
-    Vector<3, T> look_at = center;
-    Vector<3, T> view_direction(0.f, 0.f, -1.f);
-    Vector<3, T> view_up(0.f, 1.f, 0.f);
+    grace::Vector<3, T> camera_position(center.x, center.y, span.z);
+    grace::Vector<3, T> look_at = center;
+    grace::Vector<3, T> view_direction(0.f, 0.f, -1.f);
+    grace::Vector<3, T> view_up(0.f, 1.f, 0.f);
     float length = 2 * span.z;
 
-    grace::orthographic_projection_rays(camera_position, look_at, view_up, span.y,
-                                        length, N_side, N_side, d_rays);
+    grace::orthographic_projection_rays(camera_position, look_at, view_up,
+                                        span.y, length, N_side, N_side, d_rays);
 }
 
 // Generates semi-randomized plane-parallel rays in the +z direction, covering
@@ -93,14 +96,14 @@ void plane_parallel_rays_z(const size_t N_side,
                            thrust::device_vector<grace::Ray>& d_rays,
                            float* area = NULL)
 {
-    Vector<3, T> span = box_span(mins, maxs);
+    grace::Vector<3, T> span = box_span(mins, maxs);
 
-    Vector<3, T> base(mins.x - maxs.r, // start in top-left for images
-                      maxs.y + maxs.r, // start in top-left for images
-                      maxs.z + maxs.r);
+    grace::Vector<3, T> base(mins.x - maxs.r, // start in top-left for images
+                             maxs.y + maxs.r, // start in top-left for images
+                             maxs.z + maxs.r);
     // Ray direction is cross(w, h) = -z.
-    Vector<3, T> w(span.x, 0.f, 0.f);  // start in top-left for images
-    Vector<3, T> h(0.f, -span.y, 0.f); // start in top-left for images
+    grace::Vector<3, T> w(span.x, 0.f, 0.f);  // start in top-left for images
+    grace::Vector<3, T> h(0.f, -span.y, 0.f); // start in top-left for images
 
     float length = 2 * span.z;
 
