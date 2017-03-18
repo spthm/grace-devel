@@ -26,8 +26,8 @@ public:
     typedef StateT state_type;
 
 private:
-    state_type* const _states;
-    const size_t _num_states;
+    state_type* const states_;
+    const size_t num_states_;
 
     GRACE_HOST RngDeviceStates(state_type* const states,
                                const size_t num_states);
@@ -41,11 +41,8 @@ public:
     friend class RngStates<StateT>;
 };
 
-// A class to initialize states on the current device, or, if provided,
-// any device. The target device cannot be modified after initialization.
+// A class to initialize states on the current device.
 // Resource allocation happens at initialization, and only at initialization.
-// All state initialization always occurs on the original device; the current
-// device is _temporarily_ set to the RngStates' device if necessary.
 template <typename StateT>
 class RngStates : private detail::NonCopyable<RngStates<StateT> >
 {
@@ -53,11 +50,10 @@ public:
     typedef StateT state_type;
 
 private:
-    state_type* _states;
-    size_t _num_states;
-    unsigned long long _seed;
-    int _device_id;
-    const static int _block_size;
+    state_type* states_;
+    size_t num_states_;
+    unsigned long long seed_;
+    const static int block_size_;
 
 public:
     // Note explicit to prevent implicit type conversion using single-argument
@@ -72,17 +68,9 @@ public:
     GRACE_HOST explicit RngStates(const unsigned long long seed = 123456789);
 
     GRACE_HOST explicit RngStates(const size_t num_states,
-                                  const unsigned long long seed = 123456789);
-
-    GRACE_HOST explicit RngStates(const int device_id,
-                                  const unsigned long long seed = 123456789);
-
-    GRACE_HOST RngStates(const int device_id, const size_t num_states,
-                         const unsigned long long seed = 123456789);
+                                  const unsigned long long seed);
 
     GRACE_HOST ~RngStates();
-
-    GRACE_HOST int device() const;
 
     GRACE_HOST void init_states();
 
@@ -100,8 +88,6 @@ public:
 
 private:
     GRACE_HOST void alloc_states();
-    GRACE_HOST int swap_device() const;
-    GRACE_HOST void unswap_device(const int device) const;
 };
 
 
