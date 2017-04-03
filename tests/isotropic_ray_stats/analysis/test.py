@@ -132,16 +132,6 @@ def print_W_result(confidence, data_dir):
     confidence - the confidence level of the test, in (0, 1).
     """
     _print_result('W', confidence, data_dir)
-    # ray_Ws, ref_Ws = _read_ray_ref_stats('W', data_dir)
-    # e, _ = read_acceptable_error('W', data_dir)
-
-    # print_overwrite("Performing noninferiority test for Rayleigh statistic...")
-    # noninf_W, W_test, W_crit = _noninferiority_result(ray_Ws, ref_Ws,
-    #                                                   confidence, e)
-    # print_overwrite_done()
-
-    # _print_noninferiority_result(noninf_W, W_test, W_crit, confidence,
-    #                              "Rayleigh-statistic")
 
 def print_An_result(confidence, data_dir):
     """
@@ -150,16 +140,6 @@ def print_An_result(confidence, data_dir):
     confidence - the confidence level of the test, in (0, 1).
     """
     _print_result('An', confidence, data_dir)
-    # ray_Ans, ref_Ans = _read_ray_ref_stats('An', data_dir)
-    # e, _ = read_acceptable_error('An', data_dir)
-
-    # print_overwrite("Performing noninferiority test for An statistic...")
-    # noninf_An, An_test, An_crit = _noninferiority_result(ray_Ans, ref_Ans,
-    #                                                      confidence, e)
-    # print_overwrite_done()
-
-    # _print_noninferiority_result(noninf_An, An_test, An_crit, confidence,
-    #                              "An-statistic")
 
 def print_Gn_result(confidence, data_dir):
     """
@@ -168,13 +148,3 @@ def print_Gn_result(confidence, data_dir):
     confidence - the confidence level of the test, in (0, 1).
     """
     _print_result('Gn', confidence, data_dir)
-    # ray_Gns, ref_Gns = _read_ray_ref_stats('Gn', data_dir)
-    # e, _ = read_acceptable_error('Gn', data_dir)
-
-    # print_overwrite("Performing noninferiority test for Gn statistic...")
-    # noninf_Gn, Gn_test, Gn_crit = _noninferiority_result(ray_Gns, ref_Gns,
-    #                                                      confidence, e)
-    # print_overwrite_done()
-
-    # _print_noninferiority_result(noninf_Gn, Gn_test, Gn_crit, confidence,
-    #                              "Gn-statistic")
