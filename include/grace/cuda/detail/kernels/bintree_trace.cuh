@@ -29,6 +29,124 @@ namespace grace {
 
 namespace gpu {
 
+template <typename Primitive, typename RayData, typename Intersection,
+          typename OnHit>
+GRACE_DEVICE
+void leaf_intersector(
+    const int4 leaf, const Primitive* const leaf_prims, const Ray& ray,
+    int ray_index, RayData& ray_data, Intersection intersect, OnHit on_hit,
+    const BoundedPtr<char>& sm_ptr_user)
+{
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+
+    for (int i = 0; i < leaf.y; ++i)
+    {
+        const Primitive prim = leaf_prims[i];
+        if (intersect(ray, prim, ray_data, lane, sm_ptr_user))
+        {
+            on_hit(ray_index, ray, ray_data, leaf.x + i, prim, lane,
+                   sm_ptr_user);
+        }
+    }
+}
+
+template <typename Primitive, typename RayData, typename Intersection,
+          typename OnHit>
+GRACE_DEVICE
+void leaf_intersector_rayloop_sm20(
+    const int4 leaf, const Primitive* const leaf_prims, const Ray* rays,
+    const int first_ray_index, RayData* rays_data, Intersection intersect,
+    OnHit on_hit, const BoundedPtr<char>& sm_ptr_user)
+{
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+
+    for (int i = lane; i < leaf.y; i += grace::WARP_SIZE)
+    {
+        const Primitive prim = leaf_prims[i];
+
+        for (int j = 0; j < grace::WARP_SIZE; ++j)
+        {
+            const Ray ray = rays[j];
+            RayData ray_data = rays_data[j];
+
+            bool hit = intersect(ray, prim, ray_data, lane, sm_ptr_user);
+            if (hit)
+            {
+                on_hit(first_ray_index + j, ray, ray_data, leaf.x + i, prim,
+                       lane, sm_ptr_user);
+            }
+
+            // There is an ambiguity for which ray data we update to.
+            // We choose the highest-valued lane's version.
+            int high_lane = grace::WARP_SIZE - __clz(__ballot(hit)) - 1;
+            GRACE_ASSERT(high_lane >= 0);
+            if (lane == high_lane)
+            {
+                rays_data[j] = ray_data;
+            }
+        }
+    }
+}
+
+template <typename Primitive, typename RayData, typename Intersection,
+          typename OnHit>
+GRACE_DEVICE
+void leaf_intersector_rayloop_sm30(
+    const int4 leaf, const Primitive* const leaf_prims, const Ray& ray,
+    const int first_ray_index, RayData* ray_data, Intersection intersect,
+    OnHit on_hit, const BoundedPtr<char>& sm_ptr_user)
+{
+    const int lane = threadIdx.x % grace::WARP_SIZE;
+
+    // All lanes have to hit the shfl_idx().
+    const int n = (leaf.y + grace::WARP_SIZE - 1) / grace::WARP_SIZE;
+    for (int k = 0; k < n; ++k)
+    {
+        const int i = lane + k * grace::WARP_SIZE;
+        Primitive prim;
+        if (i < leaf.y) prim = leaf_prims[i];
+
+        for (int j = 0; j < grace::WARP_SIZE; ++j)
+        {
+            const Ray ray_j = shfl_idx(ray, j);
+            RayData ray_data_j = shfl_idx(ray_data, j);
+
+            bool hit = false;
+            if (i < leaf.y)
+            {
+                hit = intersect(ray_j, prim, ray_data_j, lane, sm_ptr_user);
+                if (hit)
+                {
+                    on_hit(first_ray_index + j, ray_j, ray_data_j, leaf.x + i,
+                           prim, lane, sm_ptr_user);
+                }
+            }
+
+            // There is an ambiguity for which ray data we update to.
+            // We choose the highest-valued lane's version.
+            int high_lane = grace::WARP_SIZE - __clz(__ballot(hit)) - 1;
+            GRACE_ASSERT(high_lane >= 0);
+            // All lanes must take part.
+            ray_data_j = shfl_idx(ray_data_j, high_lane);
+            if (lane == j)
+            {
+                ray_data = ray_data_j;
+            }
+        }
+    }
+}
+
+template <typename T, typename U>
+GRACE_HOST_DEVICE T* align_ptr(U* ptr)
+{
+    char* ptr_c = (char*)ptr;
+    int rem = (uintptr_t)ptr_c % GRACE_ALIGNOF(T);
+    if (rem != 0) {
+        ptr_c += GRACE_ALIGNOF(T) - rem;
+    }
+    return reinterpret_cast<T*>(ptr_c);
+}
+
 //-----------------------------------------------------------------------------
 // Textures for tree access within trace kernels.
 //-----------------------------------------------------------------------------
@@ -45,6 +163,7 @@ texture<int4, cudaTextureType1D, cudaReadModeElementType> leaves_tex;
 // RayIter _may_ be a const Ray* or const_iterator<Ray>.
 // PrimitiveIter _may_ be a const TPrimitive* or const_iterator<TPrimitive>
 template <typename RayData,
+          LeafTraversal::E LTConfig,
           typename RayIter,
           typename PrimitiveIter,
           typename Init,
@@ -86,16 +205,39 @@ __global__ void trace_kernel(
     init(sm_iter_usr);
     __syncthreads();
 
+
     // Shared memory accesses must ensure correct alignment relative to the
     // access size.
-    char* sm_ptr = smem_trace + user_smem_bytes;
-    int rem = (uintptr_t)sm_ptr % sizeof(TPrimitive);
-    if (rem != 0) {
-        sm_ptr += sizeof(TPrimitive) - rem;
+    TPrimitive* sm_prims = align_ptr<TPrimitive>(smem_trace + user_smem_bytes);
+
+    int* sm_stacks;
+#if __CUDA_ARCH__ < 300
+    Ray* sm_rays;
+    RayData* sm_rays_data;
+
+    if (LTConfig == LeafTraversal::ParallelPrimitives)
+    {
+        sm_rays = align_ptr<Ray>(sm_prims + prims_smem_count);
+        sm_rays_data = align_ptr<RayData>(sm_rays + grace::WARP_SIZE * N_warps);
+        sm_stacks = align_ptr<int>(sm_rays_data + grace::WARP_SIZE * N_warps);
     }
-    TPrimitive* sm_prims = reinterpret_cast<TPrimitive*>(sm_ptr);
-    int* sm_stacks = reinterpret_cast<int*>(&sm_prims[prims_smem_count]);
+    else
+    {
+        sm_stacks = align_ptr<int>(sm_prims + prims_smem_count);
+    }
+#else
+    sm_stacks = align_ptr<int>(sm_prims + prims_smem_count);
+#endif
+
+    // This warp's offset.
     int* stack_ptr = sm_stacks + grace::STACK_SIZE * wid;
+    sm_prims += max_per_leaf * wid;
+#if __CUDA_ARCH__ < 300
+    if (LTConfig == LeafTraversal::ParallelPrimitives) {
+        sm_rays += grace::WARP_SIZE * wid;
+        sm_rays_data += grace::WARP_SIZE * wid;
+    }
+#endif
 
     // This is the exit sentinel. All threads in a ray packet (i.e. warp) write
     // to the same location to avoid any need for volatile declarations, or
@@ -107,6 +249,15 @@ __global__ void trace_kernel(
         // Ray must not be modified by user.
         const Ray ray = rays[ray_index];
         RayData ray_data = {};
+
+    #if __CUDA_ARCH__ < 300
+        if (LTConfig == LeafTraversal::ParallelPrimitives)
+        {
+            sm_rays[lane] = ray;
+            sm_rays_data[lane] = ray_data;
+        }
+    #endif
+
         ray_entry(ray_index, ray, ray_data, sm_iter_usr);
 
         float3 invd, origin;
@@ -178,17 +329,40 @@ __global__ void trace_kernel(
 
                 for (int i = lane; i < node.y; i += grace::WARP_SIZE)
                 {
-                    sm_prims[max_per_leaf * wid + i] = primitives[node.x + i];
+                    sm_prims[i] = primitives[node.x + i];
                 }
 
-                for (int i = 0; i < node.y; ++i)
+                if (LTConfig == LeafTraversal::ParallelRays)
                 {
-                    const TPrimitive prim = sm_prims[max_per_leaf * wid + i];
-                    if (intersect(ray, prim, ray_data, i, sm_iter_usr))
-                    {
-                        on_hit(ray_index, ray, ray_data, node.x + i, prim, i,
-                               sm_iter_usr);
-                    }
+                    leaf_intersector(node, sm_prims, ray, ray_index, ray_data,
+                                     intersect, on_hit, sm_iter_usr);
+                }
+                else if (LTConfig == LeafTraversal::ParallelPrimitives)
+                {
+                    int first_ray_index = ray_index - lane;
+                #if __CUDA_ARCH__ < 300
+                    leaf_intersector_rayloop_sm20(node,
+                                                  sm_prims,
+                                                  sm_rays,
+                                                  first_ray_index,
+                                                  sm_rays_data,
+                                                  intersect,
+                                                  on_hit,
+                                                  sm_iter_usr);
+                #else
+                    leaf_intersector_rayloop_sm30(node,
+                                                  sm_prims,
+                                                  ray,
+                                                  first_ray_index,
+                                                  ray_data,
+                                                  intersect,
+                                                  on_hit,
+                                                  sm_iter_usr);
+                #endif
+                }
+                else
+                {
+                    GRACE_ASSERT(false);
                 }
             }
         }
@@ -207,6 +381,7 @@ __global__ void trace_kernel(
 // PrimitiveIter _may_ be a const TPrimitive* or const_iterator<TPrimitive>
 // Both must be dereferencable on the device.
 template <typename RayData,
+          LeafTraversal::E LTConfig,
           typename RayIter,
           typename PrimitiveIter,
           typename Init,
@@ -261,7 +436,7 @@ GRACE_HOST void trace(
                            + sizeof(int) * grace::STACK_SIZE * N_warps
                            + user_smem_bytes;
 
-    gpu::trace_kernel<RayData><<<blocks, NT, sm_size>>>(
+    gpu::trace_kernel<RayData, LTConfig><<<blocks, NT, sm_size>>>(
         d_rays_iter,
         N_rays,
         reinterpret_cast<const float4*>(
@@ -285,6 +460,7 @@ GRACE_HOST void trace(
 }
 
 template <typename RayData,
+          LeafTraversal::E LTConfig,
           typename TPrimitive,
           typename Init,
           typename Intersection, typename OnHit,
@@ -303,15 +479,16 @@ GRACE_HOST void trace(
     const Ray* d_rays_iter = thrust::raw_pointer_cast(d_rays.data());
     const TPrimitive* d_prims_iter = thrust::raw_pointer_cast(d_primitives.data());
 
-    trace<RayData>(d_rays_iter, d_rays.size(), d_prims_iter,
-                   d_primitives.size(), d_tree, user_smem_bytes, init,
-                   intersect, on_hit, ray_entry, ray_exit);
+    trace<RayData, LTConfig>(d_rays_iter, d_rays.size(), d_prims_iter,
+                             d_primitives.size(), d_tree, user_smem_bytes, init,
+                             intersect, on_hit, ray_entry, ray_exit);
 }
 
 // Reads the primitives through the texture cache.
 // RayIter _may_ be a const Ray* or const_iterator<Ray>. It must be
 // dereferencable on the device.
 template <typename RayData,
+          LeafTraversal::E LTConfig,
           typename RayIter,
           typename TPrimitive,
           typename Init,
@@ -336,14 +513,15 @@ GRACE_HOST void trace_texref(
         = prims_iter.bind(d_primitives, N_primitives * sizeof(TPrimitive));
     GRACE_CUDA_CHECK(cuerr);
 
-    trace<RayData>(d_rays_iter, N_rays, prims_iter, N_primitives, d_tree,
-                   user_smem_bytes, init, intersect, on_hit, ray_entry,
-                   ray_exit);
+    trace<RayData, LTConfig>(d_rays_iter, N_rays, prims_iter, N_primitives,
+                             d_tree, user_smem_bytes, init, intersect, on_hit,
+                             ray_entry, ray_exit);
 
     GRACE_CUDA_CHECK(prims_iter.unbind());
 }
 
 template <typename RayData,
+          LeafTraversal::E LTConfig,
           typename TPrimitive,
           typename Init,
           typename Intersection, typename OnHit,
@@ -362,9 +540,10 @@ GRACE_HOST void trace_texref(
     const TPrimitive* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const Ray* rays_ptr = thrust::raw_pointer_cast(d_rays.data());
 
-    trace_texref<RayData>(rays_ptr, d_rays.size(), prims_ptr,
-                          d_primitives.size(), d_tree, user_smem_bytes, init,
-                          intersect, on_hit, ray_entry, ray_exit);
+    trace_texref<RayData, LTConfig>(rays_ptr, d_rays.size(), prims_ptr,
+                                    d_primitives.size(), d_tree,
+                                    user_smem_bytes, init, intersect, on_hit,
+                                    ray_entry, ray_exit);
 }
 
 } // namespace grace

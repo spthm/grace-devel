@@ -68,7 +68,7 @@ GRACE_HOST void trace_hitcounts_sph(
     // Defines only RayData.data, of type int.
     typedef RayData_datum<int> RayData;
 
-    trace_texref<RayData>(
+    trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
         d_spheres,
         d_tree,
@@ -98,7 +98,7 @@ GRACE_HOST void trace_cumulative_sph(
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
     typedef RayData_sphere<OutType, OutType> RayData;
-    trace_texref<RayData>(
+    trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
         d_spheres,
         d_tree,
@@ -155,7 +155,7 @@ GRACE_HOST void trace_sph(
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
     typedef RayData_sphere<int, OutType> RayData;
-    trace_texref<RayData>(
+    trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
         d_tree,
@@ -230,7 +230,7 @@ GRACE_HOST void trace_with_sentinels_sph(
     thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
 
     typedef RayData_sphere<int, OutType> RayData;
-    trace_texref<RayData>(
+    trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
         d_tree,
