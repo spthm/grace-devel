@@ -33,7 +33,7 @@ template <typename Primitive, typename RayData, typename Intersection,
           typename OnHit>
 GRACE_DEVICE
 void leaf_intersector(
-    const int4 leaf, const Primitive* const leaf_prims, const Ray& ray,
+    const int4& leaf, const Primitive* const leaf_prims, const Ray& ray,
     int ray_index, RayData& ray_data, Intersection intersect, OnHit on_hit,
     const BoundedPtr<char>& sm_ptr_user)
 {
@@ -54,7 +54,7 @@ template <typename Primitive, typename RayData, typename Intersection,
           typename OnHit>
 GRACE_DEVICE
 void leaf_intersector_rayloop_sm20(
-    const int4 leaf, const Primitive* const leaf_prims, const Ray* rays,
+    const int4& leaf, const Primitive* const leaf_prims, const Ray* rays,
     const int first_ray_index, RayData* rays_data, Intersection intersect,
     OnHit on_hit, const BoundedPtr<char>& sm_ptr_user)
 {
@@ -92,8 +92,8 @@ template <typename Primitive, typename RayData, typename Intersection,
           typename OnHit>
 GRACE_DEVICE
 void leaf_intersector_rayloop_sm30(
-    const int4 leaf, const Primitive* const leaf_prims, const Ray& ray,
-    const int first_ray_index, RayData* ray_data, Intersection intersect,
+    const int4& leaf, const Primitive* const leaf_prims, const Ray& ray,
+    const int first_ray_index, RayData& ray_data, Intersection intersect,
     OnHit on_hit, const BoundedPtr<char>& sm_ptr_user)
 {
     const int lane = threadIdx.x % grace::WARP_SIZE;
