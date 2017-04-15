@@ -78,11 +78,16 @@ void leaf_intersector_rayloop_sm20(
 
             // There is an ambiguity for which ray data we update to.
             // We choose the highest-valued lane's version.
-            int high_lane = grace::WARP_SIZE - __clz(__ballot(hit)) - 1;
-            GRACE_ASSERT(high_lane >= 0);
-            if (lane == high_lane)
+            unsigned int hitbits = __ballot(hit);
+            if (hitbits)
             {
-                rays_data[j] = ray_data;
+                int high_lane = grace::WARP_SIZE - __clz(hitbits) - 1;
+                GRACE_ASSERT(high_lane >= 0);
+                GRACE_ASSERT(high_lane < grace::WARP_SIZE);
+                if (lane == high_lane)
+                {
+                    rays_data[j] = ray_data;
+                }
             }
         }
     }
@@ -124,13 +129,18 @@ void leaf_intersector_rayloop_sm30(
 
             // There is an ambiguity for which ray data we update to.
             // We choose the highest-valued lane's version.
-            int high_lane = grace::WARP_SIZE - __clz(__ballot(hit)) - 1;
-            GRACE_ASSERT(high_lane >= 0);
-            // All lanes must take part.
-            ray_data_j = shfl_idx(ray_data_j, high_lane);
-            if (lane == j)
+            unsigned int hitbits = __ballot(hit);
+            if (hitbits)
             {
-                ray_data = ray_data_j;
+                int high_lane = grace::WARP_SIZE - __clz(hitbits) - 1;
+                GRACE_ASSERT(high_lane >= 0);
+                GRACE_ASSERT(high_lane < grace::WARP_SIZE);
+                // All lanes must take part.
+                ray_data_j = shfl_idx(ray_data_j, high_lane);
+                if (lane == j)
+                {
+                    ray_data = ray_data_j;
+                }
             }
         }
     }

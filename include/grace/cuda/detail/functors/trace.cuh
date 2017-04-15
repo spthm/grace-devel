@@ -242,7 +242,8 @@ public:
         GRACE_ASSERT(integral >= 0);
         GRACE_ASSERT(ray_data.dist >= 0);
 
-        ray_data.data += offset;
+        // The highest-valued lane is the one whose ray_data is kept.
+        ray_data.data += offset + 1;
     }
 };
 
