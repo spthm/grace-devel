@@ -82,8 +82,7 @@ void leaf_intersector_rayloop_sm20(
             if (hitbits)
             {
                 int high_lane = grace::WARP_SIZE - __clz(hitbits) - 1;
-                GRACE_ASSERT(high_lane >= 0);
-                GRACE_ASSERT(high_lane < grace::WARP_SIZE);
+                GRACE_ASSERT(__popc(__ballot(lane == high_lane)) == 1);
                 if (lane == high_lane)
                 {
                     rays_data[j] = ray_data;
@@ -133,8 +132,7 @@ void leaf_intersector_rayloop_sm30(
             if (hitbits)
             {
                 int high_lane = grace::WARP_SIZE - __clz(hitbits) - 1;
-                GRACE_ASSERT(high_lane >= 0);
-                GRACE_ASSERT(high_lane < grace::WARP_SIZE);
+                GRACE_ASSERT(__popc(__ballot(lane == high_lane)) == 1);
                 // All lanes must take part.
                 ray_data_j = shfl_idx(ray_data_j, high_lane);
                 if (lane == j)
@@ -441,10 +439,24 @@ GRACE_HOST void trace(
     const int blocks = std::min((int)((N_rays + NT - 1) / NT),
                                 grace::MAX_BLOCKS);
     const size_t N_warps = grace::TRACE_THREADS_PER_BLOCK / grace::WARP_SIZE;
-    const size_t sm_size = sizeof(TPrimitive) * d_tree.max_per_leaf * N_warps
-                           + sizeof(TPrimitive) - 1 // For alignment correction.
-                           + sizeof(int) * grace::STACK_SIZE * N_warps
-                           + user_smem_bytes;
+    size_t sm_size = sizeof(TPrimitive) * d_tree.max_per_leaf * N_warps
+                     + GRACE_ALIGNOF(TPrimitive) - 1 // For alignment correction.
+                     + sizeof(int) * grace::STACK_SIZE * N_warps
+                     + user_smem_bytes;
+
+    if (LTConfig == LeafTraversal::ParallelPrimitives)
+    {
+        int device;
+        cudaDeviceProp prop;
+        cudaGetDevice(&device);
+        cudaGetDeviceProperties(&prop, device);
+        if (prop.major < 3) {
+            sm_size += sizeof(Ray) * grace::WARP_SIZE * N_warps;
+            sm_size += GRACE_ALIGNOF(Ray) - 1;
+            sm_size += sizeof(RayData) * grace::WARP_SIZE * N_warps;
+            sm_size += GRACE_ALIGNOF(RayData) - 1;
+        }
+    }
 
     gpu::trace_kernel<RayData, LTConfig><<<blocks, NT, sm_size>>>(
         d_rays_iter,
