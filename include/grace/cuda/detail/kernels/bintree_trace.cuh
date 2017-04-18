@@ -66,18 +66,18 @@ void leaf_intersector_rayloop_sm20(
 
         for (int j = 0; j < grace::WARP_SIZE; ++j)
         {
-            const Ray ray = rays[j];
-            RayData ray_data = rays_data[j];
+            const Ray ray_j = rays[j];
+            RayData ray_data_j = rays_data[j];
 
-            bool hit = intersect(ray, prim, ray_data, lane, sm_ptr_user);
+            bool hit = intersect(ray_j, prim, ray_data_j, lane, sm_ptr_user);
             if (hit)
             {
-                on_hit(first_ray_index + j, ray, ray_data, leaf.x + i, prim,
+                on_hit(first_ray_index + j, ray_j, ray_data_j, leaf.x + i, prim,
                        lane, sm_ptr_user);
             }
 
             // There is an ambiguity for which ray data we update to.
-            // We choose the highest-valued lane's version.
+            // We choose the highest-valued active lane's version.
             unsigned int hitbits = __ballot(hit);
             if (hitbits)
             {
@@ -85,7 +85,7 @@ void leaf_intersector_rayloop_sm20(
                 GRACE_ASSERT(__popc(__ballot(lane == high_lane)) == 1);
                 if (lane == high_lane)
                 {
-                    rays_data[j] = ray_data;
+                    rays_data[j] = ray_data_j;
                 }
             }
         }
@@ -127,7 +127,7 @@ void leaf_intersector_rayloop_sm30(
             }
 
             // There is an ambiguity for which ray data we update to.
-            // We choose the highest-valued lane's version.
+            // We choose the highest-valued active lane's version.
             unsigned int hitbits = __ballot(hit);
             if (hitbits)
             {
