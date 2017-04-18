@@ -258,6 +258,8 @@ __global__ void trace_kernel(
         const Ray ray = rays[ray_index];
         RayData ray_data = {};
 
+        ray_entry(ray_index, ray, ray_data, sm_iter_usr);
+
     #if __CUDA_ARCH__ < 300
         if (LTConfig == LeafTraversal::ParallelPrimitives)
         {
@@ -265,8 +267,6 @@ __global__ void trace_kernel(
             sm_rays_data[lane] = ray_data;
         }
     #endif
-
-        ray_entry(ray_index, ray, ray_data, sm_iter_usr);
 
         float3 invd, origin;
         invd.x = 1.f / ray.dx;
