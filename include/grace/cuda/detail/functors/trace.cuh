@@ -18,7 +18,7 @@ namespace grace {
 class Init_null
 {
 public:
-    GRACE_DEVICE void operator()(const BoundedPtr<char> /*smem_iter*/)
+    GRACE_DEVICE void operator()(const BoundedPtr<char>& /*smem_iter*/)
     {
         return;
     }
@@ -30,7 +30,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  const RayData&,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         return;
     }
@@ -53,7 +53,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  RayData& ray_data,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         ray_data.data = inits[ray_idx];
     }
@@ -74,7 +74,7 @@ public:
     template <typename RayData>
     GRACE_DEVICE void operator()(const int ray_idx, const Ray&,
                                  const RayData& ray_data,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         store[ray_idx] = ray_data.data;
     }
@@ -95,7 +95,7 @@ public:
     InitGlobalToSmem(const InType* const global_addr, const int count) :
         data_global(global_addr), count(count) {}
 
-    GRACE_DEVICE void operator()(const BoundedPtr<char> smem_iter)
+    GRACE_DEVICE void operator()(const BoundedPtr<char>& smem_iter)
     {
         // We *must* cast from the default pointer-to-char to the data type we
         // wish to store in shared memory for dereferencing and indexing
@@ -122,7 +122,7 @@ public:
     template <typename T, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  const RayData&, const int /*lane*/,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         PrecisionType dummy_b2, dummy_dist;
         return sphere_hit<PrecisionType>(ray, sphere, dummy_b2, dummy_dist);
@@ -137,7 +137,7 @@ public:
     template <typename T, typename RayData>
     GRACE_DEVICE bool operator()(const Ray& ray, const Sphere<T>& sphere,
                                  RayData& ray_data, const int /*lane*/,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         // Type of the b2, dist provided to sphere_hit must match the
         // PrecisionType template parameter.
@@ -159,7 +159,7 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*prim_idx*/,
                                  const TPrim&, const int /*lane*/,
-                                 const BoundedPtr<char> /*smem_iter*/)
+                                 const BoundedPtr<char>& /*smem_iter*/)
     {
         ++ray_data.data;
     }
@@ -179,7 +179,7 @@ public:
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int /*sphere_idx*/,
                                  const Sphere<T>& sphere, const int /*lane*/,
-                                 const BoundedPtr<char> smem_iter)
+                                 const BoundedPtr<char>& smem_iter)
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
@@ -217,8 +217,8 @@ public:
     template <typename RayData, typename T>
     GRACE_DEVICE void operator()(const int /*ray_idx*/, const Ray&,
                                  RayData& ray_data, const int sphere_idx,
-                                 const Sphere<T>& sphere, const int /*lane*/,
-                                 const BoundedPtr<char> smem_iter)
+                                 const Sphere<T>& sphere, const int lane,
+                                 const BoundedPtr<char>& smem_iter)
     {
         // For implementation simplicity, we do not template the type of the
         // kernel integral lookup table; it is always required to be double.
@@ -230,14 +230,20 @@ public:
         PrecisionType integral = lerp(b, Wk_lookup, N_table);
         integral *= (ir * ir);
 
-        indices[ray_data.data] = sphere_idx;
-        integrals[ray_data.data] = integral;
-        distances[ray_data.data] = ray_data.dist;
+        unsigned int hitbits = __ballot(true);
+        unsigned int mask = (1u << lane) - 1u;
+        int offset = __popc(mask & hitbits);
+        int out_idx = ray_data.data + offset;
+
+        indices[out_idx] = sphere_idx;
+        integrals[out_idx] = integral;
+        distances[out_idx] = ray_data.dist;
 
         GRACE_ASSERT(integral >= 0);
         GRACE_ASSERT(ray_data.dist >= 0);
 
-        ++ray_data.data;
+        // The highest-valued lane is the one whose ray_data is kept.
+        ray_data.data += offset + 1;
     }
 };
 

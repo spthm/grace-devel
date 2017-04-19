@@ -123,6 +123,17 @@ enum RaySortType {
     EndPointSort
 };
 
+// ParallelRays -> Multiple rays are tested, in parallel, against a single
+//                 primitive (default).
+// ParallelPrimitives -> Multiple primitives are tested, in parallel, against a
+//                       single ray. This has some overhead.
+struct LeafTraversal {
+    enum E {
+        ParallelRays,
+        ParallelPrimitives
+    };
+};
+
 } // namespace grace
 
 #include "grace/detail/math_shim.h"

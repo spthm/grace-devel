@@ -50,4 +50,27 @@ __device__ __forceinline__ float maxf_vminf(float f1, float f2, float f3) {
                                    __float_as_int(f3)));
 }
 
+// Return the 'in' stored in the register(s) of lane src_lane.
+template <typename T>
+__device__ __forceinline__ T shfl_idx(T in, int src_lane)
+{
+    // Probably, this actually can be done.
+    GRACE_STATIC_ASSERT(sizeof(T) % sizeof(int) == 0, "Type not representable as ints, cannot shuffle");
+
+    const int N = (sizeof(T) + sizeof(int) - 1) / sizeof(int);
+
+    T out;
+    int* in_ptr = reinterpret_cast<int*>(&in);
+    int* out_ptr = reinterpret_cast<int*>(&out);
+
+    #pragma unroll
+    for (int i = 0; i < N; ++i)
+    {
+        int tmp = __shfl(in_ptr[i], src_lane);
+        out_ptr[i] = tmp;
+    }
+
+    return out;
+}
+
 } // namespace grace

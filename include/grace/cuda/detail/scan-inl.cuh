@@ -8,6 +8,8 @@
 
 #include <thrust/device_vector.h>
 
+#include <memory>
+
 namespace grace {
 
 // d_data and d_results may be the same vector.
