@@ -1,10 +1,23 @@
 #include "eisemann.cuh"
+#include "auxillary.cuh"
+
+__host__ __device__ EisemannRayAuxillary eisemann_auxillary(const Ray& ray)
+{
+    EisemannRayAuxillary aux;
+
+    set_dclass(ray, aux);
+    set_slope(ray, aux);
+
+    return aux;
+}
 
 // NOTE: This is actually an incomplete implementation, because the ray slopes
 // method requires special handling any time a ray has a direction component
 // exactly equal to zero.
 
-__host__ __device__ int eisemann(const Ray& ray, const AABB& box)
+__host__ __device__ int eisemann(const Ray& ray,
+                                 const EisemannRayAuxillary& aux,
+                                 const AABB& box)
 {
     float ox = ray.ox;
     float oy = ray.oy;
@@ -17,18 +30,18 @@ __host__ __device__ int eisemann(const Ray& ray, const AABB& box)
     // Assume start == 0.
     float l = ray.end;
 
-    float xbyy = ray.xbyy;
-    float ybyx = ray.ybyx;
-    float ybyz = ray.ybyz;
-    float zbyy = ray.zbyy;
-    float xbyz = ray.xbyz;
-    float zbyx = ray.zbyx;
-    float c_xy = ray.c_xy;
-    float c_xz = ray.c_xz;
-    float c_yx = ray.c_yx;
-    float c_yz = ray.c_yz;
-    float c_zx = ray.c_zx;
-    float c_zy = ray.c_zy;
+    float xbyy = aux.xbyy;
+    float ybyx = aux.ybyx;
+    float ybyz = aux.ybyz;
+    float zbyy = aux.zbyy;
+    float xbyz = aux.xbyz;
+    float zbyx = aux.zbyx;
+    float c_xy = aux.c_xy;
+    float c_xz = aux.c_xz;
+    float c_yx = aux.c_yx;
+    float c_yz = aux.c_yz;
+    float c_zx = aux.c_zx;
+    float c_zy = aux.c_zy;
 
     float bx = box.bx;
     float by = box.by;
@@ -37,7 +50,7 @@ __host__ __device__ int eisemann(const Ray& ray, const AABB& box)
     float ty = box.ty;
     float tz = box.tz;
 
-    switch(ray.dclass) {
+    switch(aux.dclass) {
 
     case MMM:
 

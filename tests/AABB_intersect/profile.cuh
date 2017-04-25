@@ -18,6 +18,8 @@ __global__ void intersect_kernel(const Ray* rays, const AABB* boxes,
                                  const size_t N_AABBs,
                                  const Intersector intersector)
 {
+    typedef typename AuxillaryTraits<Intersector>::type AuxType;
+
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
 
     while (tid < N_rays)
@@ -25,13 +27,14 @@ __global__ void intersect_kernel(const Ray* rays, const AABB* boxes,
         // While its impact varies with the number of intersections per ray, it
         // still seems fairer to include any per-ray overhead in the
         // profiling results.
-        Ray ray = intersector.prepare(rays[tid]);
+        Ray ray = rays[tid];
+        AuxType aux = intersector.prepare(ray);
 
         int hit_count = 0;
         for (size_t i = 0; i < N_AABBs; ++i)
         {
             AABB box = boxes[i];
-            hit_count += intersector.intersect(ray, box);
+            hit_count += intersector.intersect(ray, aux, box);
         }
 
         hits[tid] = hit_count;
@@ -45,16 +48,19 @@ void intersect(const thrust::host_vector<Ray>& rays,
                thrust::host_vector<int>& hits,
                const Intersector intersector)
 {
+    typedef typename AuxillaryTraits<Intersector>::type AuxType;
+
     #pragma omp parallel for
     for (size_t i = 0; i < rays.size(); ++i)
     {
-        Ray ray = intersector.prepare(rays[i]);
+        Ray ray = rays[i];
+        AuxType aux = intersector.prepare(ray);
         int hit_count = 0;
 
         for (size_t j = 0; j < boxes.size(); ++j)
         {
             AABB box = boxes[j];
-            hit_count += intersector.intersect(ray, box);
+            hit_count += intersector.intersect(ray, aux, box);
         }
 
         hits[i] = hit_count;

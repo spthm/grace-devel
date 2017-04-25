@@ -1,6 +1,18 @@
 #include "plucker.cuh"
+#include "auxillary.cuh"
 
-__host__ __device__ int plucker(const Ray& ray, const AABB& box)
+__host__ __device__ PluckerRayAuxillary plucker_auxillary(const Ray& ray)
+{
+    PluckerRayAuxillary aux;
+
+    set_dclass(ray, aux);
+
+    return aux;
+}
+
+__host__ __device__ int plucker(const Ray& ray,
+                                const PluckerRayAuxillary& aux,
+                                const AABB& box)
 {
     float dx = ray.dx;
     float dy = ray.dy;
@@ -26,7 +38,7 @@ __host__ __device__ int plucker(const Ray& ray, const AABB& box)
     o2ty = ty - ray.oy;
     o2tz = tz - ray.oz;
 
-    switch(ray.dclass) {
+    switch(aux.dclass) {
 
     case MMM:
 

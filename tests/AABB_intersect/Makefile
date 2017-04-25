@@ -11,7 +11,7 @@ eisemann.o \
 plucker.o \
 williams.o
 
-NVCCDEPS += profile.cuh intersectors.cuh
+NVCCDEPS += auxillary.cuh intersectors.cuh profile.cuh
 
 # _FORCE_INLINES is required to succesfully compile AABB.cu when using newer
 # versions of gcc (seemingly 4.9+).
