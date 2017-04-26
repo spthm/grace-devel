@@ -22,6 +22,7 @@ INTEGRATION_TEST_DIRS = segmented_scan \
 DUMP_DIRS = project_gadget render_triangle hitcounts
 
 PROFILE_DIRS = AABB_intersect \
+	benchmark_rngs \
 	profile_one_to_many_rays_gadget \
 	profile_project_gadget \
 	profile_trace_gadget \
