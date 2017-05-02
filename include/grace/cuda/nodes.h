@@ -55,6 +55,11 @@ public:
     {
         GRACE_CUDA_CHECK(cudaFree(root_index_ptr));
     }
+
+    size_t size() const
+    {
+        return leaves.size();
+    }
 };
 
 class H_Tree
@@ -68,6 +73,23 @@ public:
     H_Tree(size_t N_leaves, int _max_per_leaf = 1) :
         nodes(4*(N_leaves-1)), leaves(N_leaves), root_index(0),
         max_per_leaf(max_per_leaf) {}
+
+    H_Tree(const Tree& d_tree)
+    {
+        nodes = d_tree.nodes;
+        leaves = d_tree.leaves;
+        max_per_leaf = d_tree.max_per_leaf;
+
+        GRACE_CUDA_CHECK(cudaMemcpy((void*)&root_index,
+                                    (void*)d_tree.root_index_ptr,
+                                    sizeof(int),
+                                    cudaMemcpyDeviceToHost));
+    }
+
+    size_t size() const
+    {
+        return leaves.size();
+    }
 };
 
 
