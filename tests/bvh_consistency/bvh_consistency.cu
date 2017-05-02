@@ -67,7 +67,7 @@ int main(int argc, char* argv[])
 
     thrust::host_vector<int> parent_flags(N_nodes);
     thrust::host_vector<int> child_flags(N_nodes + N_leaves);
-    size_t N_particles_covered = 0;
+    thrust::host_vector<int> particle_flags(N);
 
     for (size_t ni = 0; ni < N_nodes; ++ni)
     {
@@ -83,12 +83,17 @@ int main(int argc, char* argv[])
     for (size_t li = 0; li < N_leaves; ++li)
     {
         int4 leaf = h_tree.leaves[li];
+        int first = leaf.x;
         int size = leaf.y;
 
-        N_particles_covered += size;
+        for (int pi = first; pi < first + size; ++pi)
+        {
+            particle_flags[pi] += 1;
+        }
     }
 
     size_t failures = 0;
+
     for (size_t ni = 0; ni < parent_flags.size(); ++ni)
     {
         int flag = parent_flags[ni];
@@ -102,17 +107,29 @@ int main(int argc, char* argv[])
     for (size_t ci = 0; ci < child_flags.size(); ++ci)
     {
         int flag = child_flags[ci];
-        if (flag != 1 && ci != h_tree.root_index) {
+
+        if (ci == h_tree.root_index && flag != 0)
+        {
+            std::cout << "Error: child count @ root " << ci << " = " << flag
+                      << std::endl;
+            failures += 1;
+        }
+
+        if (ci != h_tree.root_index && flag != 1) {
             std::cout << "Error: child count @ " << ci << " = " << flag
                       << std::endl;
             failures += 1;
         }
     }
 
-    if (N_particles_covered != N)
+    for (size_t pi = 0; pi < N; ++pi)
     {
-        std::cout << "Error: only " << N_particles_covered << " of " << N
-                  << " particles covered" << std::endl;
+        int flag = particle_flags[pi];
+        if (flag != 1) {
+            std::cout << "Error: particle count @ " << pi << " = " << flag
+                      << std::endl;
+            failures += 1;
+        }
     }
 
     if (failures == 0)

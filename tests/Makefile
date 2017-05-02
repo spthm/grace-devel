@@ -12,6 +12,7 @@ UNIT_TEST_DIRS = AABB \
 	vector4_math
 
 INTEGRATION_TEST_DIRS = segmented_scan \
+    bvh_consistency \
 	distance_sort \
 	integrate \
 	integrate_gadget \
@@ -38,21 +39,21 @@ ALL_DIRS := $(UNIT_TEST_DIRS) $(INTEGRATION_TEST_DIRS) $(DUMP_DIRS) $(PROFILE_DI
 # don't correspond to any actual files/directories, either.
 # So we'll prefix them all.
 UNIT_TEST_DIRS := $(UNIT_TEST_DIRS:%=unit-%)
-INTEGRATION_TEST_DIRS := $(INTEGRATION_TEST_DIRS:%=test-%)
+INTEGRATION_TEST_DIRS := $(INTEGRATION_TEST_DIRS:%=integration-%)
 DUMP_DIRS := $(DUMP_DIRS:%=dump-%)
 PROFILE_DIRS := $(PROFILE_DIRS:%=profile-%)
 CLEAN_DIRS := $(ALL_DIRS:%=clean-%)
 DISTCLEAN_DIRS := $(ALL_DIRS:%=distclean-%)
 
-all: unit test dump profile
+all: unit integration dump profile
 
 unit: $(UNIT_TEST_DIRS)
 $(UNIT_TEST_DIRS):
 	$(MAKE) -C $(@:unit-%=%)
 
-test: $(INTEGRATION_TEST_DIRS)
+integration: $(INTEGRATION_TEST_DIRS)
 $(INTEGRATION_TEST_DIRS):
-	$(MAKE) -C $(@:test-%=%)
+	$(MAKE) -C $(@:integration-%=%)
 
 dump: $(DUMP_DIRS)
 $(DUMP_DIRS):
@@ -72,7 +73,7 @@ distclean: clean $(DISTCLEAN_DIRS)
 $(DISTCLEAN_DIRS):
 	@$(MAKE) --no-print-directory -C $(@:distclean-%=%) distclean
 
-.PHONY: all unit test dump profile clean distclean
+.PHONY: all unit integration dump profile clean distclean
 .PHONY: $(UNIT_TEST_DIRS)
 .PHONY: $(INTEGRATION_TEST_DIRS)
 .PHONY: $(DUMP_DIRS)
