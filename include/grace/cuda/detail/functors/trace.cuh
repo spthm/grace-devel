@@ -187,8 +187,8 @@ public:
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
-        PrecisionType b = (N_table - 1) * (sqrt(b2) * ir);
-        PrecisionType integral = lerp(b, Wk_lookup, N_table);
+        b2 = (N_table - 1) * (b2 * ir * ir);
+        PrecisionType integral = lerp(b2, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         GRACE_ASSERT(integral >= 0);
@@ -226,8 +226,8 @@ public:
 
         PrecisionType ir = static_cast<PrecisionType>(1.0) / sphere.r;
         PrecisionType b2 = static_cast<PrecisionType>(ray_data.b2);
-        PrecisionType b = (N_table - 1) * (sqrt(b2) * ir);
-        PrecisionType integral = lerp(b, Wk_lookup, N_table);
+        b2 = (N_table - 1) * (b2 * ir * ir);
+        PrecisionType integral = lerp(b2, Wk_lookup, N_table);
         integral *= (ir * ir);
 
         unsigned int hitbits = __ballot(true);
