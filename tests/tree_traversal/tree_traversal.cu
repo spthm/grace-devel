@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
     size_t N = 2000000;
     size_t N_rays = 32 * 1000; // = 32,000
     int max_per_leaf = 32;
-    bool verbose = false;
+    bool verbose = true;
 
     if (argc > 1) {
         N = (size_t)std::strtol(argv[1], NULL, 10);

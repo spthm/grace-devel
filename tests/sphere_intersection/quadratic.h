@@ -8,6 +8,7 @@ template <typename T> class VertexQuadratic; // Pre-declare class itself...
 template <typename T> std::ostream& operator<<(std::ostream& ostrm, const VertexQuadratic<T>& eqn);
 
 /* Quadratic of the form ax^2 + bx + c, stored internally as a(x - h)^2 + k.
+ * This form avoids the dependency problem when evaluating intervals.
  *
  * The class is templated for use with any numeric type.
  * The evaluate() methods only accept inputs of said numeric type, or Intervals
