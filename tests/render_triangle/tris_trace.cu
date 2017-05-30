@@ -78,7 +78,7 @@ void trace_primary_rays(
     const grace::Tree& d_tree,
     thrust::device_vector<PrimaryRayResult>& d_primary_results)
 {
-    grace::trace_texref<RayData_tri>(
+    grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
             d_primary_rays,
             d_tris,
             d_tree,
@@ -98,7 +98,7 @@ void trace_shadow_rays(
     const grace::Tree& d_tree,
     thrust::device_ptr<ShadowRayResult> d_shadow_results_ptr)
 {
-    grace::trace_texref<RayData_tri>(
+    grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
             d_shadow_rays,
             d_tris,
             d_tree,

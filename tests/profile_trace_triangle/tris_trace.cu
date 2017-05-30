@@ -45,7 +45,7 @@ void trace_closest_tri(
     const grace::Tree& d_tree,
     thrust::device_vector<int>& d_closest_tri_idx)
 {
-    grace::trace_texref<RayData_tri>(
+    grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
         d_rays,
         d_tris,
         d_tree,
