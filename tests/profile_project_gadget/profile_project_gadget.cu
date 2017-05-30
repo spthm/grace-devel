@@ -94,20 +94,24 @@ int main(int argc, char* argv[])
 
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
                d_tree);
-    orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 
 
     CUDATimer timer;
-    double total = 0.0;
+    double t_genray, t_trace;
+    t_genray = t_trace = 0.0;
     thrust::device_vector<float> d_integrals(N_rays);
     for (int i = -1; i < N_iter; ++i)
     {
         timer.start();
+
+        orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
+        if (i >= 0) t_genray += timer.split();
+
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
                                     d_tree,
                                     d_integrals);
-        if (i >= 0) total += timer.elapsed();
+        if (i >= 0) t_trace += timer.split();
 
         // Must be done in-loop for cuMemGetInfo to return relevant results.
         if (i == 0) {
@@ -136,8 +140,10 @@ int main(int argc, char* argv[])
         }
     }
 
+    std::cout << "Time for generating rays:            " << std::setw(8)
+              << t_genray / N_iter << " ms" << std::endl;
     std::cout << "Time for cumulative density tracing: " << std::setw(8)
-              << total / N_iter << " ms" << std::endl;
+              << t_trace / N_iter << " ms" << std::endl;
 
 } // End device code.
 
