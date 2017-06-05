@@ -8,8 +8,9 @@ CXX = g++
 GRACE_FLAGS = -D_GLIBCXX_USE_CXX11_ABI=0
 
 # Set to 0 or comment out to turn off debug mode.
-# When in debug mode, -lineinfo is passed to nvcc, and GRACE_DEBUG and
-# THRUST_DEBUG are defined.
+# When in debug mode, the GRACE_DEBUG and THRUST_DEBUG flags are defined,
+# -g is passed to the host compiler and nvcc, and -lineinfo is passed to nvcc.
+# (-G is not passed to nvcc as it is incompaitivle with Thrust.)
 GRACE_DEBUG = 1
 
 # SGPU REQUIRES that compilation targets devices you will run on.

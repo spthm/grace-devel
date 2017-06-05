@@ -70,10 +70,10 @@ NVCCFLAGS += -Xcompiler "-fopenmp"
 endif
 endif
 
-# NB: Do NOT use -G when in debug. It is not compatible with Thrust.
+# NB: Do NOT use -G. It is not compatible with Thrust.
 ifdef GRACE_DEBUG
 ifeq ($(GRACE_DEBUG), 1)
-CXXFLAGS += -DGRACE_DEBUG -g
+CXXFLAGS += -DGRACE_DEBUG -DTHRUST_DEBUG -g
 NVCCFLAGS += -DGRACE_DEBUG -DTHRUST_DEBUG -g -lineinfo
 endif
 endif
