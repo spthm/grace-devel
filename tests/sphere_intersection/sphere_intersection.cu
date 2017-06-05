@@ -73,8 +73,8 @@ int main(int argc, char* argv[])
               << std::endl;
 
 
-    SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
-    SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
+    SphereType low = SphereType(-0.5e4f, -0.5e4f, -0.5e4f, 80.f);
+    SphereType high = SphereType(0.5e4f, 0.5e4f, 0.5e4f, 280.f);
     thrust::host_vector<SphereType> h_spheres(N);
     thrust::transform(thrust::counting_iterator<unsigned int>(0),
                       thrust::counting_iterator<unsigned int>(N),
