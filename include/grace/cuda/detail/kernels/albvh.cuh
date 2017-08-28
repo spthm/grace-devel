@@ -448,8 +448,8 @@ __global__ void build_nodes_slice_kernel(
                 CudaBvhNode node = nodes[g_cur_index];
                 node_aabb = node.AABB();
 
-                g_left = node.left_child();
-                g_right = node.right_child();
+                g_left = node.first_leaf();
+                g_right = node.last_leaf();
             }
             else {
                 CudaBvhLeaf leaf = leaves[g_cur_index - n_nodes];
