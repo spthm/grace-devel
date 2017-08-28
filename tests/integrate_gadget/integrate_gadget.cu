@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/util/extrema.cuh"
@@ -66,7 +66,7 @@ int main(int argc, char* argv[])
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<float> d_integrals(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
     grace::PrngStates rng_states;
 
     // build_tree can compute the x/y/z limits for us, but we compute them
@@ -79,10 +79,10 @@ int main(int argc, char* argv[])
     float area_per_ray;
 
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
-               d_tree);
+               d_bvh);
     plane_parallel_rays_z(N_per_side, mins, maxs, rng_states, d_rays,
                           &area_per_ray);
-    grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
+    grace::trace_cumulative_sph(d_rays, d_spheres, d_bvh, d_integrals);
 
     // ~ Integrate over x and y.
     float integrated_sum = thrust::reduce(d_integrals.begin(),

@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/aabb.h"
@@ -84,7 +84,7 @@ int main(int argc, char* argv[])
 
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
@@ -93,7 +93,7 @@ int main(int argc, char* argv[])
     grace::max_vec4(d_spheres, &maxs);
 
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
-               d_tree);
+               d_bvh);
 
 
     CUDATimer timer;
@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
 
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
-                                    d_tree,
+                                    d_bvh,
                                     d_integrals);
         if (i >= 0) t_trace += timer.split();
 
@@ -120,8 +120,8 @@ int main(int argc, char* argv[])
             // 'permanently' allocated memory.
             size_t trace_bytes = 0;
             trace_bytes += d_spheres.size() * sizeof(SphereType);
-            trace_bytes += d_tree.nodes.size() * sizeof(int4);
-            trace_bytes += d_tree.leaves.size() * sizeof(int4);
+            trace_bytes += d_bvh.num_nodes() * sizeof(grace::detail::CudaBvhNode);
+            trace_bytes += d_bvh.num_leaves() * sizeof(grace::detail::CudaBvhLeaf);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_integrals.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(double); // Integral lookup.

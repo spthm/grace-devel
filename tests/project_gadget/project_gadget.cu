@@ -5,7 +5,7 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/build_sph.cuh"
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
 #include "grace/aabb.h"
@@ -61,7 +61,7 @@ int main(int argc, char* argv[])
 
 
     thrust::device_vector<grace::Ray> d_rays(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
 
     // build_tree can compute the x/y/z limits for us, but we compute them
     // explicitly as we also need them for othogonal_rays_z.
@@ -75,13 +75,13 @@ int main(int argc, char* argv[])
     mins.r = maxs.r = 0;
 
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
-               d_tree);
+               d_bvh);
     orthogonal_rays_z(N_per_side, mins, maxs, d_rays);
 
     thrust::device_vector<float> d_integrals(N_rays);
     grace::trace_cumulative_sph(d_rays,
                                 d_spheres,
-                                d_tree,
+                                d_bvh,
                                 d_integrals);
 
     float max_integral = thrust::reduce(d_integrals.begin(),

@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/prngstates.cuh"
@@ -52,7 +52,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
     grace::PrngStates rng_states;
 
     // Random spheres in [0, 1) are generated, with radii in [0, 0.1).
@@ -62,9 +62,9 @@ int main(int argc, char* argv[])
     grace::Vector<3, float> origin = grace::Vector<3, float>(.5f, .5f, .5f);
     float length = 2.f;
 
-    random_spheres_tree(low, high, N, d_spheres, d_tree);
+    random_spheres_tree(low, high, N, d_spheres, d_bvh);
     grace::uniform_random_rays(origin, length, rng_states, d_rays);
-    grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
+    grace::trace_hitcounts_sph(d_rays, d_spheres, d_bvh, d_hit_counts);
 
     int max_hits = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end(), 0,
                                   thrust::maximum<int>());

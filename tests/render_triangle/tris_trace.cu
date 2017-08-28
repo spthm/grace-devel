@@ -1,5 +1,7 @@
 #include "tris_trace.cuh"
 
+#include "grace/cuda/bvh.cuh"
+
 #include "grace/cuda/detail/kernel_config.h"
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
@@ -75,13 +77,13 @@ void generate_shadow_rays(
 void trace_primary_rays(
     const thrust::device_vector<grace::Ray>& d_primary_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_vector<PrimaryRayResult>& d_primary_results)
 {
     grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
             d_primary_rays,
             d_tris,
-            d_tree,
+            d_bvh,
             0,
             grace::Init_null(),
             RayIntersect_tri(),
@@ -95,13 +97,13 @@ void trace_primary_rays(
 void trace_shadow_rays(
     const thrust::device_vector<grace::Ray>& d_shadow_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_ptr<ShadowRayResult> d_shadow_results_ptr)
 {
     grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
             d_shadow_rays,
             d_tris,
-            d_tree,
+            d_bvh,
             0,
             grace::Init_null(),
             RayIntersect_tri(),

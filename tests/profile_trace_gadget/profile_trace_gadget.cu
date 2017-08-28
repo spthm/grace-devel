@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/trace_sph.cuh"
@@ -78,8 +78,8 @@ int main(int argc, char* argv[])
 
 
     grace::PrngStates rng_states;
-    grace::Tree d_tree(N, max_per_leaf);
-    build_tree(d_spheres, d_tree);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
+    build_tree(d_spheres, d_bvh);
 
     // Ray origin is the box centre; all rays will exit the box.
     // Assume x, y and z spatial extents are similar.
@@ -110,13 +110,13 @@ int main(int argc, char* argv[])
 
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
-                                    d_tree,
+                                    d_bvh,
                                     d_integrals);
         if (i >= 0) t_cum += timer.split();
 
         grace::trace_sph(d_rays,
                          d_spheres,
-                         d_tree,
+                         d_bvh,
                          d_ray_offsets,
                          d_indices,
                          d_integrals,
@@ -133,7 +133,7 @@ int main(int argc, char* argv[])
         // traversal algorithm.
         grace::trace_hitcounts_sph(d_rays,
                                    d_spheres,
-                                   d_tree,
+                                   d_bvh,
                                    d_ray_offsets);
         if (i >= 0) t_hit += timer.split();
 
@@ -146,8 +146,8 @@ int main(int argc, char* argv[])
             // 'permanently' allocated memory.
             float trace_bytes = 0.0;
             trace_bytes += d_spheres.size() * sizeof(SphereType);
-            trace_bytes += d_tree.leaves.size() * sizeof(int4);
-            trace_bytes += d_tree.nodes.size() * sizeof(int4);
+            trace_bytes += d_bvh.num_leaves() * sizeof(grace::detail::CudaBvhLeaf);
+            trace_bytes += d_bvh.num_nodes() * sizeof(grace::detail::CudaBvhNode);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_ray_offsets.size() * sizeof(int);
             trace_bytes += d_integrals.size() * sizeof(float);

@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/prngstates.cuh"
 #include "grace/cuda/trace_sph.cuh"
@@ -51,16 +51,16 @@ int main(int argc, char* argv[])
     thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<int> d_hit_counts(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
     grace::PrngStates rng_states;
 
     SphereType low = SphereType(-1E4f, -1E4f, -1E4f, 80.f);
     SphereType high = SphereType(1E4f, 1E4f, 1E4f, 400.f);
-    random_spheres_tree(low, high, N, d_spheres, d_tree);
+    random_spheres_tree(low, high, N, d_spheres, d_bvh);
     grace::uniform_random_rays(grace::Vector<3, float>(), 2E4f, rng_states,
                                d_rays);
 
-    grace::trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_hit_counts);
+    grace::trace_hitcounts_sph(d_rays, d_spheres, d_bvh, d_hit_counts);
     double total = thrust::reduce(d_hit_counts.begin(), d_hit_counts.end());
     double mean_hits = total / N_rays;
     std::cout << "Mean of " << mean_hits << " hits per ray (device)."

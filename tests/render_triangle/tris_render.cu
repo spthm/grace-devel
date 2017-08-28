@@ -163,7 +163,7 @@ static void shade_pixels(
 void render(
     const thrust::device_vector<grace::Ray>& d_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     const thrust::device_vector<grace::Vector<3, float> >& d_lights_pos,
     const thrust::device_vector<float>& d_shaded_tris,
     thrust::device_vector<float>& d_pixels)
@@ -173,7 +173,7 @@ void render(
     thrust::device_vector<ShadowRayResult>
         d_shadow_results(d_rays.size() * d_lights_pos.size());
 
-    trace_primary_rays(d_rays, d_tris, d_tree, d_primary_results);
+    trace_primary_rays(d_rays, d_tris, d_bvh, d_primary_results);
 
     // Trace shadow rays to each light source.
     for (int i = 0; i < d_lights_pos.size(); ++i)
@@ -181,7 +181,7 @@ void render(
         generate_shadow_rays(i, d_lights_pos, d_rays, d_primary_results,
                              d_shadow_rays);
 
-        trace_shadow_rays(d_shadow_rays, d_tris, d_tree,
+        trace_shadow_rays(d_shadow_rays, d_tris, d_bvh,
                           d_shadow_results.data() + i * d_rays.size());
     }
 

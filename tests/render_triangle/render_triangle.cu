@@ -8,7 +8,7 @@
 #include "tris_tree.cuh"
 #include "tris_render.cuh"
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/aabb.h"
 #include "grace/ray.h"
@@ -74,10 +74,10 @@ int main(int argc, char* argv[])
     thrust::device_vector<float> d_pixels(N_rays);
     thrust::device_vector<grace::Vector<3, float> > d_lights_pos;
     thrust::device_vector<float> d_shaded_tris;
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
 
     grace::AABB<float> aabb;
-    build_tree_tris(d_tris, d_tree, &aabb);
+    build_tree_tris(d_tris, d_bvh, &aabb);
     setup_lights(aabb, d_lights_pos);
 
     grace::Vector<3, float> camera_position, look_at, view_up;
@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
                         ray_length, N_per_side, N_per_side, d_rays);
 
     shade_triangles(d_tris, d_lights_pos, d_shaded_tris);
-    render(d_rays, d_tris, d_tree, d_lights_pos, d_shaded_tris, d_pixels);
+    render(d_rays, d_tris, d_bvh, d_lights_pos, d_shaded_tris, d_pixels);
 
     float min_val = thrust::reduce(d_pixels.begin(),
                                    d_pixels.end(),

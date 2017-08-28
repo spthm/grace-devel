@@ -15,7 +15,7 @@
 // Always uses 30-bit keys.
 template <typename T>
 void build_tree(thrust::device_vector<grace::Sphere<T> >& spheres,
-                grace::CudaBVH& bvh)
+                grace::CudaBvh& bvh)
 {
     thrust::device_vector<T> deltas(spheres.size() + 1);
 
@@ -28,7 +28,7 @@ void build_tree(thrust::device_vector<grace::Sphere<T> >& spheres,
 template <typename T>
 void build_tree(thrust::device_vector<grace::Sphere<T> >& spheres,
                 const grace::AABB<T>& aabb,
-                grace::CudaBVH& bvh)
+                grace::CudaBvh& bvh)
 {
     thrust::device_vector<T> deltas(spheres.size() + 1);
 
@@ -43,7 +43,7 @@ void random_spheres_tree(const grace::Sphere<T> low,
                          const grace::Sphere<T> high,
                          const size_t N,
                          thrust::device_vector<grace::Sphere<T> >& spheres,
-                         grace::CudaBVH& bvh)
+                         grace::CudaBvh& bvh)
 {
     spheres.resize(N);
 

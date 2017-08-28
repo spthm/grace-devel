@@ -5,7 +5,7 @@
 #include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -33,7 +33,7 @@ void shade_triangles(
 void render(
     const thrust::device_vector<grace::Ray>& d_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     const thrust::device_vector<grace::Vector<3, float> >& d_lights_pos,
     const thrust::device_vector<float>& d_shaded_tris,
     thrust::device_vector<float>& d_pixels);

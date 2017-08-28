@@ -4,7 +4,8 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cpp/bvh.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/aabb.h"
 #include "grace/sphere.h"
 #include "helper/random.cuh"
@@ -58,22 +59,25 @@ int main(int argc, char* argv[])
                       thrust::counting_iterator<unsigned int>(N),
                       d_spheres.begin(),
                       random_sphere_functor<SphereType>(low, high));
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_tree(N, max_per_leaf);
     build_tree(d_spheres, d_tree);
 
-    grace::H_Tree h_tree = d_tree;
-    const int N_leaves = h_tree.size();
+    grace::HostBvh h_tree(N, max_per_leaf);
+    d_tree.to_host(h_tree);
+    const int N_leaves = h_tree.num_leaves();
     const int N_nodes = N_leaves - 1;
 
     thrust::host_vector<int> parent_flags(N_nodes);
     thrust::host_vector<int> child_flags(N_nodes + N_leaves);
     thrust::host_vector<int> particle_flags(N);
 
+    typedef grace::detail::Bvh_ref<grace::HostBvh> ref_type;
+    ref_type bvh_ref(h_tree);
     for (size_t ni = 0; ni < N_nodes; ++ni)
     {
-        int4 node = h_tree.nodes[4 * ni];
-        int l = node.x;
-        int r = node.y;
+        ref_type::node_type node = bvh_ref.nodes()[ni];
+        int l = node.left_child();
+        int r = node.right_child();
 
         parent_flags[ni] += 1;
         child_flags[l] += 1;
@@ -82,9 +86,9 @@ int main(int argc, char* argv[])
 
     for (size_t li = 0; li < N_leaves; ++li)
     {
-        int4 leaf = h_tree.leaves[li];
-        int first = leaf.x;
-        int size = leaf.y;
+        ref_type::leaf_type leaf = bvh_ref.leaves()[li];
+        int first = leaf.first_primitive();
+        int size = leaf.size();
 
         for (int pi = first; pi < first + size; ++pi)
         {
@@ -108,14 +112,14 @@ int main(int argc, char* argv[])
     {
         int flag = child_flags[ci];
 
-        if (ci == h_tree.root_index && flag != 0)
+        if (ci == h_tree.root_index() && flag != 0)
         {
             std::cout << "Error: child count @ root " << ci << " = " << flag
                       << std::endl;
             failures += 1;
         }
 
-        if (ci != h_tree.root_index && flag != 1) {
+        if (ci != h_tree.root_index() && flag != 1) {
             std::cout << "Error: child count @ " << ci << " = " << flag
                       << std::endl;
             failures += 1;

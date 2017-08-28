@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/util/extrema.cuh"
@@ -73,8 +73,8 @@ int main(int argc, char* argv[])
               << std::endl;
 
 
-    grace::Tree d_tree(N, max_per_leaf);
-    build_tree(d_spheres, d_tree);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
+    build_tree(d_spheres, d_bvh);
 
     // Ray origin is the box centre.
     grace::Vector<3, float> origin;
@@ -112,7 +112,7 @@ int main(int argc, char* argv[])
 
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
-                                    d_tree,
+                                    d_bvh,
                                     d_integrals);
         if (i >= 0) t_cum_nosort += timer.split();
 
@@ -120,7 +120,7 @@ int main(int argc, char* argv[])
         // traversal algorithm.
         grace::trace_hitcounts_sph(d_rays,
                                    d_spheres,
-                                   d_tree,
+                                   d_bvh,
                                    d_hit_counts_nosort);
         if (i >= 0) t_hit_nosort += timer.split();
 
@@ -133,13 +133,13 @@ int main(int argc, char* argv[])
 
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
-                                    d_tree,
+                                    d_bvh,
                                     d_integrals);
         if (i >= 0) t_cum_dirkey += timer.split();
 
         grace::trace_hitcounts_sph(d_rays,
                                    d_spheres,
-                                   d_tree,
+                                   d_bvh,
                                    d_hit_counts_dirkey);
         if (i >= 0) t_hit_dirkey += timer.split();
 
@@ -154,13 +154,13 @@ int main(int argc, char* argv[])
 
         grace::trace_cumulative_sph(d_rays,
                                     d_spheres,
-                                    d_tree,
+                                    d_bvh,
                                     d_integrals);
         if (i >= 0) t_cum_endkey += timer.split();
 
         grace::trace_hitcounts_sph(d_rays,
                                    d_spheres,
-                                   d_tree,
+                                   d_bvh,
                                    d_hit_counts_endkey);
         if (i >= 0) t_hit_endkey += timer.split();
 
@@ -173,8 +173,8 @@ int main(int argc, char* argv[])
             // 'permanently' allocated memory.
             float trace_bytes = 0.0;
             trace_bytes += d_spheres.size() * sizeof(SphereType);
-            trace_bytes += d_tree.leaves.size() * sizeof(int4);
-            trace_bytes += d_tree.nodes.size() * sizeof(int4);
+            trace_bytes += d_bvh.num_leaves() * sizeof(grace::detail::CudaBvhLeaf);
+            trace_bytes += d_bvh.num_nodes() * sizeof(grace::detail::CudaBvhNode);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_integrals.size() * sizeof(float);
             trace_bytes += grace::N_table * sizeof(double); // Integral lookup.

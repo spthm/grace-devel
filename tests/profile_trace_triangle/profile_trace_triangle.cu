@@ -8,7 +8,7 @@
 #include "tris_tree.cuh"
 #include "tris_trace.cuh"
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/aabb.h"
 #include "grace/ray.h"
@@ -82,8 +82,8 @@ int main(int argc, char* argv[])
               << std::endl;
 
     grace::AABB<float> aabb;
-    grace::Tree d_tree(N, max_per_leaf);
-    build_tree_tris(d_tris, d_tree, &aabb);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
+    build_tree_tris(d_tris, d_bvh, &aabb);
 
     std::vector<grace::Vector<3, float> > camera_positions;
     grace::Vector<3, float> look_at, view_up;
@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
             trace_closest_tri(
                 d_rays,
                 d_tris,
-                d_tree,
+                d_bvh,
                 d_closest_tri_idx);
             if (i >= 0) t_closest += timer.split();
 
@@ -129,8 +129,8 @@ int main(int argc, char* argv[])
                 // 'permanently' allocated memory.
                 float trace_bytes = 0.0;
                 trace_bytes += d_tris.size() * sizeof(Triangle);
-                trace_bytes += d_tree.leaves.size() * sizeof(int4);
-                trace_bytes += d_tree.nodes.size() * sizeof(int4);
+                trace_bytes += d_bvh.num_leaves() * sizeof(grace::detail::CudaBvhLeaf);
+                trace_bytes += d_bvh.num_nodes() * sizeof(grace::detail::CudaBvhNode);
                 trace_bytes += d_rays.size() * sizeof(grace::Ray);
                 trace_bytes += d_closest_tri_idx.size() * sizeof(int);
 
