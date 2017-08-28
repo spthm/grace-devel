@@ -45,11 +45,15 @@ struct GRACE_ALIGNAS(16) AABB
 
     GRACE_HOST_DEVICE Vector<3, T> size() const;
 
+    GRACE_HOST_DEVICE void invalidate();
     GRACE_HOST_DEVICE void scale(const T s);
     GRACE_HOST_DEVICE void scale(const Vector<3, T>& vec);
 
     GRACE_HOST_DEVICE void translate(const Vector<3, T>& vec);
 };
+
+typedef AABB<float> AABBf;
+typedef AABB<double> AABBd;
 
 
 //
@@ -63,6 +67,15 @@ bool operator==(const AABB<T>& lhs, const AABB<T>& rhs);
 template <typename T>
 GRACE_HOST_DEVICE
 bool operator!=(const AABB<T>& lhs, const AABB<T>& rhs);
+
+
+//
+// Geometric operations
+//
+
+template <typename T>
+GRACE_HOST_DEVICE
+AABB<T> aabb_union(const AABB<T>& lhs, const AABB<T>& rhs);
 
 } // namespace grace
 

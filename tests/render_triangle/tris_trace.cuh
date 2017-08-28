@@ -5,7 +5,7 @@
 #include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/generic/boundedptr.h"
 
 #include <thrust/device_vector.h>
@@ -123,11 +123,11 @@ void generate_shadow_rays(
 void trace_primary_rays(
     const thrust::device_vector<grace::Ray>& d_primary_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_vector<PrimaryRayResult>& d_primary_results);
 
 void trace_shadow_rays(
     const thrust::device_vector<grace::Ray>& d_shadow_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_ptr<ShadowRayResult> d_shadow_results_ptr);

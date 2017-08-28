@@ -5,7 +5,7 @@
 #include "grace/aabb.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/generic/boundedptr.h"
 
 #include <thrust/device_vector.h>
@@ -83,5 +83,5 @@ void setup_cameras(
 void trace_closest_tri(
     const thrust::device_vector<grace::Ray>& d_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_vector<int>& d_closest_tri_idx);

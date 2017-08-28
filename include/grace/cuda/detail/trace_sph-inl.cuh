@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
 #include "grace/generic/meta.h"
@@ -68,7 +68,7 @@ template <typename T>
 GRACE_HOST void trace_hitcounts_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     thrust::device_vector<int>& d_hit_counts)
 {
     // Defines only RayData.data, of type int.
@@ -77,7 +77,7 @@ GRACE_HOST void trace_hitcounts_sph(
     trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
         d_spheres,
-        d_tree,
+        d_bvh,
         0,
         Init_null(),
         Intersect_sphere_bool<T>(),
@@ -94,7 +94,7 @@ template <typename T, typename OutType>
 GRACE_HOST void trace_cumulative_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     thrust::device_vector<OutType>& d_cumulated)
 {
     // TODO: Change it such that this is passed in, rather than copying it on
@@ -107,7 +107,7 @@ GRACE_HOST void trace_cumulative_sph(
     trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
         d_spheres,
-        d_tree,
+        d_bvh,
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
@@ -126,7 +126,7 @@ template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     // SGPU's segmented scans and sorts require ray offsets to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,
@@ -136,7 +136,7 @@ GRACE_HOST void trace_sph(
     const size_t n_rays = d_rays.size();
 
     // Initially, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_ray_offsets);
+    trace_hitcounts_sph(d_rays, d_spheres, d_bvh, d_ray_offsets);
     int last_ray_hitcount = d_ray_offsets[n_rays - 1];
 
     // Allocate output array from total per-ray hit counts, and calculate
@@ -164,7 +164,7 @@ GRACE_HOST void trace_sph(
     trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
-        d_tree,
+        d_bvh,
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
@@ -187,7 +187,7 @@ template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_with_sentinels_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     // SGPU's segmented scans and sorts require this to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,
@@ -200,7 +200,7 @@ GRACE_HOST void trace_with_sentinels_sph(
     const size_t n_rays = d_rays.size();
 
     // Initially, d_ray_offsets is actually per-ray *hit counts*.
-    trace_hitcounts_sph(d_rays, d_spheres, d_tree, d_ray_offsets);
+    trace_hitcounts_sph(d_rays, d_spheres, d_bvh, d_ray_offsets);
     int last_ray_hitcount = d_ray_offsets[n_rays - 1];
 
     // Allocate output array from total per-ray hit counts, and calculate
@@ -239,7 +239,7 @@ GRACE_HOST void trace_with_sentinels_sph(
     trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
-        d_tree,
+        d_bvh,
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),

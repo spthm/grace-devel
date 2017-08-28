@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/aabb.h"
 #include "grace/sphere.h"
@@ -68,7 +68,7 @@ template <typename T, typename DeltaType>
 GRACE_HOST void ALBVH_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
     const thrust::device_vector<DeltaType>& d_deltas,
-    Tree& d_tree);
+    CudaBvh& d_tree);
 
 } // namespace grace
 

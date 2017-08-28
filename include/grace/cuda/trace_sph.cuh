@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/ray.h"
 #include "grace/sphere.h"
@@ -21,7 +21,7 @@ template <typename T>
 GRACE_HOST void trace_hitcounts_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     thrust::device_vector<int>& d_hit_counts);
 
 // T defines the internal precision of the intersection test, and of
@@ -32,7 +32,7 @@ template <typename T, typename OutType>
 GRACE_HOST void trace_cumulative_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     thrust::device_vector<OutType>& d_cumulated);
 
 // T defines the internal precision of the intersection test, and of
@@ -43,7 +43,7 @@ template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     // SGPU's segmented scans and sorts require ray offsets to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,
@@ -58,7 +58,7 @@ template <typename T, typename IndexType, typename OutType>
 GRACE_HOST void trace_with_sentinels_sph(
     const thrust::device_vector<Ray>& d_rays,
     const thrust::device_vector<Sphere<T> >& d_spheres,
-    const Tree& d_tree,
+    const CudaBvh& d_bvh,
     // SGPU's segmented scans and sorts require this to be int.
     thrust::device_vector<int>& d_ray_offsets,
     thrust::device_vector<IndexType>& d_hit_indices,

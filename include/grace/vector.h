@@ -65,6 +65,10 @@ Vector<3, T>
     GRACE_HOST_DEVICE const T& operator[](int i) const;
 };
 
+typedef Vector<3, int> Vector3i;
+typedef Vector<3, float> Vector3f;
+typedef Vector<3, double> Vector3d;
+
 template <typename T>
 struct GRACE_ALIGNAS((detail::vector_alignment<4, T>::value))
 Vector<4, T>
@@ -120,6 +124,9 @@ Vector<4, T>
     GRACE_HOST_DEVICE const T& operator[](int i) const;
 };
 
+typedef Vector<4, int> Vector4i;
+typedef Vector<4, float> Vector4f;
+typedef Vector<4, double> Vector4d;
 
 //
 // Comparison operations

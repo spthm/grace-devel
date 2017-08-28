@@ -42,13 +42,13 @@ void setup_cameras(
 void trace_closest_tri(
     const thrust::device_vector<grace::Ray>& d_rays,
     const thrust::device_vector<Triangle>& d_tris,
-    const grace::Tree& d_tree,
+    const grace::CudaBvh& d_bvh,
     thrust::device_vector<int>& d_closest_tri_idx)
 {
     grace::trace_texref<RayData_tri, grace::LeafTraversal::ParallelRays>(
         d_rays,
         d_tris,
-        d_tree,
+        d_bvh,
         0,
         grace::Init_null(),
         RayIntersect_tri(),

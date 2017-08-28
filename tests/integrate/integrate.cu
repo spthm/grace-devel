@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/cuda/prngstates.cuh"
 #include "grace/aabb.h"
@@ -50,7 +50,7 @@ void two_spheres(const SphereType mins, const SphereType maxs,
 
 int main(int argc, char* argv[])
 {
-    // Tree does not work for N < 2 objects.
+    // Bvh does not work for N < 2 objects.
     const size_t N = 2;
     // DO NOT CHANGE. There are only two spheres.
     const int maxs_per_leaf = 1;
@@ -79,7 +79,7 @@ int main(int argc, char* argv[])
     thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::device_vector<float> d_integrals(N_rays);
-    grace::Tree d_tree(N, maxs_per_leaf);
+    grace::CudaBvh d_bvh(N, maxs_per_leaf);
     grace::PrngStates rng_states;
 
     float area_per_ray;
@@ -90,10 +90,10 @@ int main(int argc, char* argv[])
 
     two_spheres(mins, maxs, d_spheres);
     build_tree(d_spheres, grace::AABB<float>(mins.center(), maxs.center()),
-               d_tree);
+               d_bvh);
     plane_parallel_rays_z(N_per_side, mins, maxs, rng_states, d_rays,
                           &area_per_ray);
-    grace::trace_cumulative_sph(d_rays, d_spheres, d_tree, d_integrals);
+    grace::trace_cumulative_sph(d_rays, d_spheres, d_bvh, d_integrals);
 
     // ~ Integrate over x and y.
     float integrated_sum = thrust::reduce(d_integrals.begin(),

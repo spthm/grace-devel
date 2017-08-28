@@ -4,7 +4,7 @@
 // See http://stackoverflow.com/questions/23352122
 #include <curand_kernel.h>
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/prngstates.cuh"
 #include "grace/sphere.h"
@@ -118,7 +118,7 @@ int main(int argc, char* argv[]) {
     thrust::device_vector<SphereType> d_spheres(N);
     thrust::device_vector<grace::Ray> d_rays(N_rays);
     thrust::host_vector<int> h_ray_offsets(N_rays);
-    grace::Tree d_tree(N, max_per_leaf);
+    grace::CudaBvh d_bvh(N, max_per_leaf);
     grace::PrngStates rng_states;
     thrust::host_vector<float> h_distances; // Will be resized.
 
@@ -129,9 +129,9 @@ int main(int argc, char* argv[]) {
     grace::Vector<3, float> origin = grace::Vector<3, float>(.5f, .5f, .5f);
     float length = 2.f;
 
-    random_spheres_tree(low, high, N, d_spheres, d_tree);
+    random_spheres_tree(low, high, N, d_spheres, d_bvh);
     grace::uniform_random_rays(origin, length, rng_states, d_rays);
-    trace_distances(d_rays, d_spheres, d_tree, h_ray_offsets, h_distances);
+    trace_distances(d_rays, d_spheres, d_bvh, h_ray_offsets, h_distances);
 
     int failures = verify_intersection_order(h_ray_offsets, h_distances,
                                              verbose);

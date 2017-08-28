@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/sort.cuh"
 #include "grace/cuda/trace_sph.cuh"
 #include "grace/ray.h"
@@ -14,7 +14,7 @@
 template <typename T, typename Real>
 void trace_distances(const thrust::device_vector<grace::Ray>& d_rays,
                      const thrust::device_vector<grace::Sphere<T> >& d_spheres,
-                     const grace::Tree& d_tree,
+                     const grace::CudaBvh& d_bvh,
                      thrust::host_vector<int>& h_offsets,
                      thrust::host_vector<Real>& h_distances)
 {
@@ -27,7 +27,7 @@ void trace_distances(const thrust::device_vector<grace::Ray>& d_rays,
 
     grace::trace_sph(d_rays,
                      d_spheres,
-                     d_tree,
+                     d_bvh,
                      d_offsets,
                      d_indices,
                      d_integrals,

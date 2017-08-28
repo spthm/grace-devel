@@ -3,7 +3,7 @@
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/cuda/detail/kernels/morton.cuh"
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"
@@ -111,7 +111,7 @@ template <typename T, typename DeltaType>
 GRACE_HOST void ALBVH_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
     const thrust::device_vector<DeltaType>& d_deltas,
-    Tree& d_tree)
+    CudaBvh& d_tree)
 {
     build_ALBVH(d_tree, d_spheres, d_deltas, AABBSphere());
 }

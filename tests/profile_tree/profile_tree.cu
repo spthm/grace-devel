@@ -5,7 +5,7 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/build_sph.cuh"
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/aabb.h"
@@ -99,8 +99,10 @@ int main(int argc, char* argv[])
             thrust::device_vector<SphereType> d_spheres = h_spheres;
             thrust::device_vector<grace::uinteger32> d_keys(N);
             thrust::device_vector<float> d_deltas(N + 1);
-            grace::Tree d_tree(N, max_per_leaf);
+            grace::CudaBvh d_bvh(N, max_per_leaf);
+            grace::detail::Bvh_ref<grace::CudaBvh> bvh_ref(d_bvh);
             thrust::device_vector<int2> d_tmp_nodes(N - 1);
+            thrust::device_vector<grace::detail::CudaBvhLeaf> d_tmp_leaves(N);
             // Don't include above memory allocations in t_morton.
             timer.split();
 
@@ -117,28 +119,32 @@ int main(int argc, char* argv[])
             grace::euclidean_deltas_sph(d_spheres, d_deltas);
             if (i >= 0) t_deltas += timer.split();
 
-            grace::ALBVH::build_leaves(
+            grace::detail::build_leaves(
                 d_tmp_nodes,
-                d_tree.leaves,
-                d_tree.max_per_leaf,
+                d_tmp_leaves,
+                d_bvh.max_per_leaf(),
                 thrust::raw_pointer_cast(d_deltas.data()),
                 thrust::less<float>());
-            grace::ALBVH::remove_empty_leaves(d_tree);
+            grace::detail::remove_empty_leaves(d_tmp_leaves);
             if (i >= 0) t_leaves += timer.split();
 
-            const size_t n_new_leaves = d_tree.leaves.size();
+            bvh_ref.leaves() = d_tmp_leaves;
+            const size_t n_new_leaves = d_bvh.num_leaves();
+            const size_t n_new_nodes = n_new_leaves - 1;
+            bvh_ref.nodes().resize(n_new_nodes);
+
             thrust::device_vector<float> d_new_deltas(n_new_leaves + 1);
             // Don't include above memory allocation in t_leaf_deltas.
             timer.split();
 
-            grace::ALBVH::copy_leaf_deltas(
-                d_tree.leaves,
+            grace::detail::copy_leaf_deltas(
+                bvh_ref.leaves(),
                 thrust::raw_pointer_cast(d_deltas.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()));
             if (i >= 0) t_leaf_deltas += timer.split();
 
-            grace::ALBVH::build_nodes(
-                d_tree,
+            grace::detail::build_nodes(
+                d_bvh,
                 thrust::raw_pointer_cast(d_spheres.data()),
                 thrust::raw_pointer_cast(d_new_deltas.data()),
                 thrust::less<float>(),

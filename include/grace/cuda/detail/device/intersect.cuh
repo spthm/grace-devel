@@ -3,39 +3,32 @@
 #include "grace/cuda/detail/device/intrinsics.cuh"
 #include "grace/generic/intersect.h"
 
+#include "grace/aabb.h"
 #include "grace/types.h"
+#include "grace/vector.h"
 
 namespace grace {
 
 GRACE_DEVICE int AABBs_hit(
-    const float3 invd, const float3 origin,
+    const Vector3f invd, const Vector3f origin,
     const float start, const float end,
-    const float4 AABB_L,
-    const float4 AABB_R,
-    const float4 AABB_LR)
+    const AABBf AABB_L,
+    const AABBf AABB_R)
 {
-    float bx_L = (AABB_L.x - origin.x) * invd.x;
-    float tx_L = (AABB_L.y - origin.x) * invd.x;
-    float by_L = (AABB_L.z - origin.y) * invd.y;
-    float ty_L = (AABB_L.w - origin.y) * invd.y;
-    float bz_L = (AABB_LR.x - origin.z) * invd.z;
-    float tz_L = (AABB_LR.y - origin.z) * invd.z;
+    Vector3f b_L = (AABB_L.min - origin) * invd;
+    Vector3f t_L = (AABB_L.max - origin) * invd;
 
-    float bx_R = (AABB_R.x - origin.x) * invd.x;
-    float tx_R = (AABB_R.y - origin.x) * invd.x;
-    float by_R = (AABB_R.z - origin.y) * invd.y;
-    float ty_R = (AABB_R.w - origin.y) * invd.y;
-    float bz_R = (AABB_LR.z - origin.z) * invd.z;
-    float tz_R = (AABB_LR.w - origin.z) * invd.z;
+    Vector3f b_R = (AABB_R.min - origin) * invd;
+    Vector3f t_R = (AABB_R.max - origin) * invd;
 
-    float tmin_L = maxf_vmaxf( fmin(bx_L, tx_L), fmin(by_L, ty_L),
-                               maxf_vminf(bz_L, tz_L, start) );
-    float tmax_L = minf_vminf( fmax(bx_L, tx_L), fmax(by_L, ty_L),
-                               minf_vmaxf(bz_L, tz_L, end) );
-    float tmin_R = maxf_vmaxf( fmin(bx_R, tx_R), fmin(by_R, ty_R),
-                               maxf_vminf(bz_R, tz_R, start) );
-    float tmax_R = minf_vminf( fmax(bx_R, tx_R), fmax(by_R, ty_R),
-                               minf_vmaxf(bz_R, tz_R, end) );
+    float tmin_L = maxf_vmaxf( fmin(b_L.x, t_L.x), fmin(b_L.y, t_L.y),
+                               maxf_vminf(b_L.z, t_L.z, start) );
+    float tmax_L = minf_vminf( fmax(b_L.x, t_L.x), fmax(b_L.y, t_L.y),
+                               minf_vmaxf(b_L.z, t_L.z, end) );
+    float tmin_R = maxf_vmaxf( fmin(b_R.x, t_R.x), fmin(b_R.y, t_R.y),
+                               maxf_vminf(b_R.z, t_R.z, start) );
+    float tmax_R = minf_vminf( fmax(b_R.x, t_R.x), fmax(b_R.y, t_R.y),
+                               minf_vmaxf(b_R.z, t_R.z, end) );
 
     return (int)(tmax_R >= tmin_R) + 2*((int)(tmax_L >= tmin_L));
 }
