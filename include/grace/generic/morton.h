@@ -1,8 +1,8 @@
 #pragma once
 
-#include "grace/generic/bits.h"
-
+#include "grace/config.h"
 #include "grace/types.h"
+#include "grace/generic/bits.h"
 
 namespace grace {
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/types.h"
+#include "grace/config.h"
 
 #include <functional>
 

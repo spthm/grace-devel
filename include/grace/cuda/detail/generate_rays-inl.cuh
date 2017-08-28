@@ -5,8 +5,9 @@
 #include "grace/cuda/util/extrema.cuh"
 
 #include "grace/aabb.h"
-#include "grace/types.h"
+#include "grace/config.h"
 #include "grace/ray.h"
+#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <thrust/device_vector.h>

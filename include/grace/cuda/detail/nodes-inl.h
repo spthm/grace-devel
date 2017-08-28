@@ -1,8 +1,8 @@
 #pragma once
 
-#include "grace/types.h"
+#include "grace/config.h"
 
-#include "vector_types.h" // CUDA
+#include "vector_config.h" // CUDA
 
 namespace grace {
 

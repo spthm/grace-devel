@@ -4,8 +4,8 @@
 
 #include "grace/generic/functors/aabb.h"
 
+#include "grace/config.h"
 #include "grace/error.h"
-#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <algorithm>

@@ -1,8 +1,8 @@
 #pragma once
 
+#include "grace/config.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
-#include "grace/types.h"
 
 namespace grace {
 

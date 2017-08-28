@@ -13,6 +13,7 @@
 #include "grace/generic/functors/centroid.h"
 
 #include "grace/aabb.h"
+#include "grace/config.h"
 #include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"

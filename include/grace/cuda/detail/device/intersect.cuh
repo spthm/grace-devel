@@ -4,7 +4,7 @@
 #include "grace/generic/intersect.h"
 
 #include "grace/aabb.h"
-#include "grace/types.h"
+#include "grace/config.h"
 #include "grace/vector.h"
 
 namespace grace {

@@ -7,8 +7,8 @@
 #include "grace/cuda/bvh.cuh"
 
 #include "grace/aabb.h"
+#include "grace/config.h"
 #include "grace/error.h"
-#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <thrust/fill.h>

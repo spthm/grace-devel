@@ -1,7 +1,7 @@
 #pragma once
 
+#include "grace/config.h"
 #include "grace/error.h"
-#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 

@@ -12,6 +12,6 @@ class Bvh;
 // We always have the host target available.
 #include "grace/cpp/bvh.h"
 
-#if defined(GRACE_CUDA_TARGET)
-#include "grace/cuda/bvh.h"
+#if defined(GRACE_CUDA_AVAILABLE)
+#include "grace/cuda/bvh.cuh"
 #endif

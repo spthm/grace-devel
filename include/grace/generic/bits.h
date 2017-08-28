@@ -1,5 +1,6 @@
 #pragma once
 
+#include "grace/config.h"
 #include "grace/types.h"
 
 #include <cmath>

@@ -2,8 +2,8 @@
 
 #include "grace/cuda/detail/kernels/rng.cuh"
 
+#include "grace/config.h"
 #include "grace/error.h"
-#include "grace/types.h"
 
 namespace grace {
 

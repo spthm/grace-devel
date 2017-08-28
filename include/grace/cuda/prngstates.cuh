@@ -1,7 +1,7 @@
 #pragma once
 
 #include "grace/detail/noncopyable-inl.h"
-#include "grace/types.h"
+#include "grace/config.h"
 
 #include <curand_kernel.h>
 

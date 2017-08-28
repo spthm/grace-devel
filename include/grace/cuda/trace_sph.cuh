@@ -2,9 +2,9 @@
 
 #include "grace/cuda/bvh.cuh"
 
+#include "grace/config.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
-#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 

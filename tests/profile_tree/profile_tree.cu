@@ -9,6 +9,7 @@
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/aabb.h"
+#include "grace/types.h"
 #include "grace/sphere.h"
 #include "helper/cuda_timer.cuh"
 #include "helper/random.cuh"

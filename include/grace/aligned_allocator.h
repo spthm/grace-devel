@@ -1,7 +1,7 @@
 #pragma once
 
 #include "grace/aligned_malloc.h"
-#include "grace/types.h"
+#include "grace/config.h"
 
 #include <cstddef>
 #include <memory>

@@ -5,6 +5,7 @@
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
 #include "grace/generic/meta.h"
 #include "grace/generic/raydata.h"
+#include "grace/config.h"
 #include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"

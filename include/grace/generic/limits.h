@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/types.h"
+#include "grace/config.h"
 
 /* This file provides device-compatible implementations of some of the standard
  * library header <limits>. This allows generic host- and device-compatible

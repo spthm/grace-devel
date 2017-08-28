@@ -10,9 +10,9 @@
 #include "grace/generic/bits.h"
 #include "grace/generic/morton.h"
 
+#include "grace/config.h"
 #include "grace/aabb.h"
 #include "grace/error.h"
-#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <thrust/device_vector.h>

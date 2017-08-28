@@ -6,6 +6,7 @@
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
 
+#include "grace/types.h"
 #include "grace/vector.h"
 
 static __global__ void shadow_rays_kernel(

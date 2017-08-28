@@ -9,8 +9,8 @@
 
 #include "grace/generic/functors/albvh.h"
 
-#include "grace/aabb.h"
 #include "grace/types.h"
+#include "grace/config.h"
 
 #include <thrust/device_vector.h>
 #include <thrust/sort.h>

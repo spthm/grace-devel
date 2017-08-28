@@ -4,7 +4,7 @@
 #include "helper-unit/assert_macros.h"
 #include "helper-unit/test_types.h"
 
-#include "grace/types.h"
+#include "grace/config.h"
 #include "grace/vector.h"
 
 

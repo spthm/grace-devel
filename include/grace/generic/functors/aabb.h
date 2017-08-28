@@ -1,8 +1,8 @@
 #pragma once
 
+#include "grace/config.h"
 #include "grace/aabb.h"
 #include "grace/sphere.h"
-#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <iterator>

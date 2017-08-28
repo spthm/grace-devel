@@ -14,7 +14,7 @@
 #define NDEBUG
 #endif
 
-#include "grace/types.h"
+#include "grace/config.h"
 
 #include <cstdio>
 

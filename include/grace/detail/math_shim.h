@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/types.h"
+#include "grace/config.h"
 
 #include <algorithm>
 
@@ -32,7 +32,7 @@ namespace grace {
  * Note 2: nvcc includes cuda_runtime.h by default, which includes
  *         common_functions.h, which includes the aforementioned
  *         math_functions.h. (See e.g. http://stackoverflow.com/a/29710576.)
- *         Since we only required overloaded ::min() and ::max() when following
+ *         Since we only require overloaded ::min() and ::max() when following
  *         the device compilation trajectory, we can be sure they exist without
  *         #include-ing any other headers.
  *

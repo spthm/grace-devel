@@ -2,6 +2,7 @@
 
 // No grace/vector.h include.
 // This should only ever be included by grace/vector.h.
+#include "grace/config.h"
 
 namespace grace {
 

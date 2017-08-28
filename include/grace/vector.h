@@ -1,8 +1,7 @@
 #pragma once
 
-#include "grace/types.h"
-
 #include "grace/detail/vector_alignment-inl.h"
+#include "grace/config.h"
 
 namespace grace {
 

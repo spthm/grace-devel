@@ -9,6 +9,7 @@
 #include "grace/generic/functors/centroid.h"
 
 #include "grace/aabb.h"
+#include "grace/config.h"
 #include "grace/sphere.h"
 #include "grace/types.h"
 

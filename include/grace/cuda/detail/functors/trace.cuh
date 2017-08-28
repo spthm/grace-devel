@@ -6,9 +6,9 @@
 #include "grace/generic/interpolate.h"
 #include "grace/generic/meta.h"
 
+#include "grace/config.h"
 #include "grace/error.h"
 #include "grace/sphere.h"
-#include "grace/types.h"
 
 namespace grace {
 

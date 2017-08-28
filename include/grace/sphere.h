@@ -1,7 +1,7 @@
 #pragma once
 
+#include "grace/config.h"
 #include "grace/vector.h"
-#include "grace/types.h"
 
 namespace grace {
 

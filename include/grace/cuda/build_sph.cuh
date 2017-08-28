@@ -3,8 +3,8 @@
 #include "grace/cuda/bvh.cuh"
 
 #include "grace/aabb.h"
+#include "grace/config.h"
 #include "grace/sphere.h"
-#include "grace/types.h"
 
 #include <thrust/device_vector.h>
 

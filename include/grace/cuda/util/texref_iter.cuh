@@ -52,9 +52,8 @@
 
 #pragma once
 
+#include "grace/config.h"
 #include "grace/generic/meta.h"
-
-#include "grace/types.h"
 
 #include <cstddef>
 #include <iterator>

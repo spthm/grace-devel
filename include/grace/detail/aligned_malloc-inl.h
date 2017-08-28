@@ -3,7 +3,11 @@
 // No grace/aligned_malloc.h include.
 // This should only ever be included by grace/aligned_malloc.h.
 
+#if defined(GRACE_USE_CPP17_ALIGNED_ALLOC)
+#include <cstdlib>
+#else
 #include <stdlib.h>
+#endif
 
 #if defined(GRACE_USE_MM_MALLOC) || defined(GRACE_USE_MS_ALIGNED_MALLOC)
 #include <malloc.h>
@@ -19,7 +23,10 @@ GRACE_HOST void* aligned_malloc(const size_t size, const size_t alignment)
 
     void* memptr = NULL;
 
-#if defined(GRACE_USE_CPP11_ALIGNED_ALLOC)
+#if defined(GRACE_USE_CPP17_ALIGNED_ALLOC)
+    memptr = std::aligned_alloc(alignment, size);
+
+#elif defined(GRACE_USE_C11_ALIGNED_ALLOC)
     memptr = aligned_alloc(alignment, size);
 
 #elif defined(GRACE_USE_POSIX_MEMALIGN)

@@ -3,8 +3,9 @@
 #include "grace/cuda/prngstates.cuh"
 
 #include "grace/aabb.h"
-#include "grace/types.h"
+#include "grace/config.h"
 #include "grace/ray.h"
+#include "grace/types.h"
 #include "grace/vector.h"
 
 #include <thrust/device_vector.h>
@@ -41,7 +42,7 @@ GRACE_HOST void uniform_random_rays(
 // negative.
 // E.g. PPP: all rays are in the +ve x, +ve y and +ve z octant;
 //      MPM: all rays are in the -ve x, +ve y and -ve z octant.
-// Octants are defined in grace/types.h.
+// Octants are defined in grace/config.h.
 template <typename Real, typename StateT>
 GRACE_HOST void uniform_random_rays_single_octant(
     const Vector<3, Real> origin,

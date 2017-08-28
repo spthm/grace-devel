@@ -1,7 +1,7 @@
 #include "vector3_host.h"
 
-#include "grace/types.h"
 #include "grace/aligned_malloc.h"
+#include "grace/config.h"
 
 // Forward declarations. These are not externally visible.
 

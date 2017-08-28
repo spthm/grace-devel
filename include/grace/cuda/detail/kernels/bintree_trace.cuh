@@ -10,6 +10,7 @@
 
 #include "grace/cuda/bvh.cuh"
 
+#include "grace/config.h"
 #include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"

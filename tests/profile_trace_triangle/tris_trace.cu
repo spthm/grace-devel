@@ -2,6 +2,7 @@
 
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
+#include "grace/types.h"
 
 
 void setup_cameras(
