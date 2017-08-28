@@ -65,6 +65,9 @@ struct GRACE_ALIGNAS(16) Sphere
     GRACE_HOST_DEVICE Vector<3, T> center() const;
 };
 
+typedef Sphere<float> Spheref;
+typedef Sphere<double> Sphered;
+
 //
 // Comparison operations
 //

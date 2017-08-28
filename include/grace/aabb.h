@@ -51,6 +51,9 @@ struct GRACE_ALIGNAS(16) AABB
     GRACE_HOST_DEVICE void translate(const Vector<3, T>& vec);
 };
 
+typedef AABB<float> AABBf;
+typedef AABB<double> AABBd;
+
 
 //
 // Comparison operations
