@@ -3,6 +3,8 @@
 // No grace/aabb.h include.
 // This should only ever be included by grace/aabb.h.
 
+#include "grace/generic/limits.h"
+
 namespace grace {
 
 //
@@ -11,7 +13,9 @@ namespace grace {
 
 template <typename T>
 GRACE_HOST_DEVICE AABB<T>::AABB()
-    : min((T)-0.5, (T)-0.5, (T)-0.5), max((T)0.5, (T)0.5, (T)0.5) {}
+{
+    invalidate();
+}
 
 template <typename T>
 template <typename U>
@@ -50,6 +54,23 @@ GRACE_HOST_DEVICE Vector<3, T> AABB<T>::center() const
 {
     return T(0.5) * (max + min);
 }
+
+template <typename T>
+GRACE_HOST_DEVICE void AABB<T>::invalidate()
+{
+    // lowest/max rather than max/min because min, for floats, is the smallest
+    // positive value.
+    // +/- infinity also an option, but doesn't work for (admittedly weird)
+    // integral-value AABBs.
+    min = Vector<3, T>(grace::numeric_limits<T>::max(),
+                       grace::numeric_limits<T>::max(),
+                       grace::numeric_limits<T>::max());
+    max = Vector<3, T>(grace::numeric_limits<T>::lowest(),
+                       grace::numeric_limits<T>::lowest(),
+                       grace::numeric_limits<T>::lowest());
+
+}
+
 
 template <typename T>
 GRACE_HOST_DEVICE Vector<3, T> AABB<T>::size() const

@@ -13,14 +13,24 @@ namespace grace {
 
 GRACE_HOST void* aligned_malloc(const size_t size, const size_t alignment)
 {
+    // Require non-zero, power-of-two.
+    if ( alignment == 0 || ((alignment & (alignment - 1)) != 0) )
+        return NULL;
+
     void* memptr = NULL;
 
 #if defined(GRACE_USE_CPP11_ALIGNED_ALLOC)
     memptr = aligned_alloc(alignment, size);
 
 #elif defined(GRACE_USE_POSIX_MEMALIGN)
+    // posix_memalign fails if alignment is not a multiple of sizeof(void*).
+    // Where alignment is less than this value, we may safely use
+    // sizeof(void*) alignment because alignments are always powers of two.
+    const size_t posix_alignment
+        = sizeof(void*) > alignment ? sizeof(void*) : alignment;
+
     int res;
-    res = posix_memalign(&memptr, alignment, size);
+    res = posix_memalign(&memptr, posix_alignment, size);
     if (res != 0) {
         memptr = NULL;
     }

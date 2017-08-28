@@ -45,6 +45,7 @@ struct GRACE_ALIGNAS(16) AABB
 
     GRACE_HOST_DEVICE Vector<3, T> size() const;
 
+    GRACE_HOST_DEVICE void invalidate();
     GRACE_HOST_DEVICE void scale(const T s);
     GRACE_HOST_DEVICE void scale(const Vector<3, T>& vec);
 
