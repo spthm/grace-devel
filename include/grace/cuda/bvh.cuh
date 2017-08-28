@@ -1,6 +1,9 @@
 #pragma once
 
-#include "grace/cuda/detail/bvh_node-inl.cuh"
+#include "grace/execution_tag.h"
+#include "grace/cpp/bvh.h"
+#include "grace/detail/bvh_base.h"
+#include "grace/cuda/detail/bvh_node.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -8,44 +11,27 @@ namespace grace {
 
 namespace detail {
 
-// Forward declarations
-class CudaBVH_ref;
-class CudaBVH_const_ref;
+typedef BvhBase<thrust::device_vector<CudaBvhNode>,
+                thrust::device_vector<CudaBvhLeaf> > CudaBvhBase;
 
 } // namespace detail
 
-class CudaBVH
+
+template <>
+class Bvh<grace::cuda_tag> : public detail::CudaBvhBase
 {
 public:
-    const int max_per_leaf;
-    int root_index;
-    int* d_root_index_ptr;
+    GRACE_HOST
+    explicit Bvh<grace::cuda_tag>(const size_t num_primitives,
+                                  const int max_per_leaf = 1)
+        : detail::CudaBvhBase(num_primitives, max_per_leaf) {}
 
-    // Allocates space only.
-    GRACE_HOST CudaBVH(const size_t N_primitives, const int max_per_leaf = 1);
-
-    // Copies all BVH data.
-    GRACE_HOST CudaBVH(const CudaBVH& other);
-
-    GRACE_HOST size_t num_nodes() const;
-    GRACE_HOST size_t num_leaves() const;
-
-    GRACE_HOST ~CudaBVH();
-
-private:
-    typedef typename thrust::device_vector<detail::CudaNode> node_vector;
-    typedef typename thrust::device_vector<detail::CudaLeaf> leaf_vector;
-
-    node_vector _nodes;
-    leaf_vector _leaves;
-
-    GRACE_HOST void reserve_nodes(const size_t);
-
-    friend class detail::CudaBVH_ref;
-    friend class detail::CudaBVH_const_ref;
+    void from_host(const HostBvh& bvh);
+    void to_host(HostBvh& bvh) const;
 };
+
+typedef Bvh<grace::cuda_tag> CudaBvh;
 
 } //namespace grace
 
 #include "grace/cuda/detail/bvh-inl.cuh"
-#include "grace/cuda/detail/bvh_refs-inl.cuh"
