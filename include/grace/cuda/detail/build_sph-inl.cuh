@@ -111,7 +111,7 @@ template <typename T, typename DeltaType>
 GRACE_HOST void ALBVH_sph(
     const thrust::device_vector<Sphere<T> >& d_spheres,
     const thrust::device_vector<DeltaType>& d_deltas,
-    Tree& d_tree)
+    CudaBvh& d_tree)
 {
     build_ALBVH(d_tree, d_spheres, d_deltas, AABBSphere());
 }

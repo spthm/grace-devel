@@ -37,16 +37,16 @@ GRACE_DEVICE bool albvh_is_left_child(int2 node, int parent_index) {
     return node.y == parent_index;
 }
 
-GRACE_DEVICE CudaNode albvh_decode_node(CudaNode node) {
-    CudaNode decoded(node);
+GRACE_DEVICE CudaBvhNode albvh_decode_node(CudaBvhNode node) {
+    CudaBvhNode decoded(node);
     decoded.set_left_child(-1 * node.left_child() - 1);
     decoded.set_right_child(-1 * node.right_child() - 1);
 
     return decoded;
 }
 
-GRACE_DEVICE CudaNode albvh_encode_node(CudaNode node) {
-    CudaNode encoded(node);
+GRACE_DEVICE CudaBvhNode albvh_encode_node(CudaBvhNode node) {
+    CudaBvhNode encoded(node);
     encoded.set_left_child(-1 * (node.left_child() + 1));
     encoded.set_right_child(-1 * (node.right_child() + 1));
     return encoded;
@@ -54,7 +54,7 @@ GRACE_DEVICE CudaNode albvh_encode_node(CudaNode node) {
 
 // Return the parent index in terms of the base nodes, given the actual parent
 // index and the base nodes covered by the current node.
-GRACE_DEVICE int albvh_logical_parent(CudaNode node, int2 g_node, int g_parent_index)
+GRACE_DEVICE int albvh_logical_parent(CudaBvhNode node, int2 g_node, int g_parent_index)
 {
     return albvh_is_left_child(g_node, g_parent_index) ? node.last_leaf() : node.first_leaf() - 1;
 }
@@ -84,7 +84,7 @@ GRACE_DEVICE int albvh_node_parent(int2 node, DeltaIter deltas, DeltaComp comp)
 // node contains the left- and right-most primitives it spans.
 // deltas is an array of per-leaf delta values.
 template <typename DeltaIter, typename DeltaComp>
-GRACE_DEVICE int albvh_node_parent(CudaNode node, DeltaIter deltas, DeltaComp comp)
+GRACE_DEVICE int albvh_node_parent(CudaBvhNode node, DeltaIter deltas, DeltaComp comp)
 {
     return albvh_node_parent(make_int2(node.first_leaf(), node.last_leaf()), deltas, comp);
 }
@@ -117,7 +117,7 @@ __global__ void compute_deltas_kernel(
 // Two template parameters as DeltaIter _may_ be const_iterator or const T*.
 template<typename DeltaIter, typename LeafDeltaIter>
 __global__ void copy_leaf_deltas_kernel(
-    const CudaLeaf* leaves,
+    const CudaBvhLeaf* leaves,
     const size_t n_leaves,
     DeltaIter all_deltas,
     LeafDeltaIter leaf_deltas)
@@ -133,7 +133,7 @@ __global__ void copy_leaf_deltas_kernel(
 
     while (tid < n_leaves)
     {
-        CudaLeaf leaf = leaves[tid];
+        CudaBvhLeaf leaf = leaves[tid];
         int last_idx = leaf.last_primitive();
         leaf_deltas[tid] = all_deltas[last_idx];
 
@@ -304,7 +304,7 @@ __global__ void build_leaves_kernel(
 __global__ void write_leaves_kernel(
     const int2* nodes,
     const size_t n_nodes,
-    CudaLeaf* big_leaves,
+    CudaBvhLeaf* big_leaves,
     const int max_per_leaf)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
@@ -346,7 +346,7 @@ __global__ void write_leaves_kernel(
         // NOTE: size is guaranteed accurate only if both left_leaf and
         // right_leaf are true, but if they are both false no write occurs
         // anyway because of the && below.
-        CudaLeaf leaf;
+        CudaBvhLeaf leaf;
         if (left_leaf && write_check) {
             leaf.set_first_primitive(left);
             leaf.set_size(left_size);
@@ -369,9 +369,9 @@ template <
     typename AABBFunc
     >
 __global__ void build_nodes_slice_kernel(
-    CudaNode* nodes,
+    CudaBvhNode* nodes,
     const size_t n_nodes,
-    const CudaLeaf* leaves,
+    const CudaBvhLeaf* leaves,
     const size_t n_leaves,
     PrimitiveIter primitives,
     const int* base_indices,
@@ -443,22 +443,21 @@ __global__ void build_nodes_slice_kernel(
             GRACE_ASSERT(g_cur_index < n_nodes + n_leaves);
 
             int g_left, g_right;
-            AABB<float> node_aabb;
+            AABBf node_aabb;
             if (g_cur_index < n_nodes) {
-                CudaNode node = nodes[g_cur_index];
+                CudaBvhNode node = nodes[g_cur_index];
                 node_aabb = node.AABB();
 
                 g_left = node.left_child();
                 g_right = node.right_child();
             }
             else {
-                CudaLeaf leaf = leaves[g_cur_index - n_nodes];
+                CudaBvhLeaf leaf = leaves[g_cur_index - n_nodes];
 
-                #pragma unroll 4
-                for (int i = 0; i < leaf.size(); i++) {
+                for (int i = 0; i < leaf.size(); ++i) {
                     PrimitiveType prim = primitives[leaf.first_primitive() + i];
 
-                    AABB<float> prim_aabb;
+                    AABBf prim_aabb;
                     aabb_op(prim, &prim_aabb);
                     node_aabb = aabb_union(node_aabb, prim_aabb);
                 }
@@ -560,7 +559,7 @@ __global__ void build_nodes_slice_kernel(
                 // We are certain that a thread in this block has already
                 // *written* the other child of the current node, so we can read
                 // from L1 if we get a cache hit.
-                CudaNode node = nodes[g_cur_index];
+                CudaBvhNode node = nodes[g_cur_index];
 
                 // 'error: class "int2" has no suitable copy constructor'
                 // int2 left_right = sm_nodes[cur_index - low];
@@ -598,7 +597,7 @@ __global__ void build_nodes_slice_kernel(
                 }
 
                 // Again, L1 data will be accurate.
-                AABB<float> node_aabb = node.AABB();
+                AABBf node_aabb = node.AABB();
 
                 GRACE_ASSERT(node_aabb.min.x < node_aabb.max.x);
                 GRACE_ASSERT(node_aabb.min.y < node_aabb.max.y);
@@ -665,7 +664,7 @@ __global__ void build_nodes_slice_kernel(
 }
 
 __global__ void fill_output_queue(
-    const CudaNode* nodes,
+    const CudaBvhNode* nodes,
     const size_t n_nodes,
     const int max_per_node,
     int* new_base_indices)
@@ -674,7 +673,7 @@ __global__ void fill_output_queue(
 
     while (tid < n_nodes)
     {
-        CudaNode node = nodes[tid];
+        CudaBvhNode node = nodes[tid];
 
         // The left/right values are negative IFF they were written in this
         // iteration.  A negative index represents a logical/compacted index.
@@ -710,16 +709,16 @@ __global__ void fill_output_queue(
 }
 
 __global__ void fix_node_ranges(
-    CudaNode* nodes,
+    CudaBvhNode* nodes,
     const size_t n_nodes,
-    const CudaLeaf* leaves,
+    const CudaBvhLeaf* leaves,
     const int* old_base_indices)
 {
     int tid = threadIdx.x + blockIdx.x * grace::BUILD_THREADS_PER_BLOCK;
 
     while (tid < n_nodes)
     {
-        CudaNode node = nodes[tid];
+        CudaBvhNode node = nodes[tid];
 
         // We only need to fix nodes whose ranges were written, *in full*, this
         // iteration.
@@ -764,7 +763,7 @@ __global__ void fix_node_ranges(
 // Two template parameters as DeltaIter _may_ be const_iterator or const T*.
 template<typename DeltaIter, typename LeafDeltaIter>
 GRACE_HOST void copy_leaf_deltas(
-    const thrust::device_vector<CudaLeaf>& d_leaves,
+    const thrust::device_vector<CudaBvhLeaf>& d_leaves,
     DeltaIter d_all_deltas_iter,
     LeafDeltaIter d_leaf_deltas_iter)
 {
@@ -781,7 +780,7 @@ GRACE_HOST void copy_leaf_deltas(
 template <typename DeltaIter, typename DeltaComp>
 GRACE_HOST void build_leaves(
     thrust::device_vector<int2>& d_tmp_nodes,
-    thrust::device_vector<CudaLeaf>& d_tmp_leaves,
+    thrust::device_vector<CudaBvhLeaf>& d_tmp_leaves,
     const int max_per_leaf,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp)
@@ -820,7 +819,7 @@ GRACE_HOST void build_leaves(
     GRACE_KERNEL_CHECK();
 }
 
-GRACE_HOST void remove_empty_leaves(CudaBVH& bvh)
+GRACE_HOST void remove_empty_leaves(thrust::device_vector<CudaBvhLeaf>& d_leaves)
 {
     // A transform_reduce (with unary op 'is_valid_node()') followed by a
     // copy_if (with predicate 'is_valid_node()') actually seems slightly faster
@@ -829,19 +828,15 @@ GRACE_HOST void remove_empty_leaves(CudaBVH& bvh)
     // build process.
 
     // Try
-    // thrust::remove(.., .., CudaLeaf());
+    // thrust::remove(.., .., CudaBvhLeaf());
 
-    detail::CudaBVH_ref bvh_ref(bvh);
+    typedef typename thrust::device_vector<CudaBvhLeaf>::iterator LeafIter;
+    LeafIter end = thrust::remove_if(d_leaves.begin(),
+                                     d_leaves.end(),
+                                     detail::is_empty_cuda_bvh_node());
 
-    typedef detail::CudaBVH_ref::leaf_iterator LeafIter;
-    LeafIter end = thrust::remove_if(bvh_ref.leaves().begin(),
-                                     bvh_ref.leaves().end(),
-                                     detail::is_empty_node());
-
-    const size_t n_new_leaves = end - bvh_ref.leaves().begin();
-    const size_t n_new_nodes = n_new_leaves - 1;
-    bvh_ref.nodes().resize(n_new_nodes);
-    bvh_ref.leaves().resize(n_new_leaves);
+    const size_t n_new_leaves = end - d_leaves.begin();
+    d_leaves.resize(n_new_leaves);
 }
 
 template <
@@ -851,7 +846,7 @@ template <
     typename AABBFunc
     >
 GRACE_HOST void build_nodes(
-    CudaBVH& bvh,
+    CudaBvh& bvh,
     PrimitiveIter d_prims_iter,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
@@ -859,7 +854,11 @@ GRACE_HOST void build_nodes(
 {
     const size_t n_leaves = bvh.num_leaves();
     const size_t n_nodes = bvh.num_nodes();
-    detail::CudaBVH_ref bvh_ref(bvh);
+    detail::Bvh_ref<CudaBvh> bvh_ref(bvh);
+
+    thrust::device_vector<int> d_root_index(1);
+    d_root_index[0] = -1;
+    int* d_root_index_ptr = thrust::raw_pointer_cast(d_root_index.data());
 
     thrust::device_vector<int> d_queue1(n_leaves);
     thrust::device_vector<int> d_queue2(n_leaves);
@@ -890,7 +889,7 @@ GRACE_HOST void build_nodes(
         // SMEM has to cover for BUILD_THREADS_PER_BLOCK + max_per_leaf flags
         // AND int2 nodes.
         int smem_size = (sizeof(int) + sizeof(int2))
-                        * (grace::BUILD_THREADS_PER_BLOCK + bvh.max_per_leaf);
+                        * (grace::BUILD_THREADS_PER_BLOCK + bvh.max_per_leaf());
         build_nodes_slice_kernel<<<blocks, grace::BUILD_THREADS_PER_BLOCK, smem_size>>>(
             thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
@@ -899,9 +898,9 @@ GRACE_HOST void build_nodes(
             d_prims_iter,
             d_in_ptr,
             n_in,
-            bvh.d_root_index_ptr,
+            d_root_index_ptr,
             d_deltas_iter,
-            bvh.max_per_leaf, // This can actually be anything.
+            bvh.max_per_leaf(), // This can actually be anything.
             d_out_ptr,
             delta_comp,
             aabb_op);
@@ -913,7 +912,7 @@ GRACE_HOST void build_nodes(
         fill_output_queue<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
-            bvh.max_per_leaf,
+            bvh.max_per_leaf(),
             d_out_ptr);
         GRACE_KERNEL_CHECK();
 
@@ -935,6 +934,11 @@ GRACE_HOST void build_nodes(
         // worth doing since we need to fill it with -1's.
         out_q_end = out_q_begin + (in_q_end - in_q_begin);
     }
+
+    int root_index = d_root_index[0];
+    GRACE_ASSERT(root_index != -1);
+
+    bvh.set_root_index(root_index);
 }
 
 } // namespace detail
@@ -982,8 +986,9 @@ template <
     typename AABBFunc
     >
 GRACE_HOST void build_ALBVH(
-    CudaBVH& bvh,
+    CudaBvh& bvh,
     PrimitiveIter d_prims_iter,
+    const size_t num_primitives,
     DeltaIter d_deltas_iter,
     const DeltaComp delta_comp,
     const AABBFunc aabb_op,
@@ -993,27 +998,34 @@ GRACE_HOST void build_ALBVH(
 
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
 
-    detail::CudaBVH_ref bvh_ref(bvh);
+    const size_t n_leaves = num_primitives;
+    const size_t n_nodes = n_leaves - 1;
+
+    detail::Bvh_ref<CudaBvh> bvh_ref(bvh);
 
     // In case this ever changes.
     GRACE_ASSERT(sizeof(int4) == sizeof(float4));
 
     if (wipe) {
         thrust::fill(bvh_ref.nodes().begin(), bvh_ref.nodes().end(),
-                     detail::CudaNode());
+                     detail::CudaBvhNode());
         thrust::fill(bvh_ref.leaves().begin(), bvh_ref.leaves().end(),
-                     detail::CudaLeaf());
+                     detail::CudaBvhLeaf());
     }
 
-    const size_t n_leaves = bvh_ref.leaves().size();
-    const size_t n_nodes = n_leaves - 1;
+    thrust::device_vector<detail::CudaBvhLeaf> d_tmp_leaves(n_leaves);
     thrust::device_vector<int2> d_tmp_nodes(n_nodes);
 
-    detail::build_leaves(d_tmp_nodes, bvh_ref.leaves(), bvh.max_per_leaf,
+    detail::build_leaves(d_tmp_nodes, d_tmp_leaves, bvh.max_per_leaf(),
                          d_deltas_iter, delta_comp);
-    detail::remove_empty_leaves(bvh);
+    detail::remove_empty_leaves(d_tmp_leaves);
+
+    bvh_ref.leaves() = d_tmp_leaves;
 
     const size_t n_new_leaves = bvh.num_leaves();
+    const size_t n_new_nodes = n_new_leaves - 1;
+    bvh_ref.nodes().resize(n_new_nodes);
+
     thrust::device_vector<DeltaType> d_new_deltas(n_new_leaves + 1);
     DeltaType* new_deltas_ptr = thrust::raw_pointer_cast(d_new_deltas.data());
 
@@ -1029,7 +1041,7 @@ template <
     typename AABBFunc
     >
 GRACE_HOST void build_ALBVH(
-    CudaBVH& bvh,
+    CudaBvh& bvh,
     const thrust::device_vector<PrimitiveType>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const DeltaComp delta_comp,
@@ -1039,14 +1051,16 @@ GRACE_HOST void build_ALBVH(
     const PrimitiveType* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(bvh, prims_ptr, deltas_ptr, delta_comp, aabb_op, wipe);
+    build_ALBVH(bvh, prims_ptr, d_primitives.size(), deltas_ptr,
+                delta_comp, aabb_op, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
 template <typename PrimitiveIter, typename DeltaIter, typename AABBFunc>
 GRACE_HOST void build_ALBVH(
-    CudaBVH& bvh,
+    CudaBvh& bvh,
     PrimitiveIter d_prims_iter,
+    const size_t num_primitives,
     DeltaIter d_deltas_iter,
     const AABBFunc aabb_op,
     const bool wipe = false)
@@ -1054,14 +1068,14 @@ GRACE_HOST void build_ALBVH(
     typedef typename std::iterator_traits<DeltaIter>::value_type DeltaType;
     typedef typename thrust::less<DeltaType> DeltaComp;
 
-    build_ALBVH(bvh, d_prims_iter, d_deltas_iter, DeltaComp(), aabb_op,
-                wipe);
+    build_ALBVH(bvh, d_prims_iter, num_primitives, d_deltas_iter,
+                DeltaComp(), aabb_op, wipe);
 }
 
 // Specialized with DeltaComp = thrust::less<DeltaType>
 template <typename PrimitiveType, typename DeltaType, typename AABBFunc>
 GRACE_HOST void build_ALBVH(
-    CudaBVH& bvh,
+    CudaBvh& bvh,
     const thrust::device_vector<PrimitiveType>& d_primitives,
     const thrust::device_vector<DeltaType>& d_deltas,
     const AABBFunc aabb_op,
@@ -1071,7 +1085,8 @@ GRACE_HOST void build_ALBVH(
     const PrimitiveType* prims_ptr = thrust::raw_pointer_cast(d_primitives.data());
     const DeltaType* deltas_ptr = thrust::raw_pointer_cast(d_deltas.data());
 
-    build_ALBVH(bvh, prims_ptr, deltas_ptr, DeltaComp(), aabb_op, wipe);
+    build_ALBVH(bvh, prims_ptr, d_primitives.size(), deltas_ptr,
+                DeltaComp(), aabb_op, wipe);
 }
 
 } // namespace grace
