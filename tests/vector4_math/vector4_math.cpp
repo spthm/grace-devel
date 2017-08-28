@@ -1,6 +1,7 @@
-#include "grace/vector.h"
-
+// This should be first so assert() is correctly defined.
 #include "helper-unit/assert_macros.h"
+
+#include "grace/vector.h"
 
 #include <iostream>
 

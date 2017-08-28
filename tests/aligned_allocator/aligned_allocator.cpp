@@ -1,3 +1,4 @@
+// This should be first so assert() is correctly defined.
 #include "helper-unit/assert_macros.h"
 
 #include "grace/aligned_allocator.h"
