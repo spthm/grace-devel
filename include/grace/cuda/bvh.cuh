@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/detail/CudaNode-inl.cuh"
+#include "grace/cuda/detail/bvh_node-inl.cuh"
 
 #include <thrust/device_vector.h>
 
@@ -47,5 +47,5 @@ private:
 
 } //namespace grace
 
-#include "grace/cuda/detail/CudaBVH-inl.cuh"
-#include "grace/cuda/detail/CudaBVHRefs-inl.cuh"
+#include "grace/cuda/detail/bvh-inl.cuh"
+#include "grace/cuda/detail/bvh_refs-inl.cuh"

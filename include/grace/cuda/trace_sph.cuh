@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/ray.h"
 #include "grace/sphere.h"

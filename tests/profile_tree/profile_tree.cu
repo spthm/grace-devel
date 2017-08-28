@@ -5,7 +5,7 @@
 #include <curand_kernel.h>
 
 #include "grace/cuda/build_sph.cuh"
-#include "grace/cuda/CudaBVH.cuh"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/generic/functors/albvh.h"
 #include "grace/aabb.h"

@@ -8,7 +8,7 @@
 #include "grace/generic/boundedptr.h"
 #include "grace/generic/meta.h"
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/error.h"
 #include "grace/ray.h"

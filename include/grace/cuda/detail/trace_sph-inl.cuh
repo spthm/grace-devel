@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
 #include "grace/generic/meta.h"

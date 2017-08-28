@@ -4,7 +4,7 @@
 
 #include "grace/cuda/detail/kernel_config.h"
 
-#include "grace/cuda/CudaBVH.cuh"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/aabb.h"
 #include "grace/error.h"

@@ -3,7 +3,7 @@
 #include "grace/cuda/detail/kernels/albvh.cuh"
 #include "grace/cuda/detail/kernels/morton.cuh"
 
-#include "grace/cuda/nodes.h"
+#include "grace/cuda/bvh.cuh"
 
 #include "grace/generic/functors/albvh.h"
 #include "grace/generic/functors/centroid.h"

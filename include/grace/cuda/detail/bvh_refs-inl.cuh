@@ -3,10 +3,10 @@
 // This class exists only to provide access to CudaBVH's private members
 // without exposing them as part of the public API.
 //
-// DO NOT #include "CudaBVH.cuh" or #include "CudaBVH-inl.cuh".
+// DO NOT #include "bvh.cuh" or #include "bvh-inl.cuh".
 //
-// For simplicity, CudaBVH.cuh will include this file.
-// Compilation should fail if this file is #include'd before CudaBVH.cuh.
+// For simplicity, bvh.cuh will include this file.
+// Compilation should fail if this file is #include'd before bvh.cuh.
 // It makes no sense for this implementation-detail class to be used if
 // CudaBVH is not also required.
 
