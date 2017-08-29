@@ -2,7 +2,7 @@
 
 // No grace/vector.h include.
 // This should only ever be included by grace/vector.h.
-#include <grace/error.h>
+#include <grace/detail/assert.h>
 
 namespace grace {
 

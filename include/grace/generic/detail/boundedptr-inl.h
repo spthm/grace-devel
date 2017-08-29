@@ -2,7 +2,7 @@
 
 // No grace/generic/boundedptr.h include.
 // This should only ever be included by grace/generic/boundedptr.h.
-#include "grace/error.h"
+#include "grace/detail/assert.h"
 
 #include <cstddef>
 

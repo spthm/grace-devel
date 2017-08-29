@@ -1,7 +1,7 @@
 #pragma once
 
+#include "grace/cuda/error.cuh"
 #include "grace/config.h"
-#include "grace/error.h"
 
 #include <thrust/device_vector.h>
 
@@ -37,7 +37,7 @@ GRACE_HOST void multiply_by_weights(
     detail::multiply_by_weights_kernel<<<48, 512>>>(
         unweighted, N_unweighted, weights, weight_map, weighted
     );
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template <typename Real, typename IdxType>

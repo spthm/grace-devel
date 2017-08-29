@@ -7,14 +7,16 @@
 #include "grace/cuda/detail/kernel_config.h"
 #include "grace/cuda/detail/kernels/morton.cuh"
 
+#include "grace/cuda/error.cuh"
 #include "grace/cuda/sort.cuh"
 
 #include "grace/generic/morton.h"
 #include "grace/generic/functors/centroid.h"
 
+#include "grace/detail/assert.h"
+
 #include "grace/aabb.h"
 #include "grace/config.h"
-#include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"
 #include "grace/vector.h"
@@ -428,7 +430,7 @@ GRACE_HOST void uniform_random_rays(
         d_rays_ptr,
         thrust::raw_pointer_cast(d_keys.data()),
         N_rays);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
@@ -455,7 +457,7 @@ GRACE_HOST void uniform_random_rays_single_octant(
             thrust::raw_pointer_cast(d_keys.data()),
             N_rays,
             octant);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
@@ -479,7 +481,7 @@ GRACE_HOST void one_to_many_rays_nosort(
         d_rays_ptr,
         (uinteger32*)NULL,
         N_rays);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 // No bounding box information for points; just sort rays based on their
@@ -504,7 +506,7 @@ GRACE_HOST void one_to_many_rays_dirsort(
             d_rays_ptr,
             thrust::raw_pointer_cast(d_keys.data()),
             N_rays);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     thrust::sort_by_key(d_keys.begin(), d_keys.end(),
                         thrust::device_ptr<Ray>(d_rays_ptr));
@@ -534,7 +536,7 @@ GRACE_HOST void one_to_many_rays_endsort(
             d_rays_ptr,
             (uinteger32*)NULL,
             N_rays);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     morton_keys(d_points_ptr, N_rays, aabb, d_keys_ptr,
                 CentroidPassThrough<PointType, Real>());
@@ -575,7 +577,7 @@ GRACE_HOST void plane_parallel_random_rays(
         length,
         direction,
         d_rays_ptr);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template <typename Real>
@@ -629,7 +631,7 @@ GRACE_HOST void orthographic_projection_rays(
         u,
         length,
         d_rays_ptr);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template <typename Real>
@@ -686,7 +688,7 @@ GRACE_HOST void pinhole_camera_rays(
         n,
         length,
         d_rays_ptr);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 } // namespace detail

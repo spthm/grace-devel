@@ -9,9 +9,11 @@
 #include "grace/generic/meta.h"
 
 #include "grace/cuda/bvh.cuh"
+#include "grace/cuda/error.cuh"
+
+#include "grace/detail/assert.h"
 
 #include "grace/config.h"
-#include "grace/error.h"
 #include "grace/ray.h"
 #include "grace/types.h"
 
@@ -463,7 +465,7 @@ GRACE_HOST void trace(
         on_hit,
         ray_entry,
         ray_exit);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     GRACE_CUDA_CHECK(nodes_iter.unbind());
     GRACE_CUDA_CHECK(leaves_iter.unbind());

@@ -1,7 +1,8 @@
 #include "statistics.cuh"
 #include "stats_math.cuh"
 
-#include "grace/error.h"
+#include "grace/cuda/error.cuh"
+
 #include "grace/ray.h"
 #include "grace/vector.h"
 
@@ -115,7 +116,7 @@ void ij_pair_sums(const thrust::device_vector<grace::Ray>& rays,
             i,
             j_start,
             N_pairs);
-        GRACE_KERNEL_CHECK();
+        GRACE_CUDA_KERNEL_CHECK();
 
         double2 sums = thrust::reduce(psi_sinpsi_ij.begin(),
                                       psi_sinpsi_ij.begin() + N_pairs,

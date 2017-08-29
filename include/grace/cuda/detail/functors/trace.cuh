@@ -2,12 +2,13 @@
 
 #include "grace/cuda/detail/device/intersect.cuh"
 
+#include "grace/detail/assert.h"
+
 #include "grace/generic/boundedptr.h"
 #include "grace/generic/interpolate.h"
 #include "grace/generic/meta.h"
 
 #include "grace/config.h"
-#include "grace/error.h"
 #include "grace/sphere.h"
 
 namespace grace {

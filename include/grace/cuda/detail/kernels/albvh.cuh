@@ -5,10 +5,12 @@
 #include "grace/cuda/detail/kernel_config.h"
 
 #include "grace/cuda/bvh.cuh"
+#include "grace/cuda/error.cuh"
+
+#include "grace/detail/assert.h"
 
 #include "grace/aabb.h"
 #include "grace/config.h"
-#include "grace/error.h"
 #include "grace/vector.h"
 
 #include <thrust/fill.h>
@@ -774,7 +776,7 @@ GRACE_HOST void copy_leaf_deltas(
         d_leaves.size(),
         d_all_deltas_iter,
         d_leaf_deltas_iter);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template <typename DeltaIter, typename DeltaComp>
@@ -805,7 +807,7 @@ GRACE_HOST void build_leaves(
         d_deltas_iter,
         max_per_leaf,
         delta_comp);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 
     blocks = std::min(grace::MAX_BLOCKS,
                       (int)((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -816,7 +818,7 @@ GRACE_HOST void build_leaves(
         n_nodes,
         thrust::raw_pointer_cast(d_tmp_leaves.data()),
         max_per_leaf);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 GRACE_HOST void remove_empty_leaves(thrust::device_vector<CudaBvhLeaf>& d_leaves)
@@ -904,7 +906,7 @@ GRACE_HOST void build_nodes(
             d_out_ptr,
             delta_comp,
             aabb_op);
-        GRACE_KERNEL_CHECK();
+        GRACE_CUDA_KERNEL_CHECK();
 
         blocks = std::min(grace::MAX_BLOCKS,
                           (int)((n_nodes + grace::BUILD_THREADS_PER_BLOCK - 1)
@@ -914,14 +916,14 @@ GRACE_HOST void build_nodes(
             n_nodes,
             bvh.max_per_leaf(),
             d_out_ptr);
-        GRACE_KERNEL_CHECK();
+        GRACE_CUDA_KERNEL_CHECK();
 
         fix_node_ranges<<<blocks, grace::BUILD_THREADS_PER_BLOCK>>>(
             thrust::raw_pointer_cast(bvh_ref.nodes().data()),
             n_nodes,
             thrust::raw_pointer_cast(bvh_ref.leaves().data()),
             d_in_ptr);
-        GRACE_KERNEL_CHECK();
+        GRACE_CUDA_KERNEL_CHECK();
 
         QIter end = thrust::remove(out_q_begin, out_q_end, -1);
         out_q_end = end;
@@ -962,7 +964,7 @@ GRACE_HOST void compute_deltas(
         N_keys,
         d_deltas_iter,
         delta_func);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template<typename KeyType, typename DeltaType, typename DeltaFunc>

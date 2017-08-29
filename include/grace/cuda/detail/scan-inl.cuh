@@ -4,6 +4,8 @@
 
 #include "grace/cuda/detail/kernels/weights.cuh"
 
+#include "grace/cuda/error.cuh"
+
 #include "grace/external/sgpu/kernels/segscancsr.cuh"
 
 #include <thrust/device_vector.h>

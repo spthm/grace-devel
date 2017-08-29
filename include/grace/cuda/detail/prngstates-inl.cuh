@@ -2,8 +2,11 @@
 
 #include "grace/cuda/detail/kernels/rng.cuh"
 
+#include "grace/cuda/error.cuh"
+
+#include "grace/detail/assert.h"
+
 #include "grace/config.h"
-#include "grace/error.h"
 
 namespace grace {
 
@@ -105,6 +108,7 @@ void RngStates<StateT>::init_states()
     const int num_blocks = (num_states_ + block_size_ - 1) / block_size_;
     init_PRNG_states_kernel<<<num_blocks, block_size_>>>(
         states_, seed_, num_states_);
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 template <typename StateT>

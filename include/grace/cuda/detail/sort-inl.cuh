@@ -1,7 +1,7 @@
 #pragma once
 
 #include "grace/config.h"
-#include "grace/error.h"
+#include "grace/cuda/error.cuh"
 
 #include "grace/external/sgpu/kernels/segmentedsort.cuh"
 

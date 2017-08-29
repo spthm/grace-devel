@@ -2,10 +2,11 @@
 
 #include "grace/cuda/detail/kernel_config.h"
 
+#include "grace/cuda/error.cuh"
+
 #include "grace/generic/functors/aabb.h"
 
 #include "grace/config.h"
-#include "grace/error.h"
 #include "grace/vector.h"
 
 #include <algorithm>
@@ -49,7 +50,7 @@ GRACE_HOST void compute_centroids(
         N_primitives,
         d_centroid_ptr,
         centroid);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 } // namespace detail

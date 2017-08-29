@@ -5,6 +5,7 @@
 
 #include "grace/cuda/util/extrema.cuh"
 
+#include "grace/cuda/error.cuh"
 
 #include "grace/generic/functors/aabb.h"
 #include "grace/generic/bits.h"
@@ -12,7 +13,6 @@
 
 #include "grace/config.h"
 #include "grace/aabb.h"
-#include "grace/error.h"
 #include "grace/vector.h"
 
 #include <thrust/device_vector.h>
@@ -83,7 +83,7 @@ GRACE_HOST void morton_keys(
         normalizing_scale,
         d_keys_iter,
         centroid);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
 }
 
 } // namespace morton

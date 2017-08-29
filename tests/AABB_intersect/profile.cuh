@@ -3,7 +3,7 @@
 #include "AABB.cuh"
 #include "ray.cuh"
 
-#include "grace/error.h" // GRACE
+#include "grace/cuda/error.cuh"
 
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
@@ -89,7 +89,7 @@ float profile_gpu(const thrust::device_vector<Ray>& rays,
         boxes.size(),
         intersector);
     cudaEventRecord(stop);
-    GRACE_KERNEL_CHECK();
+    GRACE_CUDA_KERNEL_CHECK();
     cudaEventSynchronize(stop);
 
     cudaEventElapsedTime(&elapsed, start, stop);
