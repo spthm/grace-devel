@@ -2,8 +2,8 @@
 
 #include "grace/cuda/build_sph.cuh"
 #include "grace/cuda/bvh.cuh"
-#include "grace/generic/meta.h"
 #include "grace/aabb.h"
+#include "grace/meta.h"
 #include "grace/sphere.h"
 
 #include "helper/random.cuh"

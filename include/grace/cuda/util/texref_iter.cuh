@@ -53,12 +53,18 @@
 #pragma once
 
 #include "grace/config.h"
-#include "grace/generic/meta.h"
+#include "grace/meta.h"
 
 #include <cstddef>
 #include <iterator>
 
 namespace grace {
+
+// Forward declaration
+namespace detail {
+template <typename T>
+struct VectorWord;
+} // namespace detail
 
 enum {
     PRIMITIVE_TEX_UID = -1,
@@ -77,7 +83,7 @@ struct TypedTexRef
     {
         // Largest valid texture type of which T is a whole multiple.
         // Valid texture types are char, short, int, float, int2, int4 etc.
-        typedef typename VectorWord<T>::type TexelType;
+        typedef typename detail::VectorWord<T>::type TexelType;
 
         static const size_t TEXELS_PER_READ = sizeof(T) / sizeof(TexelType);
 
@@ -375,5 +381,21 @@ public:
         return !(lhs < rhs);
     }
 };
+
+namespace detail {
+
+template <typename T>
+struct VectorWord
+{
+    // float4 (alignment 16) is the largest type we can load with a single
+    // instruction, or through texture fetches.
+    typedef typename PredicateType<Divides<T, float4>::result, float4,
+              typename PredicateType<Divides<T, float2>::result, float2,
+                typename PredicateType<Divides<T, float>::result, float,
+                  typename PredicateType<Divides<T, short>::result, short,
+                    char>::type>::type>::type>::type type;
+};
+
+} // namespace detail
 
 } // namespace grace

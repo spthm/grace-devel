@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/generic/meta.h"
+#include "grace/meta.h"
 #include "grace/sphere.h"
 #include "grace/vector.h"
 

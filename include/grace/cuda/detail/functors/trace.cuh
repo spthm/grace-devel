@@ -6,9 +6,9 @@
 
 #include "grace/generic/boundedptr.h"
 #include "grace/generic/interpolate.h"
-#include "grace/generic/meta.h"
 
 #include "grace/config.h"
+#include "grace/meta.h"
 #include "grace/sphere.h"
 
 namespace grace {

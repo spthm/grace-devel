@@ -54,17 +54,4 @@ struct Divides
     static const bool result = (sizeof(T) % sizeof(Divisor) == 0);
 };
 
-
-template <typename T>
-struct VectorWord
-{
-    // float4 (alignment 16) is the largest type we can load with a single
-    // instruction, or through texture fetches.
-    typedef typename PredicateType<Divides<T, float4>::result, float4,
-              typename PredicateType<Divides<T, float2>::result, float2,
-                typename PredicateType<Divides<T, float>::result, float,
-                  typename PredicateType<Divides<T, short>::result, short,
-                    char>::type>::type>::type>::type type;
-};
-
 } // namespace grace
