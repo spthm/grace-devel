@@ -1,7 +1,7 @@
 #include "grace/cuda/detail/kernels/morton.cuh"
-#include "grace/generic/morton.h"
 #include "grace/generic/functors/centroid.h"
 #include "grace/aabb.h"
+#include "grace/morton.h"
 #include "grace/vector.h"
 
 #include "helper/random.cuh"

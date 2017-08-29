@@ -3,23 +3,9 @@
 #include "grace/config.h"
 #include "grace/types.h"
 
-#include <cmath>
-#include <iostream>
-#include <bitset>
-
 namespace grace {
 
-template <typename T>
-GRACE_HOST_DEVICE int sgn(T val)
-{
-    return (T(0) < val) - (val < T(0));
-}
-
 namespace detail {
-
-//-----------------------------------------------------------------------------
-// Functions for bitwise manipulation.
-//-----------------------------------------------------------------------------
 
 template <typename UInteger>
 GRACE_HOST_DEVICE uinteger32 space_by_two_10bit(const UInteger x)

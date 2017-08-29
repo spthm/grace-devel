@@ -10,13 +10,13 @@
 #include "grace/cuda/error.cuh"
 #include "grace/cuda/sort.cuh"
 
-#include "grace/generic/morton.h"
 #include "grace/generic/functors/centroid.h"
 
 #include "grace/detail/assert.h"
 
 #include "grace/aabb.h"
 #include "grace/config.h"
+#include "grace/morton.h"
 #include "grace/ray.h"
 #include "grace/types.h"
 #include "grace/vector.h"

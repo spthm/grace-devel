@@ -7,12 +7,13 @@
 
 #include "grace/cuda/error.cuh"
 
-#include "grace/generic/functors/aabb.h"
-#include "grace/generic/bits.h"
-#include "grace/generic/morton.h"
+#include "grace/detail/bits.h"
 
-#include "grace/config.h"
+#include "grace/generic/functors/aabb.h"
+
 #include "grace/aabb.h"
+#include "grace/config.h"
+#include "grace/morton.h"
 #include "grace/vector.h"
 
 #include <thrust/device_vector.h>

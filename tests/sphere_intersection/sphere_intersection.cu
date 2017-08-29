@@ -8,7 +8,6 @@
 
 #include "grace/cuda/generate_rays.cuh"
 #include "grace/cuda/prngstates.cuh"
-#include "grace/generic/bits.h"
 #include "grace/generic/intersect.h"
 #include "grace/ray.h"
 #include "grace/sphere.h"
@@ -26,6 +25,12 @@
 
 typedef grace::Sphere<float> SphereType;
 
+template <typename T>
+GRACE_HOST_DEVICE int sgn(T val)
+{
+    return (T(0) < val) - (val < T(0));
+}
+
 struct expand_functor
 {
     float d;
@@ -36,9 +41,9 @@ struct expand_functor
     {
         SphereType s = sphere;
         // Centre assumed (0, 0).
-        s.x += d * grace::sgn(s.x);
-        s.y += d * grace::sgn(s.y);
-        s.z += d * grace::sgn(s.z);
+        s.x += d * sgn(s.x);
+        s.y += d * sgn(s.y);
+        s.z += d * sgn(s.z);
         return s;
     }
 };

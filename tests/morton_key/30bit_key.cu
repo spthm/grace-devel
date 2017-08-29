@@ -1,5 +1,5 @@
-#include "grace/generic/bits.h"
-#include "grace/generic/morton.h"
+#include "grace/detail/bits.h"
+#include "grace/morton.h"
 
 #include <cstdlib>
 #include <iostream>
