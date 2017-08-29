@@ -177,7 +177,7 @@ int main(int argc, char* argv[])
             trace_bytes += d_bvh.num_nodes() * sizeof(grace::detail::CudaBvhNode);
             trace_bytes += d_rays.size() * sizeof(grace::Ray);
             trace_bytes += d_integrals.size() * sizeof(float);
-            trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
+            trace_bytes += grace::detail::N_table * sizeof(double); // Integral lookup.
 
             std::cout << "Memory allocated for cumulative trace kernel: "
                       << trace_bytes / (1024.0 * 1024.0 * 1024.0) << " GiB"

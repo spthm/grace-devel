@@ -153,7 +153,7 @@ int main(int argc, char* argv[])
             trace_bytes += d_integrals.size() * sizeof(float);
             trace_bytes += d_indices.size() * sizeof(int);
             trace_bytes += d_distances.size() * sizeof(float);
-            trace_bytes += grace::N_table * sizeof(double); // Integral lookup.
+            trace_bytes += grace::detail::N_table * sizeof(double); // Integral lookup.
 
             std::cout << "Total hits: " << d_indices.size() << std::endl
                       << std::endl

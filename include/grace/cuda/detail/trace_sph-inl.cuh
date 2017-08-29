@@ -4,7 +4,6 @@
 #include "grace/cuda/error.cuh"
 #include "grace/cuda/detail/functors/trace.cuh"
 #include "grace/cuda/detail/kernels/bintree_trace.cuh"
-#include "grace/generic/raydata.h"
 #include "grace/config.h"
 #include "grace/meta.h"
 #include "grace/ray.h"
@@ -17,6 +16,22 @@
 #include <thrust/transform.h>
 
 namespace grace {
+
+namespace detail {
+
+template<typename T>
+struct RayData_datum
+{
+    T data;
+};
+
+template <typename T, typename Real>
+struct RayData_sphere
+{
+    T data;
+    Real b2, dist;
+};
+
 
 //-----------------------------------------------------------------------------
 // SPH Kernel line integral lookup table, parameterized by normalized impact
@@ -59,6 +74,8 @@ template <typename Real>
 
 const static KernelIntegrals<double> lookup = {};
 
+} // namespace detail
+
 
 //-----------------------------------------------------------------------------
 // C-like convenience wrappers for common forms of the tracing kernel.
@@ -72,8 +89,7 @@ GRACE_HOST void trace_hitcounts_sph(
     const CudaBvh& d_bvh,
     thrust::device_vector<int>& d_hit_counts)
 {
-    // Defines only RayData.data, of type int.
-    typedef RayData_datum<int> RayData;
+    typedef detail::RayData_datum<int> RayData;
 
     trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
@@ -100,11 +116,11 @@ GRACE_HOST void trace_cumulative_sph(
 {
     // TODO: Change it such that this is passed in, rather than copying it on
     // each call.
-    const size_t sm_table_size = sizeof(double) * N_table;
-    const double* p_table = &(lookup.table[0]);
-    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
+    const size_t sm_table_size = sizeof(double) * detail::N_table;
+    const double* p_table = &(detail::lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + detail::N_table);
 
-    typedef RayData_sphere<OutType, OutType> RayData;
+    typedef detail::RayData_sphere<OutType, OutType> RayData;
     trace_texref<RayData, LeafTraversal::ParallelRays>(
         d_rays,
         d_spheres,
@@ -112,9 +128,9 @@ GRACE_HOST void trace_cumulative_sph(
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
-            N_table),
+            detail::N_table),
         Intersect_sphere_b2dist<T>(),
-        OnHit_sphere_cumulate<T>(N_table),
+        OnHit_sphere_cumulate<T>(detail::N_table),
         RayEntry_null(),
         RayExit_to_array<OutType>(
             thrust::raw_pointer_cast(d_cumulated.data()))
@@ -157,11 +173,11 @@ GRACE_HOST void trace_sph(
 
     // TODO: Change it such that this is passed in, rather than copying it on
     // each call.
-    const size_t sm_table_size = sizeof(double) * N_table;
-    const double* p_table = &(lookup.table[0]);
-    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
+    const size_t sm_table_size = sizeof(double) * detail::N_table;
+    const double* p_table = &(detail::lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + detail::N_table);
 
-    typedef RayData_sphere<int, OutType> RayData;
+    typedef detail::RayData_sphere<int, OutType> RayData;
     trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
@@ -169,13 +185,13 @@ GRACE_HOST void trace_sph(
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
-            N_table),
+            detail::N_table),
         Intersect_sphere_b2dist<T>(),
         OnHit_sphere_individual<T, IndexType, OutType>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),
-            N_table),
+            detail::N_table),
         RayEntry_from_array<int>(
             thrust::raw_pointer_cast(d_ray_offsets.data())),
         RayExit_null()
@@ -232,11 +248,11 @@ GRACE_HOST void trace_with_sentinels_sph(
 
     // TODO: Change it such that this is passed in, rather than copying it on
     // each call.
-    const size_t sm_table_size = sizeof(double) * N_table;
-    const double* p_table = &(lookup.table[0]);
-    thrust::device_vector<double> d_lookup(p_table, p_table + N_table);
+    const size_t sm_table_size = sizeof(double) * detail::N_table;
+    const double* p_table = &(detail::lookup.table[0]);
+    thrust::device_vector<double> d_lookup(p_table, p_table + detail::N_table);
 
-    typedef RayData_sphere<int, OutType> RayData;
+    typedef detail::RayData_sphere<int, OutType> RayData;
     trace_texref<RayData, LeafTraversal::ParallelPrimitives>(
         d_rays,
         d_spheres,
@@ -244,13 +260,13 @@ GRACE_HOST void trace_with_sentinels_sph(
         sm_table_size,
         InitGlobalToSmem<double>(
             thrust::raw_pointer_cast(d_lookup.data()),
-            N_table),
+            detail::N_table),
         Intersect_sphere_b2dist<T>(),
         OnHit_sphere_individual<T, IndexType, OutType>(
             thrust::raw_pointer_cast(d_hit_indices.data()),
             thrust::raw_pointer_cast(d_hit_integrals.data()),
             thrust::raw_pointer_cast(d_hit_distances.data()),
-            N_table),
+            detail::N_table),
         RayEntry_from_array<int>(
             thrust::raw_pointer_cast(d_ray_offsets.data())),
         RayExit_null()
