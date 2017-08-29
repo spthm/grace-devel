@@ -1,6 +1,6 @@
 #pragma once
 
-#include "grace/detail/noncopyable-inl.h"
+#include "grace/detail/noncopyable.h"
 #include "grace/config.h"
 
 #include <curand_kernel.h>
