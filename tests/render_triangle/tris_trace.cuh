@@ -3,10 +3,10 @@
 #include "triangle.cuh"
 
 #include "grace/aabb.h"
+#include "grace/boundedptr.h"
 #include "grace/ray.h"
 #include "grace/vector.h"
 #include "grace/cuda/bvh.cuh"
-#include "grace/generic/boundedptr.h"
 
 #include <thrust/device_vector.h>
 

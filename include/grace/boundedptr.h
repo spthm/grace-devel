@@ -185,4 +185,4 @@ GRACE_HOST_DEVICE void swap(BoundedPtr<T>& lhs,
 
 } // namespace grace
 
-#include "grace/generic/detail/boundedptr-inl.h"
+#include "grace/detail/boundedptr-inl.h"

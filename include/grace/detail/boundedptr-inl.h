@@ -1,10 +1,11 @@
 #pragma once
 
-// No grace/generic/boundedptr.h include.
-// This should only ever be included by grace/generic/boundedptr.h.
+// No grace/boundedptr.h include.
+// This should only ever be included by grace/boundedptr.h.
 #include "grace/detail/assert.h"
 
-#include <cstddef>
+// TODO: C++11 defines std::uintptr_t in <cstdint> (optionally).
+#include <stdint.h>
 
 namespace grace {
 

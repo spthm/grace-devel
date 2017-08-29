@@ -4,9 +4,9 @@
 
 #include "grace/detail/assert.h"
 
-#include "grace/generic/boundedptr.h"
 #include "grace/generic/interpolate.h"
 
+#include "grace/boundedptr.h"
 #include "grace/config.h"
 #include "grace/meta.h"
 #include "grace/sphere.h"

@@ -5,13 +5,12 @@
 
 #include "grace/cuda/util/texref_iter.cuh"
 
-#include "grace/generic/boundedptr.h"
-
 #include "grace/cuda/bvh.cuh"
 #include "grace/cuda/error.cuh"
 
 #include "grace/detail/assert.h"
 
+#include "grace/boundedptr.h"
 #include "grace/config.h"
 #include "grace/meta.h"
 #include "grace/ray.h"
