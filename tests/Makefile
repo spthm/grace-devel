@@ -6,6 +6,7 @@ UNIT_TEST_DIRS = AABB \
 	aligned_malloc \
 	morton_key \
 	morton_key_kernel \
+	throw_cuda_error \
 	Vector3 \
 	Vector4 \
 	vector3_math \
